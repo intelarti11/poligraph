@@ -686,6 +686,48 @@ describe("membres", () => {
     expect(hollandeOnly).not.toContain("Inès Entrante");
   });
 
+  it("résume la période couverte par la présidence filtrée, pas toute la couverture", async () => {
+    const H = gov({
+      id: "gh",
+      slug: "gouvernement-h",
+      name: "Gouvernement Hôtel",
+      sequence: 0,
+      primeMinisterAppointedAt: "2016-12-06",
+      formedAt: "2016-12-06",
+      endedAt: "2017-05-15",
+      compositionVerifiedAt: "2017-05-15",
+    });
+    vi.mocked(getPublishedGovernments).mockResolvedValue([H, ...GOVS]);
+    const dates = (markup: string) => {
+      const div = document.createElement("div");
+      div.innerHTML = markup;
+      return [
+        div.querySelector<HTMLInputElement>("#membres-du")?.getAttribute("value"),
+        div.querySelector<HTMLInputElement>("#membres-au")?.getAttribute("value"),
+      ];
+    };
+
+    const all = await html(MembersPage({ searchParams: sp() }));
+    expect(text(all)).toContain("entre le 6 décembre 2016 et le 23 décembre 2024");
+    expect(dates(all)).toEqual(["2016-12-06", "2024-12-23"]);
+
+    const hollande = await html(MembersPage({ searchParams: sp({ presidence: "hollande" }) }));
+    expect(text(hollande)).toContain("entre le 6 décembre 2016 et le 15 mai 2017");
+    expect(dates(hollande)).toEqual(["2016-12-06", "2017-05-15"]);
+
+    const macron = await html(MembersPage({ searchParams: sp({ presidence: "macron" }) }));
+    expect(text(macron)).toContain("entre le 20 mai 2022 et le 23 décembre 2024");
+    expect(dates(macron)).toEqual(["2022-05-20", "2024-12-23"]);
+
+    // Une période choisie plus étroite que la présidence reste celle affichée.
+    const narrow = await html(
+      MembersPage({
+        searchParams: sp({ presidence: "macron", du: "2023-01-01", au: "2023-06-30" }),
+      })
+    );
+    expect(text(narrow)).toContain("entre le 1er janvier 2023 et le 30 juin 2023");
+  });
+
   it("n'affiche pas de raccourci quand une seule présidence est couverte", async () => {
     const t = text(await html(MembersPage({ searchParams: sp() })));
     expect(t).not.toContain("Présidences :");
