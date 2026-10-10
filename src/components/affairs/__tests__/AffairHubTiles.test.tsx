@@ -11,7 +11,7 @@ describe("AffairHubTiles", () => {
     );
     expect(screen.getByRole("link", { name: /par parti/i })).toHaveAttribute(
       "href",
-      "/statistiques"
+      "/affaires/condamnations?view=stats"
     );
     expect(screen.getByRole("link", { name: /Violences contre les élus/i })).toHaveAttribute(
       "href",
