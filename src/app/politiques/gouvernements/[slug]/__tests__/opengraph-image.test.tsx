@@ -55,7 +55,10 @@ const government = (overrides: Record<string, unknown> = {}) => ({
   name: "Gouvernement Camille Rivet II",
   primeMinister: { slug: "camille-rivet", fullName: "Camille Rivet", gender: "F" },
   primeMinisterAppointedAt: "2025-10-10",
+  formedAt: "2025-10-10",
+  resignedAt: null,
   endedAt: null,
+  hasDerivedDate: false,
   ...overrides,
 });
 
@@ -114,7 +117,7 @@ describe("Open Graph d'un gouvernement", () => {
   it("donne la date de nomination d'un gouvernement en cours, sans le dire en fonction", async () => {
     const rendered = textContent(await render());
 
-    expect(rendered).toContain("Nommé le 10 octobre 2025");
+    expect(rendered).toContain("Équipe nommée le 10 octobre 2025");
     expect(rendered).not.toMatch(/en fonction|en cours|membres/i);
   });
 
@@ -122,6 +125,33 @@ describe("Open Graph d'un gouvernement", () => {
     mocks.getPublishedGovernments.mockResolvedValue([government({ endedAt: "2026-01-01" })]);
 
     expect(textContent(await render())).toContain("Du 10 octobre 2025 au 1er janvier 2026");
+  });
+
+  it("part de la date de l'équipe, comme le répertoire et la page", async () => {
+    // Jospin : Premier ministre nommé le 2 juin 1997, équipe le 4 juin.
+    mocks.getPublishedGovernments.mockResolvedValue([
+      government({
+        primeMinisterAppointedAt: "1997-06-02",
+        formedAt: "1997-06-04",
+        endedAt: "2002-05-07",
+      }),
+    ]);
+
+    const rendered = textContent(await render());
+
+    expect(rendered).toContain("Du 4 juin 1997 au 7 mai 2002");
+    expect(rendered).not.toContain("2 juin 1997");
+  });
+
+  it("n'écrit aucune période quand une date est estimée", async () => {
+    mocks.getPublishedGovernments.mockResolvedValue([
+      government({ endedAt: "2026-01-01", hasDerivedDate: true }),
+    ]);
+
+    const rendered = textContent(await render());
+
+    expect(rendered).toContain("Gouvernement Camille Rivet II");
+    expect(rendered).not.toMatch(/2025|2026/);
   });
 
   it("ne décrit pas un gouvernement non publié", async () => {

@@ -79,7 +79,7 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
   // stays in the canonical. An invalid one is ignored by the page, so is the canonical.
   const date = parseCompositionDate(first(sp.date));
   const title = `${gov.name} : composition et ministres`;
-  const description = `Composition du ${gov.name} date par date, avec l'acte officiel de chaque nomination, les changements documentés et la liste des participants.`;
+  const description = `Composition du ${gov.name} à chaque date, avec l'acte officiel de chaque nomination, les changements documentés et la liste des participants.`;
   const canonical = `${BASE}/${gov.slug}${date ? `?date=${date}` : ""}`;
   return {
     title,
@@ -521,10 +521,14 @@ export default async function GovernmentPage({ params, searchParams }: PageProps
             {prev ? (
               <Link
                 href={`${BASE}/${prev.slug}`}
-                className="inline-flex min-h-11 items-center gap-1.5 underline-offset-4 hover:underline"
+                aria-label={`Précédent : ${prev.name}`}
+                className="inline-flex min-h-11 items-center gap-1.5 py-1 underline-offset-4 hover:underline"
               >
-                <ArrowLeft className="size-4" aria-hidden="true" />
-                Gouvernement précédent : {prev.name}
+                <ArrowLeft className="size-4 shrink-0" aria-hidden="true" />
+                <span className="flex flex-col">
+                  <span className="text-xs font-normal text-muted-foreground">Précédent</span>
+                  {prev.name}
+                </span>
               </Link>
             ) : (
               <span />
@@ -532,10 +536,14 @@ export default async function GovernmentPage({ params, searchParams }: PageProps
             {next && (
               <Link
                 href={`${BASE}/${next.slug}`}
-                className="inline-flex min-h-11 items-center gap-1.5 underline-offset-4 hover:underline"
+                aria-label={`Suivant : ${next.name}`}
+                className="ml-auto inline-flex min-h-11 items-center gap-1.5 py-1 text-right underline-offset-4 hover:underline"
               >
-                Gouvernement suivant : {next.name}
-                <ArrowRight className="size-4" aria-hidden="true" />
+                <span className="flex flex-col">
+                  <span className="text-xs font-normal text-muted-foreground">Suivant</span>
+                  {next.name}
+                </span>
+                <ArrowRight className="size-4 shrink-0" aria-hidden="true" />
               </Link>
             )}
           </nav>

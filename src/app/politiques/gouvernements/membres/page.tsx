@@ -209,6 +209,19 @@ export default async function MembresPage({ searchParams }: PageProps) {
   // Partial coverage is judged on the governments actually in scope.
   const scopeGovs = membersScope(govs, query);
   const anyPartial = scopeGovs.some(isPartial);
+  // With a presidency, the period shown is the one its governments cover within the searched
+  // period, not the whole documented coverage (the filter already works on that intersection).
+  const scopeCoverage = query.presidence ? membersCoverage(scopeGovs) : null;
+  let periodDu = query.du;
+  let periodAu = query.au;
+  if (scopeCoverage && query.mode === "periode") {
+    const from = scopeCoverage.from > query.du ? scopeCoverage.from : query.du;
+    const to = scopeCoverage.to < query.au ? scopeCoverage.to : query.au;
+    if (from <= to) {
+      periodDu = from;
+      periodAu = to;
+    }
+  }
   const selfUrl = currentUrl(raw);
   const reset = PATH;
 
@@ -446,7 +459,7 @@ export default async function MembresPage({ searchParams }: PageProps) {
                   id="membres-du"
                   type="date"
                   name="du"
-                  defaultValue={query.du}
+                  defaultValue={periodDu}
                   aria-describedby="membres-dates-aide"
                   className={fieldClass}
                 />
@@ -459,7 +472,7 @@ export default async function MembresPage({ searchParams }: PageProps) {
                   id="membres-au"
                   type="date"
                   name="au"
-                  defaultValue={query.au}
+                  defaultValue={periodAu}
                   aria-describedby="membres-dates-aide"
                   className={fieldClass}
                 />
@@ -593,7 +606,7 @@ export default async function MembresPage({ searchParams }: PageProps) {
                 <span className="text-sm text-muted-foreground">
                   {query.mode === "present"
                     ? `de façon établie au ${formatDay(query.au)}.`
-                    : `ayant exercé une fonction entre le ${formatDay(query.du)} et le ${formatDay(query.au)}.`}
+                    : `ayant exercé une fonction entre le ${formatDay(periodDu)} et le ${formatDay(periodAu)}.`}
                 </span>
               </p>
               {(summaryLine || anyPartial) && (
