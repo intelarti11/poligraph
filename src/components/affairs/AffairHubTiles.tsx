@@ -27,7 +27,7 @@ export function AffairHubTiles({ etabliCount }: AffairHubTilesProps) {
       count: etabliCount,
     },
     {
-      href: "/statistiques",
+      href: "/affaires/condamnations?view=stats",
       title: "Taux de condamnation par parti",
       subtitle: "Comparer les partis politiques",
       accent: false,
