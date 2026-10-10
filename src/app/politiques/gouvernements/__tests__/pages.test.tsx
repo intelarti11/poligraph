@@ -338,6 +338,17 @@ describe("détail d'un gouvernement", () => {
     expect(text(markup)).toContain("Présidence d'Emmanuel Macron");
   });
 
+  it("nomme le gouvernement voisin sans répéter « Gouvernement »", async () => {
+    const markup = await html(detail("gouvernement-b"));
+    const div = document.createElement("div");
+    div.innerHTML = markup;
+    const prev = div.querySelector('a[href="/politiques/gouvernements/gouvernement-a"]');
+    const next = div.querySelector('a[href="/politiques/gouvernements/gouvernement-c"]');
+    expect(prev?.getAttribute("aria-label")).toBe("Précédent : Gouvernement Alpha");
+    expect(next?.getAttribute("aria-label")).toBe("Suivant : Gouvernement Charlie");
+    expect(text(markup)).not.toMatch(/Gouvernement (précédent|suivant) :/);
+  });
+
   it("renvoie notFound pour un slug inconnu ou non publié", async () => {
     await expect(detail("inconnu")).rejects.toThrow("NEXT_NOT_FOUND");
     // Un gouvernement DRAFT n'est jamais renvoyé par getPublishedGovernments.
@@ -564,6 +575,19 @@ describe("répertoire", () => {
     expect(t).not.toContain("Gouvernement Alpha");
     const all = text(await html(DirectoryPage({ searchParams: sp({ annee: "2016" }) })));
     expect(all).toContain("Gouvernement Alpha");
+  });
+
+  it("décrit la liste affichée en JSON-LD", async () => {
+    const markup = await html(DirectoryPage({ searchParams: sp() }));
+    const div = document.createElement("div");
+    div.innerHTML = markup;
+    const ld = JSON.parse(div.querySelector('script[type="application/ld+json"]')!.textContent!);
+    expect(ld["@type"]).toBe("ItemList");
+    expect(ld.numberOfItems).toBe(GOVS.length);
+    expect(ld.itemListElement[0]).toMatchObject({
+      name: "Gouvernement Delta",
+      url: expect.stringMatching(/\/politiques\/gouvernements\/gouvernement-d$/),
+    });
   });
 
   it("filtre par nom sans tenir compte des accents", async () => {

@@ -6,6 +6,8 @@ import { PRESIDENCIES, presidencyOfGovernment } from "@/config/presidencies";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { Button } from "@/components/ui/button";
 import { MissingData } from "@/components/ui/MissingData";
+import { AffairItemListJsonLd } from "@/components/seo/JsonLd";
+import { SITE_URL } from "@/config/site";
 import { CoverageSummary } from "@/components/governments/CoverageSummary";
 import { GovernmentBadges } from "@/components/governments/GovernmentBadges";
 import { PolitiquesLocalNav } from "@/components/governments/PolitiquesLocalNav";
@@ -135,6 +137,12 @@ export default async function GouvernementsPage({ searchParams }: PageProps) {
 
   return (
     <>
+      {filtered.length > 0 && (
+        <AffairItemListJsonLd
+          name="Gouvernements"
+          items={filtered.map((g) => ({ name: g.name, url: `${SITE_URL}${PATH}/${g.slug}` }))}
+        />
+      )}
       <PolitiquesLocalNav current="gouvernements" />
       <div className="container mx-auto flex flex-col gap-6 px-4 pb-10 pt-4">
         <Breadcrumb
