@@ -22,6 +22,7 @@ import type { PoliticianProfileDocument } from "@/lib/politicians/profile-snapsh
 import { resolveProfileMandateType } from "@/lib/politicians/profile-snapshot/build";
 import type { DeclarationDetails } from "@/types/hatvp";
 import type { PoliticianProfileBodyProps } from "./_components/PoliticianProfileBody";
+import { parisDay } from "@/lib/governments/dates";
 
 export type PoliticianPageData = {
   profile: PoliticianProfileDocument;
@@ -180,8 +181,8 @@ export function derivePoliticianPageModel(
     jobTitle: currentMandate ? MANDATE_TYPE_LABELS[currentMandate.type] : undefined,
     affiliation: identity.currentParty?.name,
     image: identity.photoUrl || undefined,
-    birthDate: identity.birthDate?.toISOString().split("T")[0],
-    deathDate: identity.deathDate?.toISOString().split("T")[0],
+    birthDate: identity.birthDate ? parisDay(identity.birthDate) : undefined,
+    deathDate: identity.deathDate ? parisDay(identity.deathDate) : undefined,
     birthPlace: identity.birthPlace || undefined,
     url: profileUrl,
     sameAs: identity.externalIds.map((e) => e.url).filter((url): url is string => url != null),

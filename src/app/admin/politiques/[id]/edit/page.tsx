@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { PoliticianForm } from "@/components/admin/PoliticianForm";
+import { parisDay } from "@/lib/governments/dates";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -40,7 +41,7 @@ export default async function EditPoliticianPage({ params }: PageProps) {
     firstName: politician.firstName,
     lastName: politician.lastName,
     fullName: politician.fullName,
-    birthDate: politician.birthDate ? politician.birthDate.toISOString().split("T")[0]! : null,
+    birthDate: politician.birthDate ? parisDay(politician.birthDate) : null,
     birthPlace: politician.birthPlace,
     photoUrl: politician.photoUrl,
     photoSource: politician.photoSource,
