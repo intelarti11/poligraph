@@ -19,6 +19,8 @@ Remplace `03-recette-auditable.md`, absent du kit final et contradictoire avec D
 
 À vérifier sur chaque nouvelle page : 320 px sans défilement horizontal, cibles de 44 px hors liens dans une phrase, focus visible, un seul H1, formes cartographiques `aria-hidden`, aucun tiret cadratin ni demi-cadratin.
 
+Population (1.7) : la page commune, la liste d'un département et l'API donnent le millésime, la date d'entrée en vigueur et le producteur (« Population municipale 2023, en vigueur au 1er janvier 2026 (INSEE) ») avec le lien vers la source. Vérifier Rennes (INSEE 2023), Mamoudzou (INSEE 2017, au 1er janvier 2018), Papeete (ISPF 2022, au 1er janvier 2023), Nouméa (ISEE 2025, au 1er janvier 2026) et Uvea à Wallis-et-Futuna (INSEE-STSEE 2023, au 1er janvier 2024). Un district des TAAF n'affiche aucun millésime. Sans série importée, la mention geo.api.gouv.fr reste, sans millésime.
+
 Outre-mer : la carte de l'entrée montre les cinq DROM en cartouches liés à leur région ; La Réunion, la Guadeloupe, la Guyane, la Polynésie française et une commune de Mayotte ont leur silhouette à 320, 390 et 1280 px, sans débordement (vérifié le 11 octobre 2026).
 
 Jeu de communes de recette : Rennes (35238), Paris (75056), Saint-Denis (93066, Métropole du Grand Paris et EPT), Lyon (69123), Villeurbanne (69266, Métropole de Lyon), Ouessant (29155, sans intercommunalité), Marseille (13055), Ajaccio (2A004), Saint-Denis de La Réunion (97411), Mamoudzou (97611), Papeete (98735), Saint-Pierre (97502), une commune de moins de 100 habitants, un code inexistant.
