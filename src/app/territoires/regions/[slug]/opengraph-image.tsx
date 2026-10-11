@@ -33,7 +33,7 @@ export default async function Image({ params }: { params: Promise<{ slug: string
   }
 
   const { region, presidence } = data;
-  const shape = region.outreMer ? null : regionOutlineDataUri(region.name);
+  const shape = regionOutlineDataUri(region.name);
   const overline = `Région · ${formatCompte(data.departements.length, "département", "départements")}`;
   const presidenceLine =
     presidence.state === "ETABLI" && presidence.person

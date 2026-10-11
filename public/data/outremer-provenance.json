@@ -1,0 +1,116 @@
+{
+  "genere": "2026-10-11",
+  "script": "scripts/build-outremer-geojson.ts",
+  "territoires": {
+    "971": {
+      "producteur": "IGN",
+      "jeu": "ADMIN EXPRESS COG CARTO PE (petite échelle), édition 2026",
+      "licence": "Licence Ouverte (Etalab)",
+      "page": "https://cartes.gouv.fr/rechercher-une-donnee/dataset/IGNF_ADMIN-EXPRESS",
+      "couche": "ADMINEXPRESS-COG-CARTO-PE.2026:departement",
+      "url": "https://data.geopf.fr/wfs/ows?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&outputFormat=application/json&TYPENAMES=ADMINEXPRESS-COG-CARTO-PE.2026:departement&CQL_FILTER=code_insee%3D'971'",
+      "simplification": "Douglas-Peucker à 57 m, coordonnées arrondies à 1e-5 degré",
+      "anneaux": 6
+    },
+    "972": {
+      "producteur": "IGN",
+      "jeu": "ADMIN EXPRESS COG CARTO PE (petite échelle), édition 2026",
+      "licence": "Licence Ouverte (Etalab)",
+      "page": "https://cartes.gouv.fr/rechercher-une-donnee/dataset/IGNF_ADMIN-EXPRESS",
+      "couche": "ADMINEXPRESS-COG-CARTO-PE.2026:departement",
+      "url": "https://data.geopf.fr/wfs/ows?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&outputFormat=application/json&TYPENAMES=ADMINEXPRESS-COG-CARTO-PE.2026:departement&CQL_FILTER=code_insee%3D'972'",
+      "simplification": "Douglas-Peucker à 36 m, coordonnées arrondies à 1e-5 degré",
+      "anneaux": 1
+    },
+    "973": {
+      "producteur": "IGN",
+      "jeu": "ADMIN EXPRESS COG CARTO PE (petite échelle), édition 2026",
+      "licence": "Licence Ouverte (Etalab)",
+      "page": "https://cartes.gouv.fr/rechercher-une-donnee/dataset/IGNF_ADMIN-EXPRESS",
+      "couche": "ADMINEXPRESS-COG-CARTO-PE.2026:departement",
+      "url": "https://data.geopf.fr/wfs/ows?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&outputFormat=application/json&TYPENAMES=ADMINEXPRESS-COG-CARTO-PE.2026:departement&CQL_FILTER=code_insee%3D'973'",
+      "simplification": "Douglas-Peucker à 270 m, coordonnées arrondies à 1e-5 degré",
+      "anneaux": 1
+    },
+    "974": {
+      "producteur": "IGN",
+      "jeu": "ADMIN EXPRESS COG CARTO PE (petite échelle), édition 2026",
+      "licence": "Licence Ouverte (Etalab)",
+      "page": "https://cartes.gouv.fr/rechercher-une-donnee/dataset/IGNF_ADMIN-EXPRESS",
+      "couche": "ADMINEXPRESS-COG-CARTO-PE.2026:departement",
+      "url": "https://data.geopf.fr/wfs/ows?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&outputFormat=application/json&TYPENAMES=ADMINEXPRESS-COG-CARTO-PE.2026:departement&CQL_FILTER=code_insee%3D'974'",
+      "simplification": "Douglas-Peucker à 43 m, coordonnées arrondies à 1e-5 degré",
+      "anneaux": 1
+    },
+    "975": {
+      "producteur": "IGN",
+      "jeu": "ADMIN EXPRESS COG CARTO PE (petite échelle), édition 2026",
+      "licence": "Licence Ouverte (Etalab)",
+      "page": "https://cartes.gouv.fr/rechercher-une-donnee/dataset/IGNF_ADMIN-EXPRESS",
+      "couche": "ADMINEXPRESS-COG-CARTO-PE.2026:commune",
+      "url": "https://data.geopf.fr/wfs/ows?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&outputFormat=application/json&TYPENAMES=ADMINEXPRESS-COG-CARTO-PE.2026:commune&CQL_FILTER=code_insee%20LIKE%20'975%25'",
+      "note": "Réunion des deux communes, Saint-Pierre (97502) et Miquelon-Langlade (97501).",
+      "simplification": "Douglas-Peucker à 29 m, coordonnées arrondies à 1e-5 degré",
+      "anneaux": 4
+    },
+    "976": {
+      "producteur": "IGN",
+      "jeu": "ADMIN EXPRESS COG CARTO PE (petite échelle), édition 2026",
+      "licence": "Licence Ouverte (Etalab)",
+      "page": "https://cartes.gouv.fr/rechercher-une-donnee/dataset/IGNF_ADMIN-EXPRESS",
+      "couche": "ADMINEXPRESS-COG-CARTO-PE.2026:departement",
+      "url": "https://data.geopf.fr/wfs/ows?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&outputFormat=application/json&TYPENAMES=ADMINEXPRESS-COG-CARTO-PE.2026:departement&CQL_FILTER=code_insee%3D'976'",
+      "simplification": "Douglas-Peucker à 27 m, coordonnées arrondies à 1e-5 degré",
+      "anneaux": 3
+    },
+    "977": {
+      "producteur": "IGN",
+      "jeu": "ADMIN EXPRESS COG CARTO PE (petite échelle), édition 2026",
+      "licence": "Licence Ouverte (Etalab)",
+      "page": "https://cartes.gouv.fr/rechercher-une-donnee/dataset/IGNF_ADMIN-EXPRESS",
+      "couche": "ADMINEXPRESS-COG-CARTO-PE.2026:collectivite_territoriale",
+      "url": "https://data.geopf.fr/wfs/ows?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&outputFormat=application/json&TYPENAMES=ADMINEXPRESS-COG-CARTO-PE.2026:collectivite_territoriale&CQL_FILTER=code_insee%3D'977'",
+      "simplification": "Douglas-Peucker à 6 m, coordonnées arrondies à 1e-5 degré",
+      "anneaux": 1
+    },
+    "978": {
+      "producteur": "IGN",
+      "jeu": "ADMIN EXPRESS COG CARTO PE (petite échelle), édition 2026",
+      "licence": "Licence Ouverte (Etalab)",
+      "page": "https://cartes.gouv.fr/rechercher-une-donnee/dataset/IGNF_ADMIN-EXPRESS",
+      "couche": "ADMINEXPRESS-COG-CARTO-PE.2026:collectivite_territoriale",
+      "url": "https://data.geopf.fr/wfs/ows?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&outputFormat=application/json&TYPENAMES=ADMINEXPRESS-COG-CARTO-PE.2026:collectivite_territoriale&CQL_FILTER=code_insee%3D'978'",
+      "simplification": "Douglas-Peucker à 10 m, coordonnées arrondies à 1e-5 degré",
+      "anneaux": 2
+    },
+    "986": {
+      "producteur": "Natural Earth",
+      "jeu": "Natural Earth 1:10m, ne_10m_admin_0_countries (WLF) et ne_10m_minor_islands, version 5.1.2",
+      "licence": "Domaine public",
+      "page": "https://www.naturalearthdata.com/about/terms-of-use/",
+      "url": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/v5.1.2/geojson/ne_10m_admin_0_countries.geojson",
+      "note": "Aucune source publique de l'IGN ou du territoire trouvée. Alofi vient de la couche des petites îles. Tracé grossier à cette échelle.",
+      "simplification": "Douglas-Peucker à 148 m, coordonnées arrondies à 1e-5 degré",
+      "anneaux": 3
+    },
+    "987": {
+      "producteur": "Section Cadastre-Topographie de la Polynésie française",
+      "jeu": "Géographie administrative de la Polynésie française, « Emprise des îles, atolls et bancs » (loc_ile), publiée le 28 février 2022",
+      "licence": "CC-BY",
+      "page": "https://www.data.gouv.fr/fr/datasets/geographie-administrative-de-la-polynesie-francaise/",
+      "url": "https://static.data.gouv.fr/resources/geographie-administrative-de-la-polynesie-francaise/20220228-205614/loc-ile.zip",
+      "simplification": "Douglas-Peucker à 1569 m, coordonnées arrondies à 1e-5 degré",
+      "anneaux": 138
+    },
+    "988": {
+      "producteur": "Gouvernement de la Nouvelle-Calédonie (DITTT, service topographique)",
+      "jeu": "Limites administratives terrestres, couche Provinces (mise à jour du 28 octobre 2024)",
+      "licence": "Licence Ouverte",
+      "page": "https://georep-dtsi-sgt.opendata.arcgis.com/maps/e1d853903cc64d40af7fbb5ee57e3029/about",
+      "url": "https://services1.arcgis.com/TZcrgU6CIbqWt9Qv/arcgis/rest/services/limites_terrestres/FeatureServer/1/query?where=1%3D1&outFields=nom&outSR=4326&f=geojson",
+      "note": "Les trois provinces sont fusionnées en un seul contour. Les îles Chesterfield, Walpole, Matthew et Hunter ne figurent pas dans cette couche.",
+      "simplification": "Douglas-Peucker à 316 m, coordonnées arrondies à 1e-5 degré",
+      "anneaux": 119
+    }
+  }
+}

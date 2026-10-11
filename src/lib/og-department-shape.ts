@@ -1,5 +1,6 @@
 import { readFileSync } from "fs";
 import { join } from "path";
+import { DEPARTMENT_OUTLINES, projectInDepartment } from "@/config/territoires-shapes";
 
 interface GeoJsonFeature {
   type: "Feature";
@@ -101,6 +102,45 @@ export function getDepartmentSvgPath(
   return path;
 }
 
+/**
+ * Overseas departments and collectivities are not in departements.geojson: their card uses
+ * the outline baked by scripts/build-territoires-svg.ts, every island included, in its own
+ * frame. Null when no outline exists (TAAF, Clipperton, unknown code).
+ */
+function overseasShapeDataUri(
+  code: string,
+  size: { width: number; height: number },
+  fill: string,
+  opacity: number,
+  dot?: { lat: number; lon: number; fill: string; radius: number }
+): string | null {
+  const outline = Object.hasOwn(DEPARTMENT_OUTLINES, code) ? DEPARTMENT_OUTLINES[code] : undefined;
+  if (!outline) return null;
+  const [, , width, height] = outline.viewBox.split(" ").map(Number) as [
+    number,
+    number,
+    number,
+    number,
+  ];
+  // Islands drawn as dots need a stroke to stay visible once scaled down.
+  let svgBody = `<path d="${outline.d}" fill="${fill}" fill-opacity="${opacity}" stroke="${fill}" stroke-opacity="${opacity}" stroke-width="2" stroke-linejoin="round"/>`;
+  if (dot) {
+    const point = projectInDepartment(code, dot.lon, dot.lat);
+    const units = dot.radius * (Math.max(width, height) / Math.min(size.width, size.height));
+    if (point && point[0] >= 0 && point[0] <= width && point[1] >= 0 && point[1] <= height) {
+      svgBody += `<circle cx="${point[0].toFixed(1)}" cy="${point[1].toFixed(1)}" r="${units.toFixed(1)}" fill="${dot.fill}"/>`;
+    }
+  }
+  // The OG renderer stretches a viewBox to the image box: pad the frame to the box's ratio so
+  // the territory keeps its proportions and the dot stays round.
+  const ratio = size.width / size.height;
+  const boxW = Math.max(width, height * ratio);
+  const boxH = boxW / ratio;
+  const viewBox = `${((width - boxW) / 2).toFixed(1)} ${((height - boxH) / 2).toFixed(1)} ${boxW.toFixed(1)} ${boxH.toFixed(1)}`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${viewBox}" width="${size.width}" height="${size.height}" fill-rule="evenodd">${svgBody}</svg>`;
+  return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
+}
+
 export function getDepartmentShapeDataUri(
   code: string,
   size: { width: number; height: number } = { width: 200, height: 200 },
@@ -108,7 +148,7 @@ export function getDepartmentShapeDataUri(
 ): string | null {
   const { features } = geojson;
   const feature = features.find((f) => f.properties.code === code);
-  if (!feature) return null;
+  if (!feature) return overseasShapeDataUri(code, size, fill, 1);
 
   const ring = getLargestRing(feature);
   const { path } = projectToSvg(ring, size.width, size.height);
@@ -129,7 +169,17 @@ export function getDepartmentShapeWithDot(
 
   const { features } = geojson;
   const feature = features.find((f) => f.properties.code === departmentCode);
-  if (!feature) return null;
+  if (!feature) {
+    return overseasShapeDataUri(
+      departmentCode,
+      size,
+      shapeFill,
+      0.3,
+      communeLat != null && communeLon != null
+        ? { lat: communeLat, lon: communeLon, fill: dotFill, radius: dotRadius }
+        : undefined
+    );
+  }
 
   const ring = getLargestRing(feature);
   const { path, project } = projectToSvg(ring, size.width, size.height);
