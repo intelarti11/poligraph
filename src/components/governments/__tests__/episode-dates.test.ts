@@ -6,6 +6,7 @@ import {
   episodeDates,
   governmentDatesLine,
   governmentPeriod,
+  lastDayShortcutLabel,
 } from "@/components/governments/format";
 import type { PublishedGovernment } from "@/lib/governments/mapping";
 
@@ -248,5 +249,31 @@ describe("governmentPeriod", () => {
     expect(
       governmentPeriod({ ...base, formedAt: null, endedAt: null, resignedAt: "2024-12-05" })
     ).toBe("Premier ministre nommé le 5 septembre 2024, démission le 5 décembre 2024");
+  });
+});
+
+describe("lastDayShortcutLabel", () => {
+  it("Debré : démission par acte sans régime attesté, aucune mention d'affaires courantes", () => {
+    const debre = {
+      currentAffairsAttested: false,
+      resignedEvidence: "ACT" as const,
+      endedAt: "1962-04-15",
+    };
+    expect(lastDayShortcutLabel(debre)).toBe("Équipe suivante nommée");
+    expect(lastDayShortcutLabel(debre)).not.toContain("affaires courantes");
+  });
+
+  it("régime attesté par un acte : fin des affaires courantes", () => {
+    expect(lastDayShortcutLabel(attested)).toBe("Fin des affaires courantes");
+  });
+
+  it("démission non prouvée par un acte : pas d'affaires courantes", () => {
+    expect(lastDayShortcutLabel({ ...attested, resignedEvidence: "DATASET" })).toBe(
+      "Équipe suivante nommée"
+    );
+  });
+
+  it("gouvernement en exercice : dernière vérification", () => {
+    expect(lastDayShortcutLabel({ ...attested, endedAt: null })).toBe("Composition vérifiée");
   });
 });

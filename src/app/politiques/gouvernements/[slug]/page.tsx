@@ -34,6 +34,7 @@ import {
   FUNCTION_SECTION_LABEL,
   governmentDatesLine,
   isPartial,
+  lastDayShortcutLabel,
   personsLabel,
   plural,
   safeExternalUrl,
@@ -378,7 +379,7 @@ export default async function GovernmentPage({ params, searchParams }: PageProps
     if (lastDay !== range.from && lastDay !== defaultDate) {
       shortcuts.push({
         date: lastDay,
-        label: gov.resignedAt ? "Fin des affaires courantes" : "Fin du gouvernement",
+        label: lastDayShortcutLabel(gov),
       });
     }
   }

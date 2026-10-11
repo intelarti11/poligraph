@@ -179,6 +179,22 @@ export function governmentPeriod(
 }
 
 /**
+ * Label of the last consultable day in the date shortcuts. « Fin des affaires courantes » only
+ * when the regime is attested (same rule as the dates line); otherwise `endedAt` is the day the
+ * next team was appointed, and a government in office stops at its last verification.
+ */
+export function lastDayShortcutLabel(
+  gov: Pick<PublishedGovernment, "currentAffairsAttested" | "resignedEvidence" | "endedAt">
+): string {
+  const caretaker = lastCaretakerDay(gov, {
+    endKind: "COLLECTIVE_RESIGNATION",
+    currentAffairsEndedAt: null,
+  });
+  if (caretaker) return "Fin des affaires courantes";
+  return gov.endedAt ? "Équipe suivante nommée" : "Composition vérifiée";
+}
+
+/**
  * Nature of a function start that is neither the formation nor a same-day change of title. An
  * interim is not an arrival in the government, and neither is a new function for a person who
  * already held one in this government (« entre au gouvernement » would then be wrong).
