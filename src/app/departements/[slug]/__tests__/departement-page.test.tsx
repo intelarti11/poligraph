@@ -46,7 +46,7 @@ function row(name: string, i: number, maire = true): DepartementCommuneRow {
 }
 
 const NO_PRESIDENCE: PresidenceBlock = {
-  state: "ABSENT",
+  state: "NON_ETABLI",
   person: null,
   title: null,
   lastConfirmedAt: null,
@@ -83,7 +83,7 @@ function territoire(
     letterCounts,
     communes: { letter, page, pageSize: PAGE_SIZE, total, totalPages, rows },
     presidence: opts.presidence ?? NO_PRESIDENCE,
-    conseil: { state: "ABSENT", recordedCount: 0 },
+    conseil: { state: "NON_ETABLI", recordedCount: 0 },
     parlement: { deputeCount: 0, senateurCount: 0 },
     coverage: [
       {

@@ -1,12 +1,14 @@
 import { Metadata } from "next";
-import { getDepartmentBySlug, DEPARTMENTS } from "@/config/departments";
+import { getDepartmentBySlug, getDepartmentSlug, DEPARTMENTS } from "@/config/departments";
 import { missingEntityMetadata } from "@/lib/seo/not-found-metadata";
 import { DepartementPageBody } from "./departement-page";
 
 export const revalidate = 3600; // ISR: revalidate every hour
 
+// Slugs come from the name, as getDepartmentBySlug resolves them: the keys of DEPARTMENTS are
+// codes, and prerendering those produced one 404 per department.
 export function generateStaticParams() {
-  return Object.keys(DEPARTMENTS).map((slug) => ({ slug }));
+  return Object.values(DEPARTMENTS).map(({ name }) => ({ slug: getDepartmentSlug(name) }));
 }
 
 interface PageProps {
