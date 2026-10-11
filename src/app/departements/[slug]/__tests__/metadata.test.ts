@@ -24,3 +24,16 @@ describe("/departements/[slug] metadata", () => {
     expect(m.robots).toBeUndefined();
   });
 });
+
+describe("/departements/[slug] generateStaticParams", () => {
+  it("pré-génère les vrais slugs, chacun résolu par la page", async () => {
+    const { generateStaticParams } = await import("@/app/departements/[slug]/page");
+    const { DEPARTMENTS, getDepartmentBySlug } = await import("@/config/departments");
+    const params = generateStaticParams();
+
+    expect(params).toHaveLength(Object.keys(DEPARTMENTS).length);
+    for (const { slug } of params) expect(getDepartmentBySlug(slug), slug).not.toBeNull();
+    expect(params).toContainEqual({ slug: "ille-et-vilaine" });
+    expect(params).toContainEqual({ slug: "corse-du-sud" });
+  });
+});

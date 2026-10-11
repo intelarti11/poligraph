@@ -59,3 +59,10 @@ export const GOUVERNEMENTS_MEMBRES_FILTER_KEYS = [
   "q",
   "personne",
 ] as const;
+
+/**
+ * /departements/[slug]: the A to Z index of the commune list; `page` via pagination. Every
+ * variant is a slice of the same list, noindex,follow with a canonical to the bare department
+ * page. `src/proxy.ts` reads these keys to route a variant to its own cached segment.
+ */
+export const DEPARTEMENT_COMMUNES_FILTER_KEYS = ["lettre"] as const;
