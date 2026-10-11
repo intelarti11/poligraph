@@ -30,9 +30,17 @@ import {
   MAIRE_MIN_COMMUNE_POPULATION,
   MIN_BIOGRAPHY_LENGTH,
 } from "@/lib/seo/politician-robots";
+import { TERRITOIRE_COMMUNE_MIN_POPULATION } from "@/lib/seo/territoire-robots";
+import { PUBLIC_POLITICIAN_PUBLICATION_STATUS } from "@/lib/api/public-contract";
+import { REGIONS } from "@/config/regions";
+import {
+  TERRITOIRES_PATH,
+  territoireCommunePath,
+  territoireRegionPath,
+} from "@/lib/territoires/paths";
 
 export async function generateSitemaps() {
-  return [{ id: 0 }, { id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }];
+  return [{ id: 0 }, { id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }, { id: 5 }];
 }
 
 export default async function sitemap(props: {
@@ -58,6 +66,8 @@ export default async function sitemap(props: {
       return buildScrutinsSitemap();
     case 4:
       return buildCommunesSitemap();
+    case 5:
+      return buildTerritoiresSitemap();
     default:
       return [];
   }
@@ -780,4 +790,64 @@ async function buildCommunesSitemap(): Promise<MetadataRoute.Sitemap> {
     changeFrequency: "weekly" as const,
     priority: 0.6,
   }));
+}
+
+// Sitemap 5: Territoires (#1052). The entry page and the 18 region pages are always indexable.
+// Commune pages only when isIndexableTerritoireCommune() says so (src/lib/seo/territoire-robots.ts):
+// known population at or above the floor AND an established mayor. The SQL mirrors that predicate
+// and the rule of getMaireStatus() (src/lib/data/elus.ts): exactly one current MAIRE mandate
+// outside any PLM sector, on a public profile. Counted before the public filter, so a commune with
+// two current mayors stays out even when only one of them is public. Unknown population stays out:
+// the page is not presumed rich. About 10,000 URLs, well under the 50,000 a sitemap file may hold.
+async function buildTerritoiresSitemap(): Promise<MetadataRoute.Sitemap> {
+  "use cache";
+  cacheTag(...SITEMAP_SHARD_TAGS[5]);
+  cacheLife("synced");
+
+  const communes = await db.$queryRaw<Array<{ id: string; lastmod: Date }>>(Prisma.sql`
+    SELECT c."id", maire."lastmod"
+    FROM "Commune" c
+    JOIN (
+      SELECT ml."communeId", MAX(m."updatedAt") AS "lastmod"
+      FROM "Mandate" m
+      JOIN "MandateLocal" ml ON ml."mandateId" = m."id"
+      JOIN "Politician" p ON p."id" = m."politicianId"
+      WHERE m."type" = 'MAIRE'
+        AND m."isCurrent" = true
+        AND ml."sectorLabel" IS NULL
+        AND ml."communeId" IS NOT NULL
+      GROUP BY ml."communeId"
+      HAVING COUNT(*) = 1
+        AND bool_and(p."publicationStatus" = ${PUBLIC_POLITICIAN_PUBLICATION_STATUS})
+    ) maire ON maire."communeId" = c."id"
+    WHERE c."population" IS NOT NULL
+      AND c."population" >= ${TERRITOIRE_COMMUNE_MIN_POPULATION}
+    ORDER BY c."population" DESC, c."id"
+  `);
+
+  const sectionLastmod = communes.reduce<Date | null>(
+    (latest, c) => (latest === null || c.lastmod > latest ? c.lastmod : latest),
+    null
+  );
+
+  return [
+    {
+      url: `${SITE_URL}${TERRITOIRES_PATH}`,
+      lastModified: sectionLastmod ?? new Date(),
+      changeFrequency: "weekly" as const,
+      priority: 0.8,
+    },
+    ...REGIONS.map((region) => ({
+      url: `${SITE_URL}${territoireRegionPath(region.slug)}`,
+      lastModified: sectionLastmod ?? new Date(),
+      changeFrequency: "weekly" as const,
+      priority: 0.7,
+    })),
+    ...communes.map((c) => ({
+      url: `${SITE_URL}${territoireCommunePath(c.id)}`,
+      lastModified: c.lastmod,
+      changeFrequency: "monthly" as const,
+      priority: 0.5,
+    })),
+  ];
 }

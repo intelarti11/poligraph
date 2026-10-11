@@ -18,7 +18,7 @@ export const ELECTION_GUIDES: Partial<Record<ElectionType, ElectionGuideSection[
       icon: "🗳️",
       content:
         "Les conseillers municipaux sont élus au scrutin de liste à deux tours. " +
-        "Dans les communes de 1 000 habitants et plus, les listes doivent être paritaires. " +
+        "Depuis 2026, dans toutes les communes, les listes doivent être paritaires et alterner femmes et hommes. " +
         "La liste arrivée en tête au 1er tour avec la majorité absolue, ou en tête au 2nd tour, " +
         "obtient la moitié des sièges (prime majoritaire). Les sièges restants sont répartis à la proportionnelle.",
     },
@@ -26,7 +26,7 @@ export const ELECTION_GUIDES: Partial<Record<ElectionType, ElectionGuideSection[
       title: "Nouveauté 2026",
       icon: "✨",
       content:
-        "La loi du 11 avril 2025 étend le scrutin de liste paritaire à toutes les communes, " +
+        "La loi du 21 mai 2025 étend le scrutin de liste paritaire à toutes les communes, " +
         "y compris celles de moins de 1 000 habitants (auparavant au scrutin majoritaire plurinominal). " +
         "C'est une avancée majeure pour la parité dans les conseils municipaux ruraux.",
     },

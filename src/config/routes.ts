@@ -28,6 +28,11 @@ export const STATS_SECTIONS = {
     label: "Participation aux scrutins publics",
     shortLabel: "Votes",
   },
+  territoires: {
+    path: "/statistiques/territoires",
+    label: "Territoires",
+    shortLabel: "Territoires",
+  },
 } as const;
 
 export type StatsTab = keyof typeof STATS_SECTIONS;

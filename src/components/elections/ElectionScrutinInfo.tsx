@@ -18,7 +18,7 @@ const SCRUTIN_DESCRIPTIONS: Record<ElectionType, string> = {
   SENATORIALES:
     "Mode de scrutin mixte selon les départements. Dans les départements élisant 1 ou 2 sénateurs : scrutin majoritaire à deux tours. Dans les départements élisant 3 sénateurs ou plus : scrutin proportionnel de liste.",
   MUNICIPALES:
-    "Dans les communes de 1 000 habitants et plus : scrutin proportionnel de liste à deux tours avec prime majoritaire. Dans les communes de moins de 1 000 habitants : scrutin majoritaire plurinominal à deux tours.",
+    "Scrutin de liste à deux tours avec prime majoritaire, listes paritaires alternant femmes et hommes. Depuis les municipales de 2026 (loi du 21 mai 2025), il s'applique dans toutes les communes. Auparavant, les communes de moins de 1 000 habitants votaient au scrutin majoritaire plurinominal à deux tours.",
   DEPARTEMENTALES:
     "Scrutin binominal majoritaire à deux tours. Chaque canton élit un binôme (un homme et une femme). Le binôme est élu au premier tour s'il obtient la majorité absolue et au moins 25 % des inscrits.",
   REGIONALES:

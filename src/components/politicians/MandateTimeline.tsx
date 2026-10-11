@@ -7,6 +7,7 @@ import type { SerializedMandate, MandateType } from "@/types";
 import type { ProfileMandateGovernment } from "@/lib/data/politician-profile-reads";
 import { mandateGovernmentLink } from "@/components/governments/profile-link";
 import { formatDay } from "@/components/governments/format";
+import { mandateTerritoireHref } from "@/lib/territoires/mandate-link";
 
 const MAIRE_TYPES: MandateType[] = ["MAIRE", "ADJOINT_MAIRE", "CONSEILLER_MUNICIPAL"];
 
@@ -31,6 +32,8 @@ interface MandateWithGroup extends SerializedMandate {
   } | null;
   /** Absent from profile documents stored before it was read. */
   governmentData?: ProfileMandateGovernment | null;
+  /** `commune` is set when the local mandate links a commune of the base. */
+  localData?: { commune?: unknown } | null;
 }
 
 interface MandateTimelineProps {
@@ -256,6 +259,18 @@ export function MandateTimeline({
                             prefetch={false}
                           >
                             Municipales 2026 →
+                          </Link>
+                        ) : null;
+                      })()}
+                      {(() => {
+                        const href = mandateTerritoireHref(mandate);
+                        return href ? (
+                          <Link
+                            href={href}
+                            className="text-xs text-primary hover:underline inline-block"
+                            prefetch={false}
+                          >
+                            Dossier de la commune →
                           </Link>
                         ) : null;
                       })()}

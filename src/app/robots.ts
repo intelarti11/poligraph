@@ -96,6 +96,7 @@ export default function robots(): MetadataRoute.Robots {
       `${SITE_URL}/sitemap/2.xml`,
       `${SITE_URL}/sitemap/3.xml`,
       `${SITE_URL}/sitemap/4.xml`,
+      `${SITE_URL}/sitemap/5.xml`,
     ],
   };
 }

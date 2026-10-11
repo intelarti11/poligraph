@@ -375,6 +375,52 @@ describe("doctrine — sitemap shares the indexability thresholds (no drift)", (
   });
 });
 
+describe("doctrine — the Territoires shard mirrors isIndexableTerritoireCommune()", () => {
+  const src = readFileSync(join(process.cwd(), "src/app/sitemap.ts"), "utf8");
+
+  it("imports the population floor from the shared helper", () => {
+    expect(src).toContain('from "@/lib/seo/territoire-robots"');
+    expect(src).toContain("TERRITOIRE_COMMUNE_MIN_POPULATION");
+  });
+
+  // Scoped to the shard, comments stripped, like the scrutin guard above.
+  const territoiresShard = (() => {
+    const start = src.indexOf("async function buildTerritoiresSitemap");
+    expect(start).toBeGreaterThan(-1);
+    const end = src.indexOf("\n}", start);
+    return src
+      .slice(start, end)
+      .split("\n")
+      .filter((line) => !/^\s*(\/\/|\*|\/\*|--)/.test(line))
+      .join("\n");
+  })();
+
+  it("keeps an unknown population out (not presumed rich)", () => {
+    expect(territoiresShard).toContain('c."population" IS NOT NULL');
+    expect(territoiresShard).toContain('c."population" >= ${TERRITOIRE_COMMUNE_MIN_POPULATION}');
+  });
+
+  // getMaireStatus(): exactly one current MAIRE outside any PLM sector, on a public profile,
+  // counted before the public filter.
+  it.each([
+    `m."type" = 'MAIRE'`,
+    'm."isCurrent" = true',
+    'ml."sectorLabel" IS NULL',
+    "HAVING COUNT(*) = 1",
+    'bool_and(p."publicationStatus" = ${PUBLIC_POLITICIAN_PUBLICATION_STATUS})',
+  ])("filters the established mayor on %s", (signal) => {
+    expect(territoiresShard).toContain(signal);
+  });
+
+  it("never filters the mayors on publication before counting them", () => {
+    const where = territoiresShard.slice(
+      territoiresShard.indexOf("WHERE m."),
+      territoiresShard.indexOf("GROUP BY")
+    );
+    expect(where).not.toContain("publicationStatus");
+  });
+});
+
 describe("doctrine — presidential measure methodology stays indexable and discoverable", () => {
   const sitemapSource = readFileSync(join(process.cwd(), "src/app/sitemap.ts"), "utf8");
 

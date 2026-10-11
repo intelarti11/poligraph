@@ -22,6 +22,9 @@ export const SITEMAP_SHARD_TAGS = {
   3: ["votes"],
   // Communes carrying a 2026 candidacy. Frozen data, hence the frozen tag.
   4: ["elections-municipales-2026"],
+  // Territoires entry, regions and indexable communes. "politicians": a commune enters or leaves
+  // with its mayor's publication; "territoires": the operator purge of the section.
+  5: ["politicians", "territoires"],
 } as const satisfies Record<number, readonly SelectableCacheTag[]>;
 
 /**
