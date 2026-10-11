@@ -1,0 +1,408 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  communeFindUnique: vi.fn(),
+  communeFindMany: vi.fn(),
+  communeGroupBy: vi.fn(),
+  mandateFindMany: vi.fn(),
+  mandateFindFirst: vi.fn(),
+  mandateCount: vi.fn(),
+  mandateGroupBy: vi.fn(),
+  candidacyFindMany: vi.fn(),
+  candidacyCount: vi.fn(),
+  roundFindMany: vi.fn(),
+  electionFindUnique: vi.fn(),
+  syncFindUnique: vi.fn(),
+  queryRaw: vi.fn(),
+}));
+
+vi.mock("server-only", () => ({}));
+vi.mock("next/cache", () => ({ cacheTag: vi.fn(), cacheLife: vi.fn() }));
+vi.mock("@/lib/db", () => ({
+  db: {
+    commune: {
+      findUnique: mocks.communeFindUnique,
+      findMany: mocks.communeFindMany,
+      groupBy: mocks.communeGroupBy,
+    },
+    mandate: {
+      findMany: mocks.mandateFindMany,
+      findFirst: mocks.mandateFindFirst,
+      count: mocks.mandateCount,
+      groupBy: mocks.mandateGroupBy,
+    },
+    candidacy: { findMany: mocks.candidacyFindMany, count: mocks.candidacyCount },
+    communeElectionRound: { findMany: mocks.roundFindMany },
+    election: { findUnique: mocks.electionFindUnique },
+    syncMetadata: { findUnique: mocks.syncFindUnique },
+    $queryRaw: mocks.queryRaw,
+  },
+}));
+
+import {
+  getCommuneDossier,
+  getDepartementTerritoire,
+  getRegionTerritoire,
+  matchDepartements,
+  matchRegions,
+  parseConstituencyNumber,
+  resolveTitulaire,
+  searchTerritoires,
+} from "../territoires";
+
+type Status = "PUBLISHED" | "DRAFT";
+
+function person(slug: string, status: Status = "PUBLISHED") {
+  return {
+    slug,
+    fullName: `Nom ${slug}`,
+    lastName: slug,
+    photoUrl: null,
+    blobPhotoUrl: null,
+    publicationStatus: status,
+  };
+}
+
+interface FakeMandate {
+  id: string;
+  type: string;
+  departmentCode?: string;
+  constituency?: string | null;
+  status?: Status;
+}
+
+/** Mandates fake: honours the type and the public boundary on the politician relation. */
+function serveMandates(rows: FakeMandate[]) {
+  mocks.mandateFindMany.mockImplementation(
+    async (args: { where: { type?: string; politician?: { publicationStatus?: string } } }) =>
+      rows
+        .filter((r) => r.type === args.where.type)
+        .filter(
+          (r) =>
+            !args.where.politician?.publicationStatus ||
+            (r.status ?? "PUBLISHED") === args.where.politician.publicationStatus
+        )
+        .map((r) => ({
+          id: r.id,
+          title: null,
+          constituency: r.constituency ?? null,
+          lastConfirmedAt: null,
+          source: "RNE",
+          localData: { functionStart: null, sectorLabel: null, communeId: "35238" },
+          politician: person(r.id, r.status),
+        }))
+  );
+  mocks.mandateFindFirst.mockImplementation(async (args: { where: { id: string } }) => {
+    const row = rows.find(
+      (r) => r.id === args.where.id && (r.status ?? "PUBLISHED") === "PUBLISHED"
+    );
+    return row
+      ? {
+          startDate: new Date("2026-03-22T00:00:00Z"),
+          lastConfirmedAt: null,
+          source: "RNE",
+          localData: { functionStart: new Date("2026-03-22T00:00:00Z") },
+          politician: person(row.id),
+        }
+      : null;
+  });
+}
+
+const RENNES = {
+  id: "35238",
+  name: "Rennes",
+  departmentCode: "35",
+  postalCodes: ["35000"],
+  population: 230890,
+  constituencyNumber: 1,
+};
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.communeFindUnique.mockResolvedValue(RENNES);
+  mocks.syncFindUnique.mockResolvedValue({ lastSyncAt: new Date("2026-08-10T09:00:00Z") });
+  mocks.electionFindUnique.mockResolvedValue({
+    id: "m2026",
+    round1Date: new Date("2026-03-15T00:00:00Z"),
+    round2Date: new Date("2026-03-22T00:00:00Z"),
+  });
+  mocks.candidacyFindMany.mockResolvedValue([]);
+  mocks.candidacyCount.mockResolvedValue(0);
+  mocks.roundFindMany.mockResolvedValue([]);
+  serveMandates([]);
+});
+
+describe("fonctions pures", () => {
+  it("lit le numéro de circonscription d'un libellé de mandat", () => {
+    expect(parseConstituencyNumber("Vendée (3)")).toBe(3);
+    expect(parseConstituencyNumber("Rhône (13)")).toBe(13);
+    expect(parseConstituencyNumber("Martinique")).toBeNull();
+    expect(parseConstituencyNumber(null)).toBeNull();
+  });
+
+  it("n'établit un titulaire que s'il est unique et public", () => {
+    expect(resolveTitulaire([]).state).toBe("ABSENT");
+    expect(resolveTitulaire([{ publicationStatus: "PUBLISHED" }]).state).toBe("ETABLI");
+    expect(resolveTitulaire([{ publicationStatus: "DRAFT" }])).toEqual({
+      state: "NON_ETABLI",
+      holder: null,
+    });
+    expect(
+      resolveTitulaire([{ publicationStatus: "PUBLISHED" }, { publicationStatus: "PUBLISHED" }])
+        .holder
+    ).toBeNull();
+  });
+
+  it("trouve départements et régions par nom, accents et code", () => {
+    expect(matchDepartements("loire")[0]?.name).toBe("Loire");
+    expect(matchDepartements("2a")[0]?.name).toBe("Corse-du-Sud");
+    expect(matchDepartements("finistere")[0]?.code).toBe("29");
+    expect(matchRegions("ile de france")[0]?.code).toBe("11");
+    expect(matchRegions("x").length).toBe(0);
+  });
+});
+
+describe("getCommuneDossier", () => {
+  it("refuse un code mal formé sans interroger la base", async () => {
+    expect(await getCommuneDossier("../etc")).toBeNull();
+    expect(await getCommuneDossier("123")).toBeNull();
+    expect(mocks.communeFindUnique).not.toHaveBeenCalled();
+  });
+
+  it("établit le maire unique public, avec source et date de prise de fonction", async () => {
+    serveMandates([
+      { id: "maire", type: "MAIRE" },
+      { id: "dep1", type: "DEPUTE", constituency: "Ille-et-Vilaine (1)" },
+      { id: "dep2", type: "DEPUTE", constituency: "Ille-et-Vilaine (2)" },
+      { id: "sen", type: "SENATEUR" },
+    ]);
+
+    const dossier = await getCommuneDossier("35238");
+
+    expect(dossier?.maire.state).toBe("ETABLI");
+    expect(dossier?.maire.person?.slug).toBe("maire");
+    expect(dossier?.maire.functionStart).toBe("2026-03-22T00:00:00.000Z");
+    expect(dossier?.maire.source?.label).toBe("Répertoire National des Élus");
+    expect(dossier?.parlement.deputes.state).toBe("DISPONIBLE");
+    expect(dossier?.parlement.deputes.deputes.map((d) => d.slug)).toEqual(["dep1"]);
+    expect(dossier?.parlement.deputes.couvertureCirconscriptions).toBe("NON_VERIFIEE");
+    expect(dossier?.parlement.senateurs.senateurs).toHaveLength(1);
+    expect(dossier?.identity.region?.name).toBe("Bretagne");
+  });
+
+  it("ne nomme aucun maire quand deux sont courants, dont un non public", async () => {
+    serveMandates([
+      { id: "maire-public", type: "MAIRE" },
+      { id: "maire-prive", type: "MAIRE", status: "DRAFT" },
+    ]);
+
+    const dossier = await getCommuneDossier("35238");
+
+    expect(dossier?.maire.state).toBe("NON_ETABLI");
+    expect(dossier?.maire.person).toBeNull();
+    expect(JSON.stringify(dossier)).not.toContain("maire-public");
+    expect(JSON.stringify(dossier)).not.toContain("maire-prive");
+  });
+
+  it("ne remplace jamais le conseil municipal ni le millésime de population", async () => {
+    const dossier = await getCommuneDossier("35238");
+
+    expect(dossier?.conseilMunicipal).toEqual({ state: "NON_ETABLI" });
+    expect(dossier?.population.vintage).toBeNull();
+    expect(dossier?.population.importedAt).toBe("2026-08-10T09:00:00.000Z");
+    expect(dossier?.maire.state).toBe("ABSENT");
+    expect(dossier?.coverage.find((c) => c.bloc === "conseilMunicipal")?.state).toBe("NON_ETABLI");
+  });
+
+  it("ne désigne aucun député pour une commune PLM", async () => {
+    mocks.communeFindUnique.mockResolvedValue({
+      ...RENNES,
+      id: "75056",
+      name: "Paris",
+      departmentCode: "75",
+    });
+    serveMandates([
+      { id: "dep1", type: "DEPUTE", constituency: "Paris (1)", departmentCode: "75" },
+    ]);
+
+    const dossier = await getCommuneDossier("75056");
+
+    expect(dossier?.parlement.deputes.state).toBe("NON_ETABLI");
+    expect(dossier?.parlement.deputes.deputes).toEqual([]);
+    expect(dossier?.parlement.deputes.couvertureCirconscriptions).toBe("PLUSIEURS");
+    expect(dossier?.identity.collectivitesParticulieres.map((c) => c.id)).toContain(
+      "ville-de-paris"
+    );
+  });
+
+  it("présente une collectivité d'outre-mer sans région, avec son statut", async () => {
+    mocks.communeFindUnique.mockResolvedValue({
+      ...RENNES,
+      id: "98735",
+      name: "Papeete",
+      departmentCode: "987",
+      constituencyNumber: null,
+    });
+
+    const dossier = await getCommuneDossier("98735");
+
+    expect(dossier?.identity.region).toBeNull();
+    expect(dossier?.identity.territoireHorsRegion?.statut).toBe("Collectivité d'outre-mer");
+  });
+
+  it("déclare élue au premier tour la seule liste au-delà de 50 %, jamais à 50 %", async () => {
+    mocks.candidacyFindMany.mockResolvedValue([
+      {
+        listName: "Liste A",
+        candidateName: "A",
+        round1Votes: 500,
+        round1Pct: 50,
+        round2Votes: null,
+        round2Pct: null,
+        isElected: true,
+        politician: null,
+      },
+      {
+        listName: "Liste B",
+        candidateName: "B",
+        round1Votes: 400,
+        round1Pct: 50.01,
+        round2Votes: null,
+        round2Pct: null,
+        isElected: false,
+        politician: person("tete-privee", "DRAFT"),
+      },
+    ]);
+
+    const block = (await getCommuneDossier("35238"))?.elections.municipales2026;
+
+    expect(block?.state).toBe("DISPONIBLE");
+    expect(block?.listes.map((l) => l.elueAuPremierTour)).toEqual([false, true]);
+    // Un candidat lié à une fiche non publique reste un nom de bulletin, sans lien.
+    expect(block?.listes[1]?.teteDeListe).toEqual({ name: "B", person: null });
+    expect(mocks.candidacyFindMany.mock.calls[0]![0].take).toBeLessThanOrEqual(50);
+  });
+
+  it("distingue l'absence de résultats d'une commune sans candidature", async () => {
+    mocks.candidacyCount.mockResolvedValue(12);
+    const block = (await getCommuneDossier("35238"))?.elections.municipales2026;
+    expect(block?.state).toBe("NON_ETABLI");
+  });
+});
+
+describe("getDepartementTerritoire", () => {
+  beforeEach(() => {
+    mocks.mandateCount.mockResolvedValue(0);
+    mocks.mandateGroupBy.mockResolvedValue([]);
+  });
+
+  it("valide le code, la lettre et la page", async () => {
+    expect(await getDepartementTerritoire("1; DROP")).toBeNull();
+    expect(await getDepartementTerritoire("13", { page: 0 })).toBeNull();
+    expect(await getDepartementTerritoire("13", { page: 41 })).toBeNull();
+    expect(mocks.queryRaw).not.toHaveBeenCalled();
+  });
+
+  it("pagine par lettre avec un compteur exact et l'état du maire", async () => {
+    mocks.queryRaw
+      .mockResolvedValueOnce([
+        { letter: "A", count: 2 },
+        { letter: "M", count: 1 },
+      ])
+      .mockResolvedValueOnce([
+        { id: "13001", name: "Aix-en-Provence", population: 147000 },
+        { id: "13002", name: "Allauch", population: 21000 },
+      ]);
+    mocks.mandateFindMany.mockImplementation(async (args: { where: { type: string } }) =>
+      args.where.type === "MAIRE"
+        ? [
+            { localData: { communeId: "13001" }, politician: person("maire-aix") },
+            { localData: { communeId: "13002" }, politician: person("m1") },
+            { localData: { communeId: "13002" }, politician: person("m2") },
+          ]
+        : []
+    );
+
+    const result = await getDepartementTerritoire("13", { letter: "a" });
+
+    expect(result?.communeCount).toBe(3);
+    expect(result?.letterCounts).toEqual({ A: 2, M: 1 });
+    expect(result?.communes).toMatchObject({ letter: "A", page: 1, total: 2, totalPages: 1 });
+    expect(result?.communes.rows.map((r) => [r.name, r.maire.state])).toEqual([
+      ["Aix-en-Provence", "ETABLI"],
+      ["Allauch", "NON_ETABLI"],
+    ]);
+    expect(JSON.stringify(result)).not.toContain('"m1"');
+    expect(result?.presidence.state).toBe("ABSENT");
+    expect(result?.conseil.state).toBe("ABSENT");
+  });
+});
+
+describe("getRegionTerritoire", () => {
+  it("renvoie null pour un slug inconnu, sans requête", async () => {
+    expect(await getRegionTerritoire("atlantide")).toBeNull();
+    expect(mocks.communeGroupBy).not.toHaveBeenCalled();
+  });
+
+  it("liste les départements avec leurs comptes et déclare absent ce qui manque", async () => {
+    mocks.communeGroupBy.mockResolvedValue([
+      { departmentCode: "22", _count: { _all: 344 } },
+      { departmentCode: "35", _count: { _all: 332 } },
+    ]);
+    mocks.mandateGroupBy.mockResolvedValue([]);
+    mocks.mandateCount.mockResolvedValue(0);
+
+    const region = await getRegionTerritoire("bretagne");
+
+    expect(region?.departements.map((d) => d.code)).toEqual(["22", "29", "35", "56"]);
+    expect(region?.departements.find((d) => d.code === "29")?.communeCount).toBe(0);
+    expect(region?.communeCount).toBe(676);
+    expect(region?.presidence.state).toBe("ABSENT");
+    expect(region?.conseil).toEqual({ state: "ABSENT", recordedCount: 0 });
+  });
+});
+
+describe("searchTerritoires", () => {
+  it("renvoie toutes les communes d'un code postal partagé", async () => {
+    const shared = Array.from({ length: 22 }, (_, i) => ({
+      id: `01${String(i).padStart(3, "0")}`,
+      name: `Commune ${i}`,
+      postalCodes: ["01300"],
+      population: 100,
+      departmentCode: "01",
+    }));
+    mocks.communeFindMany.mockResolvedValue(shared);
+    mocks.communeFindUnique.mockResolvedValue(null);
+
+    const result = await searchTerritoires("01300");
+
+    expect(result.communes).toHaveLength(22);
+    expect(mocks.communeFindMany.mock.calls[0]![0]).toMatchObject({
+      where: { postalCodes: { has: "01300" } },
+      take: 100,
+    });
+  });
+
+  it("borne la recherche par nom et retombe sur le repli sans accent", async () => {
+    mocks.queryRaw.mockResolvedValueOnce([]).mockResolvedValueOnce([
+      {
+        id: "27229",
+        name: "Évreux",
+        postalCodes: ["27000"],
+        population: 47000,
+        departmentCode: "27",
+      },
+    ]);
+
+    const result = await searchTerritoires("evreux");
+
+    expect(result.communes.map((c) => c.name)).toEqual(["Évreux"]);
+    expect(result.communes[0]?.department.name).toBe("Eure");
+    expect(mocks.queryRaw).toHaveBeenCalledTimes(2);
+  });
+
+  it("ignore une requête trop courte", async () => {
+    expect(await searchTerritoires(" a ")).toEqual({ communes: [], departements: [], regions: [] });
+    expect(mocks.queryRaw).not.toHaveBeenCalled();
+  });
+});
