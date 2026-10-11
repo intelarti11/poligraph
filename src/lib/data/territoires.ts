@@ -31,6 +31,10 @@ import {
   type PopulationVintage,
 } from "./commune-population";
 import { DATA_SOURCE_LABELS, DATA_SOURCE_URLS } from "@/config/labels";
+import {
+  readCommunePresidentielles,
+  type CommunePresidentielles,
+} from "@/lib/data/territoires-presidentielle";
 
 /**
  * Readers of the Territoires section (#1052): commune dossier, region, department, entry page,
@@ -101,6 +105,7 @@ export type CoverageBloc =
   | "deputes"
   | "senateurs"
   | "municipales2026"
+  | "presidentielle"
   | "departements"
   | "presidence"
   | "conseil"
@@ -377,7 +382,7 @@ export interface CommuneDossier {
     };
     senateurs: { state: BlockState; senateurs: ParlementaireRef[] };
   };
-  elections: { municipales2026: MunicipalesBlock | null };
+  elections: { municipales2026: MunicipalesBlock | null; presidentielles: CommunePresidentielles };
   coverage: CoverageEntry[];
 }
 
@@ -624,6 +629,8 @@ async function readCommuneDossier(inseeCode: string): Promise<CommuneDossier | n
     ? { label: populationEnVigueur.vintage.sourceLabel, url: populationEnVigueur.vintage.sourceUrl }
     : POPULATION_SOURCE;
   const populationImportedAt = populationEnVigueur?.verifiedAt ?? importedAt;
+  const presidentielles = await readCommunePresidentielles(inseeCode, commune.departmentCode);
+  const lastPresidentielle = presidentielles.blocks[0];
 
   const plusieursCirconscriptions = PLM_COMMUNES.has(inseeCode);
   const circo = commune.constituencyNumber;
@@ -699,6 +706,14 @@ async function readCommuneDossier(inseeCode: string): Promise<CommuneDossier | n
       source: municipales2026 ? municipales2026.source : null,
       date: municipales2026?.round2Date ?? municipales2026?.round1Date ?? null,
     },
+    {
+      bloc: "presidentielle",
+      state: lastPresidentielle ? "DISPONIBLE" : "ABSENT",
+      source: lastPresidentielle?.sources[0]
+        ? { label: lastPresidentielle.sources[0].label, url: lastPresidentielle.sources[0].url }
+        : null,
+      date: lastPresidentielle?.importedAt ?? null,
+    },
   ];
 
   return {
@@ -736,7 +751,7 @@ async function readCommuneDossier(inseeCode: string): Promise<CommuneDossier | n
       },
       senateurs: { state: senateurs.length > 0 ? "DISPONIBLE" : "ABSENT", senateurs },
     },
-    elections: { municipales2026 },
+    elections: { municipales2026, presidentielles },
     coverage,
   };
 }

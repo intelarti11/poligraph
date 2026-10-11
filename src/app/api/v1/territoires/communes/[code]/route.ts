@@ -16,8 +16,12 @@ import { withPublicRoute } from "@/lib/api/with-public-route";
  *       municipale en vigueur avec `vintage` : millésime, date d'entrée en vigueur,
  *       producteur et source ; `vintage` vaut null quand seule la population de
  *       geo.api.gouv.fr, sans millésime, est connue), parlementaires, résultats des
- *       municipales 2026 et matrice de couverture par bloc. Seules les fiches publiques
- *       sont nommées. La composition du conseil municipal n'est pas établie.
+ *       municipales 2026, résultats de la présidentielle dans la commune
+ *       (`elections.presidentielles` : participation et voix par candidat et par tour, avec la
+ *       source du ministère de l'Intérieur et la date d'import ; vide quand rien n'est publié
+ *       pour la commune ; `agregatTerritoire` quand le territoire n'est publié qu'en un seul
+ *       agrégat, comme Wallis-et-Futuna) et matrice de couverture par bloc. Seules les fiches
+ *       publiques sont nommées. La composition du conseil municipal n'est pas établie.
  *     tags: [Territoires]
  *     parameters:
  *       - in: path

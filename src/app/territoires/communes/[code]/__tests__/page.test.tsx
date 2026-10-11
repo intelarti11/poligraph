@@ -170,6 +170,7 @@ describe("/territoires/communes/[code]", () => {
     const { text } = await render({
       ...base,
       elections: {
+        ...base.elections,
         municipales2026: {
           ...block,
           listes: block.listes.map((l) => ({
