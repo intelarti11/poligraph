@@ -69,6 +69,8 @@ export interface PersonRef {
   slug: string;
   fullName: string;
   photoUrl: string | null;
+  /** "M." or "Mme" as recorded, null when unknown: drives grammatical agreement only. */
+  civility: string | null;
 }
 
 export interface DepartmentRef {
@@ -181,8 +183,14 @@ function personRef(p: {
   fullName: string;
   photoUrl: string | null;
   blobPhotoUrl: string | null;
+  civility?: string | null;
 }): PersonRef {
-  return { slug: p.slug, fullName: p.fullName, photoUrl: p.blobPhotoUrl ?? p.photoUrl };
+  return {
+    slug: p.slug,
+    fullName: p.fullName,
+    photoUrl: p.blobPhotoUrl ?? p.photoUrl,
+    civility: p.civility ?? null,
+  };
 }
 
 /** "Vendée (3)" -> 3. Null when the label carries no number. */
@@ -220,6 +228,7 @@ const PERSON_SELECT = {
   fullName: true,
   photoUrl: true,
   blobPhotoUrl: true,
+  civility: true,
 } as const;
 
 // ═══ Commune dossier ════════════════════════════════════════════
@@ -323,6 +332,8 @@ export interface CommuneDossier {
     /** Set for 975 to 989: the territory and its status, in place of a region. */
     territoireHorsRegion: { code: string; name: string; statut: string } | null;
     collectivitesParticulieres: CollectiviteParticuliere[];
+    /** Town-centre position from the COG import, used only to place a decorative marker. */
+    coordinates: { lat: number; lon: number } | null;
     source: SourceRef;
   };
   maire: MaireBlock;
@@ -590,6 +601,8 @@ async function readCommuneDossier(inseeCode: string): Promise<CommuneDossier | n
       postalCodes: true,
       population: true,
       constituencyNumber: true,
+      latitude: true,
+      longitude: true,
     },
   });
   if (!commune) return null;
@@ -687,6 +700,10 @@ async function readCommuneDossier(inseeCode: string): Promise<CommuneDossier | n
       region: regionRef(region),
       territoireHorsRegion: getTerritoireHorsRegion(commune.departmentCode),
       collectivitesParticulieres: getCollectivitesForCommune(inseeCode),
+      coordinates:
+        commune.latitude != null && commune.longitude != null
+          ? { lat: commune.latitude, lon: commune.longitude }
+          : null,
       source: COG_SOURCE,
     },
     maire,
