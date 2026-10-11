@@ -46,7 +46,14 @@ function govRow(overrides: Partial<GovernmentRow> = {}): GovernmentRow {
     slug: "lecornu-2",
     name: "Gouvernement Sébastien Lecornu II",
     sequence: 48,
-    primeMinister: { slug: "sebastien-lecornu", fullName: "Sébastien Lecornu", civility: "M." },
+    primeMinister: {
+      slug: "sebastien-lecornu",
+      fullName: "Sébastien Lecornu",
+      civility: "M.",
+      publicationStatus: "PUBLISHED",
+      photoUrl: "https://upload.wikimedia.org/lecornu.jpg",
+      blobPhotoUrl: "https://blob.example/lecornu.jpg",
+    },
     primeMinisterAppointedAt: d("2025-10-10"),
     primeMinisterAppointedEvidence: "ACT",
     primeMinisterAppointedDetermination: "CONVENTION",
@@ -80,6 +87,21 @@ function govRow(overrides: Partial<GovernmentRow> = {}): GovernmentRow {
 }
 
 describe("toPublishedGovernment", () => {
+  it("ne garde la photo du Premier ministre que si sa fiche est publiée", () => {
+    const published = toPublishedGovernment(govRow()).primeMinister;
+    expect(published.photoUrl).toBe("https://upload.wikimedia.org/lecornu.jpg");
+    expect(published.blobPhotoUrl).toBe("https://blob.example/lecornu.jpg");
+    for (const status of ["DRAFT", "ARCHIVED", "EXCLUDED", "REJECTED"] as const) {
+      const row = govRow();
+      const pm = toPublishedGovernment({
+        ...row,
+        primeMinister: { ...row.primeMinister, publicationStatus: status },
+      }).primeMinister;
+      expect(pm.photoUrl).toBeNull();
+      expect(pm.blobPhotoUrl).toBeNull();
+    }
+  });
+
   it("convertit les dates en jours UTC et préfère l'URL de l'acte", () => {
     const g = toPublishedGovernment(govRow());
     expect(g).toMatchObject({
