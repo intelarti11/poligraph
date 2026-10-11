@@ -34,6 +34,7 @@ import { TERRITOIRE_COMMUNE_MIN_POPULATION } from "@/lib/seo/territoire-robots";
 import { PUBLIC_POLITICIAN_PUBLICATION_STATUS } from "@/lib/api/public-contract";
 import { REGIONS } from "@/config/regions";
 import {
+  TERRITOIRES_DONNEES_PATH,
   TERRITOIRES_PATH,
   territoireCommunePath,
   territoireRegionPath,
@@ -836,6 +837,12 @@ async function buildTerritoiresSitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: sectionLastmod ?? new Date(),
       changeFrequency: "weekly" as const,
       priority: 0.8,
+    },
+    {
+      url: `${SITE_URL}${TERRITOIRES_DONNEES_PATH}`,
+      lastModified: sectionLastmod ?? new Date(),
+      changeFrequency: "monthly" as const,
+      priority: 0.4,
     },
     ...REGIONS.map((region) => ({
       url: `${SITE_URL}${territoireRegionPath(region.slug)}`,
