@@ -39,7 +39,7 @@ describe("TerritoiresSection", () => {
     const { container } = render(<TerritoiresSection stats={stats} />);
     const text = container.textContent ?? "";
     expect(text).toContain("34 796");
-    expect(text).toContain("22,9 %");
+    expect(text).toContain("22,9\u00a0%");
     expect(text).toContain("61 ans");
     expect(text).toContain("11 octobre 2026");
   });
@@ -83,5 +83,12 @@ describe("TerritoiresSection", () => {
       "href",
       "/territoires"
     );
+  });
+
+  it("n'écrit jamais 0,0 % pour une catégorie qui compte des lignes", () => {
+    const { container } = render(<TerritoiresSection stats={stats} />);
+    const text = container.textContent ?? "";
+    expect(text).not.toContain("0,0\u00a0%");
+    expect(text).toContain("moins de 0,1\u00a0% (3 maires)");
   });
 });

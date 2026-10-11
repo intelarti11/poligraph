@@ -10,7 +10,10 @@ const pf = new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 1, maximumFra
 
 function formatShare(count: number, total: number): string {
   const share = sharePercent(count, total);
-  return share === null ? "non calculable" : `${pf.format(share)} %`;
+  if (share === null) return "non calculable";
+  // A handful of rows must not read as « 0,0 % », which would say none.
+  if (share === 0 && count > 0) return "moins de 0,1\u00a0%";
+  return `${pf.format(share)}\u00a0%`;
 }
 
 function formatDate(iso: string | null): string | null {
@@ -107,8 +110,8 @@ export function TerritoiresSection({ stats }: { stats: TerritoiresStats }) {
           <p className="text-xs leading-relaxed text-muted-foreground">
             Depuis les municipales de mars 2026, les conseillers municipaux de toutes les communes
             sont élus au scrutin de liste paritaire, avec alternance femme-homme (loi du 21 mai
-            2025, y compris sous 1 000 habitants). Cette règle porte sur les listes. Le maire est
-            ensuite élu par le conseil municipal, et la part de femmes ci-dessus décrit cette
+            2025, y compris sous 1&nbsp;000 habitants). Cette règle porte sur les listes. Le maire
+            est ensuite élu par le conseil municipal, et la part de femmes ci-dessus décrit cette
             fonction, pas la composition des conseils.
           </p>
         </CardContent>

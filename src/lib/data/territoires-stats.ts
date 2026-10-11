@@ -119,9 +119,21 @@ export function buildTerritoiresStats(
         [
           { key: "moins-500", label: "Moins de 500 habitants", count: commune.pop_moins_500 },
           { key: "500-999", label: "500 à 999 habitants", count: commune.pop_500_999 },
-          { key: "1000-3499", label: "1 000 à 3 499 habitants", count: commune.pop_1000_3499 },
-          { key: "3500-9999", label: "3 500 à 9 999 habitants", count: commune.pop_3500_9999 },
-          { key: "10000-plus", label: "10 000 habitants et plus", count: commune.pop_10000_plus },
+          {
+            key: "1000-3499",
+            label: "1\u00a0000 à 3\u00a0499 habitants",
+            count: commune.pop_1000_3499,
+          },
+          {
+            key: "3500-9999",
+            label: "3\u00a0500 à 9\u00a0999 habitants",
+            count: commune.pop_3500_9999,
+          },
+          {
+            key: "10000-plus",
+            label: "10\u00a0000 habitants et plus",
+            count: commune.pop_10000_plus,
+          },
         ],
         { key: "inconnu", label: "Population non renseignée", count: commune.pop_inconnue }
       ),
