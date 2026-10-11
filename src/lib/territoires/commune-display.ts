@@ -47,6 +47,7 @@ const COVERAGE_LABELS: Partial<Record<CoverageEntry["bloc"], string>> = {
   deputes: "circonscription législative",
   senateurs: "sénateurs du département",
   municipales2026: "résultats des municipales 2026",
+  intercommunalite: "intercommunalité",
 };
 
 /** Blocks shown with a source, in the order of the coverage matrix. Identity is implied. */

@@ -3,6 +3,7 @@ import { ChevronDown } from "lucide-react";
 import { DATA_SOURCE_URLS } from "@/config/labels";
 import { TERRITOIRES_SANS_COMMUNE } from "@/config/regions";
 import { PoliticianAvatar } from "@/components/politicians/PoliticianAvatar";
+import { IntercommunaliteCard } from "@/components/territoires/IntercommunaliteCard";
 import type {
   CommuneDossier,
   MunicipalesBlock,
@@ -213,6 +214,12 @@ export function QuiDecideSection({ dossier }: { dossier: CommuneDossier }) {
             Poligraph ne dispose pas de la liste à jour des conseillers municipaux. Les résultats de
             mars 2026 ne la remplacent pas : des élus ont pu démissionner ou être remplacés depuis.
           </p>
+        </div>
+      )}
+
+      {dossier.intercommunalite && (
+        <div className="mt-4">
+          <IntercommunaliteCard dossier={dossier} />
         </div>
       )}
 

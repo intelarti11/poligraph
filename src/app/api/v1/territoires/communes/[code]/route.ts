@@ -14,8 +14,12 @@ import { withPublicRoute } from "@/lib/api/with-public-route";
  *       particulier), maire (`state` ETABLI, NON_ETABLI ou ABSENT ; aucun nom n'est donné
  *       hors ETABLI), maires d'arrondissement ou de secteur, population (source et date
  *       d'import, millésime non publié par la source), parlementaires, résultats des
- *       municipales 2026 et matrice de couverture par bloc. Seules les fiches publiques
- *       sont nommées. La composition du conseil municipal n'est pas établie.
+ *       municipales 2026, intercommunalité (`intercommunalite` : null avant le premier
+ *       import ; `state` DISPONIBLE, AUCUNE quand l'INSEE indique qu'aucune intercommunalité
+ *       à fiscalité propre ne regroupe la commune, NON_ETABLI quand la source ne couvre pas la
+ *       commune, comme les collectivités d'outre-mer ; date de situation et source ; aucune
+ *       compétence) et matrice de couverture par bloc. Seules les fiches publiques sont
+ *       nommées. La composition du conseil municipal n'est pas établie.
  *     tags: [Territoires]
  *     parameters:
  *       - in: path
