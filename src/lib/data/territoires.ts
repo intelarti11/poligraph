@@ -7,6 +7,10 @@ import {
   PUBLIC_POLITICIAN_WHERE,
 } from "@/lib/api/public-contract";
 import { getMaireStatus, type MaireStatus } from "@/lib/data/elus";
+import {
+  readIntercommunalites,
+  type IntercommunaliteBlock,
+} from "@/lib/data/territoires-intercommunalites";
 import { DEPARTMENTS, getDepartmentName, getDepartmentSlug } from "@/config/departments";
 import {
   REGIONS,
@@ -43,7 +47,8 @@ import {
  * Dependencies and invalidation
  * -----------------------------
  * The cached readers below read Commune, Mandate (+ MandateLocal), Politician (publication
- * status), Candidacy, ElectoralList, CommuneElectionRound, Election and SyncMetadata. Each one is
+ * status), Candidacy, ElectoralList, CommuneElectionRound, Election, SyncMetadata and
+ * CommuneIntercommunalite (+ Intercommunalite). Each one is
  * tagged with the tags the existing write paths already purge, so no new purge point is needed:
  *
  * - `politicians`: purged by `invalidateEntity("politician" | "mandate")`, which the admin
@@ -52,6 +57,7 @@ import {
  *   withdrawn from publication therefore leaves these pages on the next purge, without waiting for
  *   an RNE import. The RNE import itself (`npm run sync:rne:maires`, manual) purges nothing: its
  *   writes surface with the next daily `politicians` purge, or an operator purge of `territoires`.
+ *   The intercommunality import (`npm run sync:intercommunalites`, manual) works the same way.
  * - `elections`: purged by `invalidateEntity("election")` and by `revalidateAll()` after a sync.
  * - `elections-municipales-2026`: the frozen results tag, purged only by an operator.
  * - `territoires`: operator-selectable (`NARROW_TAGS`), purges every reader here at once.
@@ -105,6 +111,7 @@ export type CoverageBloc =
   | "deputes"
   | "senateurs"
   | "municipales2026"
+  | "intercommunalite"
   | "presidentielle"
   | "departements"
   | "presidence"
@@ -383,6 +390,8 @@ export interface CommuneDossier {
     senateurs: { state: BlockState; senateurs: ParlementaireRef[] };
   };
   elections: { municipales2026: MunicipalesBlock | null; presidentielles: CommunePresidentielles };
+  /** Null until the first intercommunality import: no block is shown then. */
+  intercommunalite: IntercommunaliteBlock | null;
   coverage: CoverageEntry[];
 }
 
@@ -629,6 +638,7 @@ async function readCommuneDossier(inseeCode: string): Promise<CommuneDossier | n
     ? { label: populationEnVigueur.vintage.sourceLabel, url: populationEnVigueur.vintage.sourceUrl }
     : POPULATION_SOURCE;
   const populationImportedAt = populationEnVigueur?.verifiedAt ?? importedAt;
+  const intercommunalite = await readIntercommunalites(inseeCode);
   const presidentielles = await readCommunePresidentielles(inseeCode, commune.departmentCode);
   const lastPresidentielle = presidentielles.blocks[0];
 
@@ -706,6 +716,20 @@ async function readCommuneDossier(inseeCode: string): Promise<CommuneDossier | n
       source: municipales2026 ? municipales2026.source : null,
       date: municipales2026?.round2Date ?? municipales2026?.round1Date ?? null,
     },
+    ...(intercommunalite
+      ? [
+          {
+            bloc: "intercommunalite" as const,
+            // "Sans objet" is an established fact too: the commune belongs to none.
+            state:
+              intercommunalite.state === "NON_ETABLI"
+                ? ("NON_ETABLI" as const)
+                : ("DISPONIBLE" as const),
+            source: intercommunalite.source,
+            date: intercommunalite.situationDate,
+          },
+        ]
+      : []),
     {
       bloc: "presidentielle",
       state: lastPresidentielle ? "DISPONIBLE" : "ABSENT",
@@ -752,6 +776,7 @@ async function readCommuneDossier(inseeCode: string): Promise<CommuneDossier | n
       senateurs: { state: senateurs.length > 0 ? "DISPONIBLE" : "ABSENT", senateurs },
     },
     elections: { municipales2026, presidentielles },
+    intercommunalite,
     coverage,
   };
 }

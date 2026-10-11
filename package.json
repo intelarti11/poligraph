@@ -188,6 +188,8 @@
     "pwa:icons": "tsx scripts/generate-pwa-icons.ts",
     "sync:rne:maires": "tsx scripts/sync-rne.ts",
     "sync:rne:arrondissements": "tsx scripts/sync-rne-arrondissements.ts",
+    "sync:intercommunalites": "tsx scripts/sync-intercommunalites.ts",
+    "sync:intercommunalites:dry": "tsx scripts/sync-intercommunalites.ts --dry-run",
     "sync:rne:maires:stats": "tsx scripts/sync-rne.ts --stats",
     "sync:elections:municipales": "tsx scripts/sync-candidatures.ts",
     "sync:elections:municipales:stats": "tsx scripts/sync-candidatures.ts --stats",

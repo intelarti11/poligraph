@@ -52,6 +52,7 @@ const COVERAGE_LABELS: Partial<Record<CoverageEntry["bloc"], string>> = {
   deputes: "circonscription législative",
   senateurs: "sénateurs du département",
   municipales2026: "résultats des municipales 2026",
+  intercommunalite: "intercommunalité",
   presidentielle: "résultats de la présidentielle",
 };
 
