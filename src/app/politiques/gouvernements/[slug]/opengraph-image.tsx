@@ -24,6 +24,16 @@ export const revalidate = 86400;
 
 const ACCENT = "#7dd3fc";
 
+// « Michel Debré » → MD, « Maurice Couve de Murville » → MC : the particles are skipped.
+// Taken from the government's own record, so an unpublished fiche still gets its initials.
+function initialsOf(fullName: string): string {
+  const words = fullName.split(/\s+/).filter((w) => /^\p{Lu}/u.test(w));
+  return words
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join("");
+}
+
 function fallbackCard(message: string) {
   return (
     <OgLayout>
@@ -58,13 +68,15 @@ export default async function Image({ params }: { params: Promise<{ slug: string
   // Narrow read: the portrait is shown only when the Prime Minister's fiche is public.
   const pm = await db.politician.findUnique({
     where: { slug: gov.primeMinister.slug, ...PUBLIC_POLITICIAN_WHERE },
-    select: { firstName: true, lastName: true, photoUrl: true, blobPhotoUrl: true },
+    select: { photoUrl: true, blobPhotoUrl: true },
   });
   const portrait = pm ? await loadOgPortrait(pm.blobPhotoUrl ?? pm.photoUrl) : null;
-  const initials = pm ? `${pm.firstName[0] ?? ""}${pm.lastName[0] ?? ""}`.toUpperCase() : "";
+  const initials = initialsOf(gov.primeMinister.fullName);
 
   // Same period as the directory card and the page; nothing when a date is estimated.
   const dates = governmentPeriod(gov);
+  // The sourcing claim holds only for a complete composition whose dates come from acts.
+  const sourced = gov.completeness === "COMPLETE" && !gov.hasDerivedDate;
 
   return new ImageResponse(
     <OgLayout>
@@ -139,7 +151,9 @@ export default async function Image({ params }: { params: Promise<{ slug: string
           {dates && <span style={{ fontSize: 30, color: "#cbd5e1" }}>{dates}</span>}
 
           <span style={{ fontSize: 24, color: "#94a3b8" }}>
-            Sa composition jour par jour, chaque nomination sourcée par le Journal officiel.
+            {sourced
+              ? "Sa composition jour par jour, chaque nomination sourcée par le Journal officiel."
+              : "Sa composition documentée et les actes officiels qui l'appuient."}
           </span>
         </div>
       </div>
