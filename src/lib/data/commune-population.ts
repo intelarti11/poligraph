@@ -1,0 +1,105 @@
+/**
+ * Population in force for a commune, read from `CommunePopulation` (lot 1.7 Territoires).
+ * Uncached on purpose: called from inside the cached commune and department readers.
+ *
+ * "In force" is decided in SQL against CURRENT_DATE, so a vintage imported before its
+ * effective date (INSEE publishes in December for 1 January) is never shown early.
+ */
+import { Prisma } from "@/generated/prisma";
+import { db } from "@/lib/db";
+
+export interface PopulationVintage {
+  millesime: number;
+  /** ISO date (yyyy-mm-dd) from which the decree applies the figures. */
+  effectiveFrom: string;
+  /** Short producer name: INSEE, ISPF, ISEE, INSEE-STSEE. */
+  producer: string;
+  sourceLabel: string;
+  sourceUrl: string;
+  /** ISO timestamp of the last import that confirmed the row against its source. */
+  importedAt: string;
+}
+
+interface VintageRow {
+  millesime: number;
+  effectiveFrom: Date;
+  producer: string;
+  sourceLabel: string;
+  sourceUrl: string;
+  importedAt: Date;
+}
+
+/**
+ * True when the table is not created yet: the code can ship before the manual migration
+ * (prisma/migrations/manual/2026-10-11_commune-population.sql) and the pages then keep their
+ * previous behaviour instead of failing. Any other error propagates.
+ */
+export function isMissingTableError(error: unknown): boolean {
+  const meta = (error as { meta?: { driverAdapterError?: { cause?: { kind?: string } } } })?.meta;
+  return meta?.driverAdapterError?.cause?.kind === "TableDoesNotExist";
+}
+
+async function tolerateMissingTable<T>(query: Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await query;
+  } catch (error) {
+    if (isMissingTableError(error)) return fallback;
+    throw error;
+  }
+}
+
+function toVintage(r: VintageRow): PopulationVintage {
+  return {
+    millesime: r.millesime,
+    effectiveFrom: r.effectiveFrom.toISOString().slice(0, 10),
+    producer: r.producer,
+    sourceLabel: r.sourceLabel,
+    sourceUrl: r.sourceUrl,
+    importedAt: r.importedAt.toISOString(),
+  };
+}
+
+export async function readPopulationEnVigueur(
+  communeId: string
+): Promise<{ value: number; vintage: PopulationVintage } | null> {
+  const rows = await tolerateMissingTable(
+    db.$queryRaw<(VintageRow & { populationMunicipale: number })[]>(Prisma.sql`
+    SELECT p."populationMunicipale", p."millesime", p."effectiveFrom", p."producer",
+           p."sourceLabel", p."sourceUrl", p."importedAt"
+    FROM "CommunePopulation" p
+    WHERE p."communeId" = ${communeId} AND p."effectiveFrom" <= CURRENT_DATE
+    ORDER BY p."effectiveFrom" DESC
+    LIMIT 1
+  `),
+    []
+  );
+  const row = rows[0];
+  return row ? { value: row.populationMunicipale, vintage: toVintage(row) } : null;
+}
+
+/**
+ * Vintages in force across a department, with the number of communes each covers. One entry
+ * almost everywhere; the list form keeps a mixed department honest instead of picking one.
+ */
+export async function readDepartementPopulationVintages(
+  departmentCode: string
+): Promise<(PopulationVintage & { communes: number })[]> {
+  const rows = await tolerateMissingTable(
+    db.$queryRaw<(VintageRow & { communes: number })[]>(Prisma.sql`
+    SELECT v."millesime", v."effectiveFrom", v."producer", v."sourceLabel", v."sourceUrl",
+           MAX(v."importedAt") AS "importedAt", COUNT(*)::int AS "communes"
+    FROM (
+      SELECT DISTINCT ON (p."communeId") p.*
+      FROM "CommunePopulation" p
+      JOIN "Commune" c ON c."id" = p."communeId"
+      WHERE c."departmentCode" = ${departmentCode} AND p."effectiveFrom" <= CURRENT_DATE
+      ORDER BY p."communeId", p."effectiveFrom" DESC
+    ) v
+    GROUP BY v."millesime", v."effectiveFrom", v."producer", v."sourceLabel", v."sourceUrl"
+    ORDER BY COUNT(*) DESC
+    LIMIT 5
+  `),
+    []
+  );
+  return rows.map((r) => ({ ...toVintage(r), communes: r.communes }));
+}

@@ -10,6 +10,7 @@ import {
 import { COMMUNE_POPULATION_SOURCE } from "@/config/communes";
 import { DATA_SOURCE_URLS } from "@/config/labels";
 import { cn, formatDate } from "@/lib/utils";
+import { populationVintageLabel } from "@/lib/territoires/population-label";
 
 interface CommuneIndexProps {
   slug: string;
@@ -42,7 +43,7 @@ const CELL =
   "inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg px-2 font-bold tabular-nums";
 
 export function CommuneIndex({ slug, territoire }: CommuneIndexProps) {
-  const { communes, letterCounts, communeCount } = territoire;
+  const { communes, letterCounts, communeCount, populationVintages } = territoire;
   const { letter, page, totalPages, rows } = communes;
   const href = (query: { letter: string | null; page: number }) =>
     departementCommunesHref(slug, query);
@@ -220,15 +221,34 @@ export function CommuneIndex({ slug, territoire }: CommuneIndexProps) {
       <p className="border-t pt-3 text-xs text-muted-foreground">
         Liste des communes : code officiel géographique (INSEE)
         {importDate ? `, import du ${formatDate(importDate)}` : ""}. Population :{" "}
-        <a
-          href={COMMUNE_POPULATION_SOURCE.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline underline-offset-2 hover:text-foreground"
-          aria-label={`${COMMUNE_POPULATION_SOURCE.label}, via ${COMMUNE_POPULATION_SOURCE.via} (nouvel onglet)`}
-        >
-          {COMMUNE_POPULATION_SOURCE.label}, via {COMMUNE_POPULATION_SOURCE.via}
-        </a>
+        {populationVintages.length > 0 ? (
+          populationVintages.map((v, i) => (
+            <span key={`${v.millesime}-${v.producer}`}>
+              {i > 0 && " ; "}
+              <a
+                href={v.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline underline-offset-2 hover:text-foreground"
+              >
+                {populationVintageLabel(v)}
+                <span className="sr-only"> (nouvel onglet)</span>
+              </a>
+              {populationVintages.length > 1 &&
+                ` pour ${v.communes.toLocaleString("fr-FR")} commune${v.communes > 1 ? "s" : ""}`}
+            </span>
+          ))
+        ) : (
+          <a
+            href={COMMUNE_POPULATION_SOURCE.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-2 hover:text-foreground"
+            aria-label={`${COMMUNE_POPULATION_SOURCE.label}, via ${COMMUNE_POPULATION_SOURCE.via} (nouvel onglet)`}
+          >
+            {COMMUNE_POPULATION_SOURCE.label}, via {COMMUNE_POPULATION_SOURCE.via}
+          </a>
+        )}
         . Maires :{" "}
         <a
           href={DATA_SOURCE_URLS.RNE}

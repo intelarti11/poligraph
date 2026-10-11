@@ -50,6 +50,7 @@
     "senatoriales:apply-mandates": "tsx scripts/apply-senatoriales-2026-mandates.ts",
     "sync:gouvernement": "tsx scripts/sync-gouvernement.ts",
     "sync:president": "tsx scripts/sync-president.ts",
+    "sync:populations": "tsx scripts/sync-populations.ts",
     "sync:hatvp": "tsx scripts/sync-hatvp.ts",
     "sync:photos": "tsx scripts/sync-photos.ts",
     "sync:deceased": "tsx scripts/sync-deceased.ts",

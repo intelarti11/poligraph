@@ -106,7 +106,7 @@ synchronisation RNE et l'import des résultats. Aucune liste non bornée ; liens
 
 ## 7. État de livraison (11 octobre 2026)
 
-Livré : lot 0 complet, lot 1 sauf 1.7, 1.8 et 1.9, lot 3.1. La recette actualisée vit dans [`territoires-recette.md`](territoires-recette.md) et remplace `03-recette-auditable.md`.
+Livré : lot 0 complet, lot 1 sauf 1.8 et 1.9, lot 3.1. La recette actualisée vit dans [`territoires-recette.md`](territoires-recette.md) et remplace `03-recette-auditable.md`.
 
 Décisions prises pendant l'implémentation, après la revue du 10 octobre :
 
@@ -118,7 +118,8 @@ Décisions prises pendant l'implémentation, après la revue du 10 octobre :
 - **Outre-mer.** `domtom.geojson` ne contient que des points : les DROM et les COM n'ont pas de silhouette, sur la page comme dans l'image Open Graph. On ne dessine jamais le contour d'un autre territoire.
 - **Badges.** « Socle officiel » et « Dossier curé » restent internes ; le lecteur voit « Informations disponibles : ... ».
 - **Décisions.** Pas d'onglet tant qu'aucune décision n'est documentée.
+- **Population millésimée (1.7).** Table `CommunePopulation`, une ligne par commune et par millésime : population municipale, comptée à part et totale, date d'entrée en vigueur, producteur, source. Import `npm run sync:populations` (`--dry-run` d'abord) : INSEE millésimes 2023 (en vigueur au 1er janvier 2026) et 2022 (au 1er janvier 2025), y compris 971 à 974, 975, 977 et 978 ; Mayotte sur le recensement 2017 (en vigueur au 1er janvier 2018), l'INSEE annonçant de nouveaux chiffres fin 2026 ; Polynésie française 2022 (ISPF), Nouvelle-Calédonie 2025 (ISEE), Wallis-et-Futuna 2023 (INSEE-STSEE), chacune avec son décret. TAAF et Clipperton : aucune série. Rapprochement par code INSEE exact ; une ligne 2022 dont le territoire a changé depuis (fusion, rétablissement) est écartée, jamais ajustée. Paris, Lyon et Marseille : somme des arrondissements municipaux, égale au chiffre communal de l'INSEE. L'import aligne `Commune.population` sur la population municipale en vigueur (zéro écart au 11 octobre 2026, donc aucun changement d'indexation). La page commune, la liste d'un département et l'API affichent « Population municipale 2023, en vigueur au 1er janvier 2026 (INSEE) » avec le lien ; sans série, l'ancienne mention geo.api.gouv.fr reste, sans millésime.
 - **`/mon-depute`.** Conservé, sous-entrée de Territoires.
 - **`ELECTION_SPOTLIGHT`.** Créé en base désactivé, `value.slug = "presidentielle-2027"`. La pastille n'apparaît que si le drapeau est actif, dans sa fenêtre de dates, que le slug figure dans `NAV_ELECTIONS`, que le drapeau propre de l'élection est actif et que l'élection existe.
 
-Restent ouverts : 1.7 population millésimée, 1.8 BANATIC, 1.9 présidentielle par commune (après publication officielle), lot 2 (décisions curées), exports et licence (lot 3.2), contours ultramarins, test du libellé à cinq lecteurs.
+Restent ouverts : 1.8 BANATIC, 1.9 présidentielle par commune (après publication officielle), lot 2 (décisions curées), exports et licence (lot 3.2), contours ultramarins, test du libellé à cinq lecteurs.

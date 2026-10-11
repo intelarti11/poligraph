@@ -14,10 +14,16 @@ const mocks = vi.hoisted(() => ({
   electionFindUnique: vi.fn(),
   syncFindUnique: vi.fn(),
   queryRaw: vi.fn(),
+  populationEnVigueur: vi.fn(),
+  departementVintages: vi.fn(),
 }));
 
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ cacheTag: vi.fn(), cacheLife: vi.fn() }));
+vi.mock("../commune-population", () => ({
+  readPopulationEnVigueur: mocks.populationEnVigueur,
+  readDepartementPopulationVintages: mocks.departementVintages,
+}));
 vi.mock("@/lib/db", () => ({
   db: {
     commune: {
@@ -133,6 +139,8 @@ beforeEach(() => {
   mocks.candidacyFindMany.mockResolvedValue([]);
   mocks.candidacyCount.mockResolvedValue(0);
   mocks.roundFindMany.mockResolvedValue([]);
+  mocks.populationEnVigueur.mockResolvedValue(null);
+  mocks.departementVintages.mockResolvedValue([]);
   serveMandates([]);
 });
 
@@ -305,6 +313,33 @@ describe("getCommuneDossier", () => {
     expect(dossier?.coverage.find((c) => c.bloc === "conseilMunicipal")?.state).toBe("NON_ETABLI");
   });
 
+  it("date la population par la série en vigueur, avec sa source et sa date de vérification", async () => {
+    const vintage = {
+      millesime: 2023,
+      effectiveFrom: "2026-01-01",
+      producer: "INSEE",
+      sourceLabel: "INSEE, populations de référence 2023",
+      sourceUrl: "https://www.insee.fr/fr/statistiques/8680726",
+      importedAt: "2026-10-11T08:00:00.000Z",
+    };
+    mocks.populationEnVigueur.mockResolvedValue({ value: 230000, vintage });
+
+    const dossier = await getCommuneDossier("35238");
+
+    expect(mocks.populationEnVigueur).toHaveBeenCalledWith("35238");
+    expect(dossier?.population).toEqual({
+      value: 230000,
+      vintage,
+      importedAt: "2026-10-11T08:00:00.000Z",
+      source: { label: vintage.sourceLabel, url: vintage.sourceUrl },
+    });
+    expect(dossier?.coverage.find((c) => c.bloc === "population")).toMatchObject({
+      state: "DISPONIBLE",
+      source: { url: vintage.sourceUrl },
+      date: "2026-10-11T08:00:00.000Z",
+    });
+  });
+
   it("ne désigne aucun député pour une commune PLM", async () => {
     mocks.communeFindUnique.mockResolvedValue({
       ...RENNES,
@@ -470,6 +505,8 @@ describe("getDepartementTerritoire", () => {
     // Mandats exécutifs saisis à la main : rien d'enregistré ne veut pas dire « pas de président ».
     expect(result?.presidence.state).toBe("NON_ETABLI");
     expect(result?.conseil.state).toBe("NON_ETABLI");
+    expect(mocks.departementVintages).toHaveBeenCalledWith("13");
+    expect(result?.populationVintages).toEqual([]);
   });
 });
 

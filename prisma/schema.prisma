@@ -2802,11 +2802,38 @@ model Commune {
   electoralLists        ElectoralList[]
   localMandates         MandateLocal[]
   communeElectionRounds CommuneElectionRound[]
+  populations           CommunePopulation[]
 
   @@index([departmentCode])
   @@index([departmentCode, constituencyNumber])
   @@index([name])
   @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "idx_commune_name_trgm")
+}
+
+// Population de référence (ex-population légale) of a commune, one row per vintage.
+// The figure in force on a date is the row with the latest effectiveFrom on or before it.
+// Overseas collectivities with their own census (987, 988, 986) and Mayotte carry the vintage
+// and source of their own authenticating decree. See src/config/populations-reference.ts.
+model CommunePopulation {
+  id                     String   @id @default(cuid())
+  communeId              String
+  /// Reference year of the census figures (millésime), e.g. 2023.
+  millesime              Int
+  populationMunicipale   Int
+  populationCompteeAPart Int?
+  populationTotale       Int?
+  /// Date from which the decree makes the figures apply (e.g. 2026-01-01).
+  effectiveFrom          DateTime @db.Date
+  /// Short producer name shown to readers: INSEE, ISPF, ISEE...
+  producer               String
+  sourceLabel            String
+  sourceUrl              String
+  importedAt             DateTime @default(now())
+
+  commune Commune @relation(fields: [communeId], references: [id], onDelete: Cascade)
+
+  @@unique([communeId, millesime])
+  @@index([communeId, effectiveFrom])
 }
 
 model CommuneElectionRound {

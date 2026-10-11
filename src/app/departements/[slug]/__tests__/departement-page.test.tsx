@@ -61,6 +61,7 @@ function territoire(
     letterCounts?: Record<string, number>;
     rows?: DepartementCommuneRow[];
     presidence?: PresidenceBlock;
+    populationVintages?: DepartementTerritoire["populationVintages"];
   } = {}
 ): DepartementTerritoire {
   const letterCounts = opts.letterCounts ?? { A: 37, B: 20, E: 17, M: 84 };
@@ -80,6 +81,7 @@ function territoire(
     territoireHorsRegion: getTerritoireHorsRegion(code),
     collectivitesParticulieres: getCollectivitesForDepartment(code),
     communeCount,
+    populationVintages: opts.populationVintages ?? [],
     letterCounts,
     communes: { letter, page, pageSize: PAGE_SIZE, total, totalPages, rows },
     presidence: opts.presidence ?? NO_PRESIDENCE,
@@ -197,6 +199,41 @@ describe("page département : département ordinaire", () => {
     expect(links[0]?.textContent).toContain("Maire : Maire 0");
     expect(links[1]?.textContent).toContain("Maire non établi");
     expect(links[1]?.textContent).not.toContain("Maire 1");
+  });
+
+  it("date la population par son millésime en vigueur quand la série existe", async () => {
+    const doc = await render(
+      "eure",
+      territoire("27", {
+        populationVintages: [
+          {
+            millesime: 2023,
+            effectiveFrom: "2026-01-01",
+            producer: "INSEE",
+            sourceLabel: "INSEE, populations de référence 2023",
+            sourceUrl: "https://www.insee.fr/fr/statistiques/8680726",
+            importedAt: "2026-10-11T08:00:00.000Z",
+            communes: 585,
+          },
+        ],
+      })
+    );
+    const footer = doc.querySelector("#communes p.border-t");
+    expect(footer?.textContent).toContain(
+      "Population municipale 2023, en vigueur au 1er janvier 2026 (INSEE)"
+    );
+    expect(footer?.textContent).not.toContain("geo.api.gouv.fr");
+    expect(footer?.textContent).not.toContain("585 communes");
+    expect(
+      footer?.querySelector('a[href="https://www.insee.fr/fr/statistiques/8680726"]')
+    ).not.toBeNull();
+  });
+
+  it("sans série, garde la source geo.api.gouv.fr sans millésime", async () => {
+    const doc = await render("eure", territoire("27"));
+    const footer = doc.querySelector("#communes p.border-t");
+    expect(footer?.textContent).toContain("via geo.api.gouv.fr");
+    expect(footer?.textContent).not.toMatch(/en vigueur/);
   });
 
   it("refuse une page au-delà de la fin de la liste", async () => {
