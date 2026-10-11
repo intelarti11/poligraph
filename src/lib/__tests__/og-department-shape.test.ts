@@ -77,3 +77,34 @@ describe("getDepartmentOutlinePath", () => {
     expect(getDepartmentOutlinePath("ZZ")).toBeNull();
   });
 });
+
+describe("overseas departments and collectivities", () => {
+  const decode = (uri: string) => Buffer.from(uri.split(",")[1]!, "base64").toString("utf-8");
+
+  it("draws an overseas territory with its own baked outline, every island included", async () => {
+    const { DEPARTMENT_OUTLINES } = await import("@/config/territoires-shapes");
+    for (const code of ["971", "973", "987", "988"]) {
+      const svg = decode(getDepartmentShapeDataUri(code, { width: 400, height: 400 })!);
+      // Square image, square viewBox: the territory is never stretched.
+      const [, , w, h] = svg
+        .match(/viewBox="([^"]+)"/)![1]!
+        .split(" ")
+        .map(Number);
+      expect(w, code).toBe(h);
+      expect(svg, code).toContain(`d="${DEPARTMENT_OUTLINES[code]!.d}"`);
+    }
+  });
+
+  it("puts the commune dot inside the frame, and drops it outside", () => {
+    const cayenne = decode(getDepartmentShapeWithDot("973", 4.9464, -52.3319)!);
+    expect(cayenne).toContain("<circle");
+    // Paris coordinates fall outside the Guyane frame: no dot rather than a wrong one.
+    const elsewhere = decode(getDepartmentShapeWithDot("973", 48.8566, 2.3522)!);
+    expect(elsewhere).not.toContain("<circle");
+  });
+
+  it("returns null for the TAAF and Clipperton", () => {
+    expect(getDepartmentShapeDataUri("984")).toBeNull();
+    expect(getDepartmentShapeWithDot("989", 10.3, -109.2)).toBeNull();
+  });
+});
