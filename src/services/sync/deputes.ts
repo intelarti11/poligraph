@@ -55,7 +55,13 @@ export async function fetchDeputesCSV(): Promise<DeputeCSV[]> {
   }) as DeputeCSV[];
 
   console.log(`Parsed ${records.length} deputies from CSV`);
-  return records;
+  return records.map(normalizeDeputeRecord);
+}
+
+/** The CSV writes Corsica as "2a"/"2b"; every reader matches the INSEE upper case "2A"/"2B". */
+export function normalizeDeputeRecord(record: DeputeCSV): DeputeCSV {
+  if (!record.departementCode) return record;
+  return { ...record, departementCode: record.departementCode.toUpperCase() };
 }
 
 /**
