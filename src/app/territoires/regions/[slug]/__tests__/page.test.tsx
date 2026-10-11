@@ -161,7 +161,12 @@ describe("page région", () => {
       region("martinique", {
         presidence: {
           state: "ETABLI",
-          person: { slug: "camille-exemple", fullName: "Camille Exemple", photoUrl: null },
+          person: {
+            slug: "camille-exemple",
+            fullName: "Camille Exemple",
+            photoUrl: null,
+            civility: null,
+          },
           title: "Président du Conseil exécutif",
           lastConfirmedAt: "2026-09-01T00:00:00.000Z",
           source: { label: "Répertoire national des élus", url: null },

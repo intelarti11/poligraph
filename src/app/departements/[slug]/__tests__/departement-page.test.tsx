@@ -39,7 +39,7 @@ function row(name: string, i: number, maire = true): DepartementCommuneRow {
     maire: maire
       ? {
           state: "ETABLI",
-          person: { slug: `maire-${i}`, fullName: `Maire ${i}`, photoUrl: null },
+          person: { slug: `maire-${i}`, fullName: `Maire ${i}`, photoUrl: null, civility: null },
         }
       : { state: "NON_ETABLI", person: null },
   };
@@ -172,7 +172,12 @@ describe("page département : département ordinaire", () => {
       territoire("27", {
         presidence: {
           state: "ETABLI",
-          person: { slug: "presidente", fullName: "Présidente Test", photoUrl: null },
+          person: {
+            slug: "presidente",
+            fullName: "Présidente Test",
+            photoUrl: null,
+            civility: null,
+          },
           title: null,
           lastConfirmedAt: null,
           source: null,
