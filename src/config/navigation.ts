@@ -284,6 +284,7 @@ export const FOOTER_SECTIONS: FooterSection[] = [
       { href: "/procedures-baillons", label: "Procédures-bâillons" },
       { href: "/programmes", label: "Programmes", featureFlag: "PROGRAMMES_ENABLED" },
       { href: "/presse", label: "Revue de presse", featureFlag: "PRESS_SECTION" },
+      { href: TERRITOIRES_PATH, label: "Territoires" },
       { href: "/departements", label: "Départements" },
       { href: "/recherche", label: "Recherche" },
       { href: "/mon-observatoire", label: "Mon Observatoire" },
