@@ -106,6 +106,7 @@
     "import:wikidata-memberships": "tsx scripts/import-wikidata-memberships.ts",
     "wikidata:lookup": "tsx scripts/wikidata-lookup.ts",
     "territoires:svg": "tsx scripts/build-territoires-svg.ts",
+    "territoires:release": "tsx scripts/export-territoires-release.ts",
     "sync:legislation": "tsx scripts/sync-legislation.ts",
     "sync:legislation:today": "tsx scripts/sync-legislation.ts --today --active",
     "sync:legislation:stats": "tsx scripts/sync-legislation.ts --stats",
