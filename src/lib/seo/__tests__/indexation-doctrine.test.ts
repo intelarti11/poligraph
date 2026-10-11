@@ -587,3 +587,51 @@ describe("doctrine — politician sub-tabs inherit the profile's indexability", 
     expect(politicianRobotsMetadata(RICH_DEPUTE)).toEqual(INDEXABLE);
   });
 });
+
+describe("doctrine, /departements/[slug] : les vues de la liste des communes restent hors index", () => {
+  it("?lettre= et ?page>1 sont des variantes utilitaires, la page nue reste indexable", async () => {
+    const { DEPARTEMENT_COMMUNES_FILTER_KEYS } = await import("../listing-filters");
+    expect(DEPARTEMENT_COMMUNES_FILTER_KEYS).toContain("lettre");
+    expect(listingRobots({ lettre: "M" }, DEPARTEMENT_COMMUNES_FILTER_KEYS)).toEqual(
+      NOINDEX_FOLLOW
+    );
+    expect(listingRobots({ page: "2" }, DEPARTEMENT_COMMUNES_FILTER_KEYS)).toEqual(NOINDEX_FOLLOW);
+    expect(listingRobots({}, DEPARTEMENT_COMMUNES_FILTER_KEYS)).toEqual(INDEXABLE);
+  });
+
+  it("la route des variantes est noindex,follow avec un canonical vers la page nue", async () => {
+    const { generateMetadata } =
+      await import("@/app/departements/[slug]/communes/[lettre]/[page]/page");
+    for (const [lettre, page] of [
+      ["M", "2"],
+      ["E", "1"],
+      ["toutes", "3"],
+    ]) {
+      const m = await generateMetadata({
+        params: Promise.resolve({ slug: "aisne", lettre: lettre!, page: page! }),
+      });
+      expect(m.robots, `${lettre}/${page}`).toEqual(NOINDEX_FOLLOW.robots);
+      expect(m.alternates?.canonical).toBe("/departements/aisne");
+    }
+  });
+
+  it("la page nue du département garde son canonical et reste indexable", async () => {
+    const { generateMetadata } = await import("@/app/departements/[slug]/page");
+    const m = await generateMetadata({ params: Promise.resolve({ slug: "aisne" }) });
+    expect(m.robots).toBeUndefined();
+    expect(m.alternates?.canonical).toBe("/departements/aisne");
+  });
+
+  it("aucune des deux routes ne lit searchParams (ISR, AGENTS.md §8)", () => {
+    for (const file of [
+      "src/app/departements/[slug]/page.tsx",
+      "src/app/departements/[slug]/communes/[lettre]/[page]/page.tsx",
+      "src/app/departements/[slug]/departement-page.tsx",
+    ]) {
+      const code = readFileSync(join(process.cwd(), file), "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/\/\/[^\n]*/g, "");
+      expect(code, file).not.toMatch(/searchParams/);
+    }
+  });
+});
