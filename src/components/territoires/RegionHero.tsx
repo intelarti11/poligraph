@@ -45,11 +45,9 @@ export function RegionHero({ data }: { data: RegionTerritoire }) {
           </h1>
           <p className="mt-2 text-white/85">Chef-lieu : {region.chefLieu.name}</p>
         </div>
-        {!region.outreMer && (
-          <div className="w-24 shrink-0 sm:w-40 lg:w-56">
-            <TerritoryShape kind="region" region={region.name} tone="marine" />
-          </div>
-        )}
+        <div className="w-24 shrink-0 sm:w-40 lg:w-56">
+          <TerritoryShape kind="region" region={region.name} tone="marine" />
+        </div>
       </div>
 
       <dl className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">

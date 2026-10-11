@@ -3,6 +3,7 @@ import { ChevronRight } from "lucide-react";
 import type { CoverageEntry, RegionTerritoire, SourceRef } from "@/lib/data/territoires";
 import { formatDate } from "@/lib/utils";
 import { formatCompte } from "@/lib/territoires/format";
+import { TERRITOIRES_DONNEES_PATH } from "@/lib/territoires/paths";
 
 const CARD = "rounded-xl border border-border bg-card p-4 sm:p-6";
 
@@ -229,6 +230,15 @@ export function RegionReutiliser({ apiPath }: { apiPath: string }) {
             className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
           >
             Documentation de l{"'"}API
+          </Link>
+        </li>
+        <li>
+          <Link
+            href={TERRITOIRES_DONNEES_PATH}
+            prefetch={false}
+            className="inline-flex min-h-11 items-center text-primary underline underline-offset-4"
+          >
+            Fichiers CSV et licences
           </Link>
         </li>
       </ul>
