@@ -103,3 +103,22 @@ synchronisation RNE et l'import des résultats. Aucune liste non bornée ; liens
 - Recette du kit (`03-recette-auditable.md`) cochée pour les planches concernées, avec preuve.
 - Vérification clavier, lecteur d'écran et 320 px sur les nouvelles pages.
 - Aucune donnée fictive en production.
+
+## 7. État de livraison (11 octobre 2026)
+
+Livré : lot 0 complet, lot 1 sauf 1.7, 1.8 et 1.9, lot 3.1. La recette actualisée vit dans [`territoires-recette.md`](territoires-recette.md) et remplace `03-recette-auditable.md`.
+
+Décisions prises pendant l'implémentation, après la revue du 10 octobre :
+
+- **Socle publiable par bloc.** Chaque bloc du dossier porte un état : établi, non établi ou absent, avec sa source. Le conseil municipal reste « composition actuelle non établie » : la base ne contient que les maires. Pas de bloc intercommunalité ni superficie tant que BANATIC et l'IGN ne sont pas importés.
+- **Maire.** Les maires courants sont comptés avant le filtre public. Plusieurs titulaires, ou un titulaire non public, donnent « titulaire non établi » sans nom ni motif.
+- **Circonscriptions.** `Commune.constituencyNumber` est présenté comme la circonscription enregistrée, jamais comme la seule. Au-delà de 20 000 habitants, la page nomme le député avec une réserve et renvoie vers Mon député. Paris, Lyon et Marseille : plusieurs circonscriptions, aucun nom.
+- **Élu au 1er tour.** Majorité absolue des exprimés et quart des inscrits (art. L. 262 du Code électoral). Les importeurs 2026 n'appliquent que la première condition : 83 listes sont marquées élues sans remplir la seconde.
+- **Indexation.** `isIndexableTerritoireCommune` : population connue d'au moins 1 000 habitants et maire établi. C'est un arbitrage éditorial (pages au contenu le plus fourni), plus le panachage, aboli en 2026. Population inconnue : `noindex,follow`. Entrée et régions toujours indexables. Variantes paginées des départements en `noindex,follow` avec canonical.
+- **Outre-mer.** `domtom.geojson` ne contient que des points : les DROM et les COM n'ont pas de silhouette, sur la page comme dans l'image Open Graph. On ne dessine jamais le contour d'un autre territoire.
+- **Badges.** « Socle officiel » et « Dossier curé » restent internes ; le lecteur voit « Informations disponibles : ... ».
+- **Décisions.** Pas d'onglet tant qu'aucune décision n'est documentée.
+- **`/mon-depute`.** Conservé, sous-entrée de Territoires.
+- **`ELECTION_SPOTLIGHT`.** Créé en base désactivé, `value.slug = "presidentielle-2027"`. La pastille n'apparaît que si le drapeau est actif, dans sa fenêtre de dates, que le slug figure dans `NAV_ELECTIONS`, que le drapeau propre de l'élection est actif et que l'élection existe.
+
+Restent ouverts : 1.7 population millésimée, 1.8 BANATIC, 1.9 présidentielle par commune (après publication officielle), lot 2 (décisions curées), exports et licence (lot 3.2), contours ultramarins, test du libellé à cinq lecteurs.
