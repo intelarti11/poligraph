@@ -198,7 +198,7 @@ export function DepartementHero({
   );
 }
 
-/** Silhouette plus a small France inset. Nothing without an outline (DROM, COM). */
+/** Silhouette plus a small France inset (metropolitan departments only). */
 function TerritoryHeroShape({ code }: { code: string }) {
   return (
     <div

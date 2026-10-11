@@ -14,6 +14,8 @@ const RESULTS = {
 };
 
 /** A Rennes-like dossier with an established mayor, one deputy and first-round results. */
+const NO_PRESIDENTIELLE = { blocks: [], agregatTerritoire: null };
+
 export function dossier(overrides: Partial<CommuneDossier> = {}): CommuneDossier {
   return {
     decisionsPubliees: 0,
@@ -71,6 +73,7 @@ export function dossier(overrides: Partial<CommuneDossier> = {}): CommuneDossier
       senateurs: { state: "DISPONIBLE", senateurs: [] },
     },
     elections: {
+      presidentielles: NO_PRESIDENTIELLE,
       municipales2026: {
         state: "DISPONIBLE",
         electionSlug: "municipales-2026",
@@ -120,6 +123,7 @@ export function dossier(overrides: Partial<CommuneDossier> = {}): CommuneDossier
         source: RESULTS,
       },
     },
+    intercommunalite: null,
     coverage: [
       { bloc: "identite", state: "DISPONIBLE", source: COG, date: null },
       { bloc: "maire", state: "DISPONIBLE", source: RNE, date: null },
@@ -198,7 +202,7 @@ export function papeete(): CommuneDossier {
       },
       senateurs: { state: "DISPONIBLE", senateurs: [] },
     },
-    elections: { municipales2026: null },
+    elections: { municipales2026: null, presidentielles: NO_PRESIDENTIELLE },
   };
 }
 
@@ -263,5 +267,36 @@ export function grandeCommune(civility: string | null = "Mme"): CommuneDossier {
         ? { ...c, state: "NON_ETABLI", reserve: "CIRCONSCRIPTION_NON_VERIFIEE" }
         : c
     ),
+  };
+}
+
+const INSEE_URL = "https://www.insee.fr/fr/information/2510634";
+const EPCI_SRC = { label: "INSEE, EPCI à fiscalité propre au 1er janvier 2026", url: INSEE_URL };
+const EPT_SRC = {
+  label: "INSEE, établissements publics territoriaux au 1er janvier 2026",
+  url: INSEE_URL,
+};
+
+type Interco = NonNullable<CommuneDossier["intercommunalite"]>;
+
+/** Intercommunality block as the reader builds it after an import. */
+export function interco(
+  state: Interco["state"],
+  bodies: {
+    siren: string;
+    name: string;
+    nature: Interco["intercommunalites"][number]["nature"];
+    natureLabel: string;
+  }[] = []
+): Interco {
+  return {
+    state,
+    intercommunalites: bodies.map((b) => ({
+      ...b,
+      source: b.nature === "EPT" ? EPT_SRC : EPCI_SRC,
+    })),
+    situationDate: state === "NON_ETABLI" ? null : "2026-01-01T00:00:00.000Z",
+    source: EPCI_SRC,
+    lastCheckedAt: "2026-10-12T08:00:00.000Z",
   };
 }

@@ -31,7 +31,7 @@ beforeEach(() => {
 });
 
 describe("sitemap : rubrique Territoires", () => {
-  it("annonce l'entrée, les 18 régions et les communes retenues par la requête", async () => {
+  it("annonce l'entrée, la page des données, les 18 régions et les communes retenues", async () => {
     h.queryRaw.mockResolvedValueOnce([
       { id: "75056", lastmod: new Date("2026-10-01T00:00:00Z") },
       { id: "2A004", lastmod: new Date("2026-09-01T00:00:00Z") },
@@ -43,7 +43,8 @@ describe("sitemap : rubrique Territoires", () => {
     for (const region of REGIONS) expect(urls).toContain(`/territoires/regions/${region.slug}`);
     expect(urls).toContain("/territoires/communes/75056");
     expect(urls).toContain("/territoires/communes/2A004");
-    expect(urls).toHaveLength(1 + 18 + 2);
+    expect(urls).toContain("/territoires/donnees");
+    expect(urls).toHaveLength(2 + 18 + 2);
   });
 
   it("date chaque commune du dernier changement du mandat de son maire", async () => {
@@ -57,10 +58,10 @@ describe("sitemap : rubrique Territoires", () => {
     expect(lastmod("/territoires")).toEqual(new Date("2026-10-01T00:00:00Z"));
   });
 
-  it("garde l'entrée et les régions sans aucune commune indexable", async () => {
+  it("garde l'entrée, la page des données et les régions sans aucune commune indexable", async () => {
     h.queryRaw.mockResolvedValueOnce([]);
     const urls = (await shard5()).map((e) => path(e.url));
-    expect(urls).toHaveLength(1 + 18);
+    expect(urls).toHaveLength(2 + 18);
     expect(urls.some((u) => u.startsWith("/territoires/communes/"))).toBe(false);
   });
 

@@ -15,9 +15,17 @@ const mocks = vi.hoisted(() => ({
   syncFindUnique: vi.fn(),
   decisionCount: vi.fn(async () => 0),
   queryRaw: vi.fn(),
+  readIntercommunalites: vi.fn(),
+  readPresidentielles: vi.fn(async () => ({ blocks: [] as unknown[], agregatTerritoire: null })),
 }));
 
 vi.mock("server-only", () => ({}));
+vi.mock("../territoires-intercommunalites", () => ({
+  readIntercommunalites: (code: string) => mocks.readIntercommunalites(code),
+}));
+vi.mock("../territoires-presidentielle", () => ({
+  readCommunePresidentielles: mocks.readPresidentielles,
+}));
 vi.mock("next/cache", () => ({ cacheTag: vi.fn(), cacheLife: vi.fn() }));
 vi.mock("@/lib/db", () => ({
   db: {
@@ -135,6 +143,7 @@ beforeEach(() => {
   mocks.candidacyFindMany.mockResolvedValue([]);
   mocks.candidacyCount.mockResolvedValue(0);
   mocks.roundFindMany.mockResolvedValue([]);
+  mocks.readIntercommunalites.mockResolvedValue(null);
   serveMandates([]);
 });
 
@@ -205,6 +214,44 @@ describe("fonctions pures", () => {
 });
 
 describe("getCommuneDossier", () => {
+  it("n'annonce aucune intercommunalité avant le premier import", async () => {
+    const dossier = await getCommuneDossier("35238");
+    expect(mocks.readIntercommunalites).toHaveBeenCalledWith("35238");
+    expect(dossier?.intercommunalite).toBeNull();
+    expect(dossier?.coverage.some((c) => c.bloc === "intercommunalite")).toBe(false);
+  });
+
+  it("porte l'intercommunalité et son état dans la matrice de couverture", async () => {
+    const source = { label: "INSEE, EPCI à fiscalité propre au 1er janvier 2026", url: null };
+    const block = {
+      state: "AUCUNE" as const,
+      intercommunalites: [],
+      situationDate: "2026-01-01T00:00:00.000Z",
+      source,
+      lastCheckedAt: null,
+    };
+    mocks.readIntercommunalites.mockResolvedValue(block);
+    const aucune = await getCommuneDossier("35238");
+    expect(aucune?.intercommunalite).toEqual(block);
+    // "Sans objet" is an established fact, not a missing one.
+    expect(aucune?.coverage.find((c) => c.bloc === "intercommunalite")).toEqual({
+      bloc: "intercommunalite",
+      state: "DISPONIBLE",
+      source,
+      date: "2026-01-01T00:00:00.000Z",
+    });
+
+    mocks.readIntercommunalites.mockResolvedValue({
+      ...block,
+      state: "NON_ETABLI",
+      situationDate: null,
+    });
+    const nonEtabli = await getCommuneDossier("35238");
+    expect(nonEtabli?.coverage.find((c) => c.bloc === "intercommunalite")?.state).toBe(
+      "NON_ETABLI"
+    );
+  });
+
   it("refuse un code mal formé sans interroger la base", async () => {
     expect(await getCommuneDossier("../etc")).toBeNull();
     expect(await getCommuneDossier("123")).toBeNull();
@@ -435,6 +482,30 @@ describe("getCommuneDossier", () => {
     mocks.candidacyCount.mockResolvedValue(12);
     const block = (await getCommuneDossier("35238"))?.elections.municipales2026;
     expect(block?.state).toBe("NON_ETABLI");
+  });
+  it("porte la présidentielle de la commune et sa ligne de couverture", async () => {
+    const absent = await getCommuneDossier("35238");
+    expect(absent?.elections.presidentielles.blocks).toEqual([]);
+    expect(absent?.coverage.find((c) => c.bloc === "presidentielle")?.state).toBe("ABSENT");
+
+    mocks.readPresidentielles.mockResolvedValueOnce({
+      blocks: [
+        {
+          electionSlug: "presidentielle-2022",
+          sources: [{ round: 1, label: "Ministère", url: "https://x", publishedAt: "2022-04-14" }],
+          importedAt: "2026-10-12T08:00:00.000Z",
+        },
+      ],
+      agregatTerritoire: null,
+    });
+    const present = await getCommuneDossier("35238");
+    expect(mocks.readPresidentielles).toHaveBeenLastCalledWith("35238", "35");
+    expect(present?.coverage.find((c) => c.bloc === "presidentielle")).toEqual({
+      bloc: "presidentielle",
+      state: "DISPONIBLE",
+      source: { label: "Ministère", url: "https://x" },
+      date: "2026-10-12T08:00:00.000Z",
+    });
   });
 });
 

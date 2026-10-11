@@ -18,3 +18,6 @@ export function territoireRegionPath(slug: string): string {
 export function territoireCommuneDecisionsPath(inseeCode: string): string {
   return `${territoireCommunePath(inseeCode)}/decisions`;
 }
+
+/** Exports, releases and licences of the section. */
+export const TERRITOIRES_DONNEES_PATH = "/territoires/donnees";

@@ -2,7 +2,7 @@ import { REGION_OUTLINES } from "@/config/territoires-shapes";
 
 /**
  * The region outline as an SVG data URI, departments drawn as hairlines. Null when no outline
- * exists (overseas regions): the card then carries no shape rather than another territory's.
+ * exists (unknown name): the card then carries no shape rather than another territory's.
  */
 export function regionOutlineDataUri(regionName: string): string | null {
   const outline = REGION_OUTLINES[regionName];

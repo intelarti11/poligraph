@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { presidencyOfGovernment } from "@/config/presidencies";
 import Link from "next/link";
+import { cn } from "@/lib/utils";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowRight, ChevronRight, Download, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -63,6 +64,8 @@ import type { Change, CompositionResult, DateEvidence } from "@/lib/governments/
 
 const BASE = "/politiques/gouvernements";
 const MAX_SHORTCUTS = 6;
+// Groupes de changements (une date, un acte) affichés avant le repli.
+const MAX_CHANGE_GROUPS = 8;
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -82,7 +85,9 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
   // A historical composition is not a duplicate of the latest one (spec §8): a valid `date`
   // stays in the canonical. An invalid one is ignored by the page, so is the canonical.
   const date = parseCompositionDate(first(sp.date));
-  const title = `${gov.name} : composition et ministres`;
+  // « | Poligraph » est ajouté par le gabarit : le titre complet reste sous 70 caractères.
+  const title =
+    gov.name.length <= 31 ? `${gov.name} : composition et ministres` : `${gov.name} : ministres`;
   const description =
     gov.completeness === "COMPLETE"
       ? `Composition du ${gov.name} à chaque date, avec l'acte officiel de chaque nomination, les changements documentés et la liste des participants.`
@@ -121,7 +126,7 @@ function actDetails(act: ActRef): string {
   return text;
 }
 
-function ActLink({ act }: { act: ActRef }) {
+function ActLink({ act, className }: { act: ActRef; className?: string }) {
   const href = safeExternalUrl(act.url);
   if (!href) return <>{act.label}</>;
   return (
@@ -129,7 +134,7 @@ function ActLink({ act }: { act: ActRef }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-primary underline-offset-4 hover:underline"
+      className={cn("text-primary underline-offset-4 hover:underline", className)}
     >
       {act.label}
     </a>
@@ -170,6 +175,24 @@ function ChangeSource({ change, acts }: { change: Change; acts: Map<string, ActR
 }
 
 // --- Changes ----------------------------------------------------------------
+
+type ChangeGroup = { key: string; date: string; act: boolean; changes: Change[] };
+
+/**
+ * Changements d'une même date et d'un même acte réunis sous un seul en-tête : la source est
+ * citée une fois. Un changement sans acte (jeu de données, date estimée) garde sa propre preuve.
+ */
+function groupChanges(rows: Change[]): ChangeGroup[] {
+  const groups = new Map<string, ChangeGroup>();
+  for (const c of rows) {
+    const act = c.evidence === "ACT" && !!safeExternalUrl(c.sourceUrl);
+    const key = `${c.date}|${act ? c.sourceUrl : "sans-acte"}`;
+    const group = groups.get(key) ?? { key, date: c.date, act, changes: [] };
+    group.changes.push(c);
+    groups.set(key, group);
+  }
+  return [...groups.values()];
+}
 
 const CHANGE_LABEL: Record<Change["kind"], string> = {
   formation: "Formation",
@@ -352,6 +375,10 @@ export default async function GovernmentPage({ params, searchParams }: PageProps
         : c
     )
     .reverse();
+  const changeGroups = groupChanges(changeRows);
+  const recentChangeGroups = changeGroups.slice(0, MAX_CHANGE_GROUPS);
+  const olderChangeGroups = changeGroups.slice(MAX_CHANGE_GROUPS);
+  const olderChangeCount = olderChangeGroups.reduce((n, g) => n + g.changes.length, 0);
 
   // Shortcuts: formation, each documented change day, last documented composition.
   const shortcuts: { date: string; label: string }[] = [];
@@ -843,25 +870,32 @@ export default async function GovernmentPage({ params, searchParams }: PageProps
               {changeRows.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Aucun changement documenté.</p>
               ) : (
-                <ul className="divide-y rounded-2xl border bg-card">
-                  {changeRows.map((c) => (
-                    <li
-                      key={`${c.date}-${c.kind}-${c.membershipIds.join(",")}`}
-                      className="grid grid-cols-[110px_1fr] gap-3 p-4"
-                    >
-                      <span className="text-[13px] font-bold">{formatDay(c.date)}</span>
-                      <div className="min-w-0 text-sm">
-                        <p>
-                          <strong>{changeLabel(c, byId, data.people)}</strong> ·{" "}
-                          {describeChange(c, gov, byId, data.people)}
-                        </p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          <ChangeSource change={c} acts={actsByUrl} />
-                        </p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                <div className="rounded-2xl border bg-card">
+                  <ChangeGroupList
+                    groups={recentChangeGroups}
+                    render={(c) => describeChange(c, gov, byId, data.people)}
+                    label={(c) => changeLabel(c, byId, data.people)}
+                    acts={actsByUrl}
+                  />
+                  {olderChangeGroups.length > 0 && (
+                    <details className="group border-t">
+                      <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1.5 px-4 text-sm font-bold text-primary [&::-webkit-details-marker]:hidden">
+                        <ChevronRight
+                          className="size-4 shrink-0 transition-transform group-open:rotate-90"
+                          aria-hidden="true"
+                        />
+                        Changements plus anciens ({olderChangeCount})
+                      </summary>
+                      <ChangeGroupList
+                        groups={olderChangeGroups}
+                        render={(c) => describeChange(c, gov, byId, data.people)}
+                        label={(c) => changeLabel(c, byId, data.people)}
+                        acts={actsByUrl}
+                        className="border-t"
+                      />
+                    </details>
+                  )}
+                </div>
               )}
             </section>
 
@@ -878,6 +912,15 @@ export default async function GovernmentPage({ params, searchParams }: PageProps
                   ? `Au moins ${plural(participants.length, "personne documentée a", "personnes documentées ont")} participé à ce gouvernement, y compris celles parties avant la date choisie.`
                   : `${plural(participants.length, "personne a", "personnes ont")} participé à ce gouvernement, y compris celles parties avant la date choisie.`}
               </p>
+              {participants.length > 0 && (
+                <Link
+                  href={`${BASE}/membres?gouvernement=${encodeURIComponent(gov.slug)}`}
+                  className="inline-flex min-h-11 w-fit items-center gap-1.5 text-sm font-bold text-primary underline-offset-4 hover:underline"
+                >
+                  Membres de ce gouvernement
+                  <ArrowRight className="size-4 shrink-0" aria-hidden="true" />
+                </Link>
+              )}
               {participants.length > 0 && (
                 <div className="rounded-2xl border bg-card">
                   <ParticipantList
@@ -918,7 +961,8 @@ export default async function GovernmentPage({ params, searchParams }: PageProps
             <ul className="mt-2 list-disc space-y-2 pl-5">
               {sourceActs.map((act) => (
                 <li key={act.url}>
-                  <ActLink act={act} /> : {actDetails(act)}.
+                  <ActLink act={act} className="inline-flex min-h-11 items-center" /> :{" "}
+                  {actDetails(act)}.
                 </li>
               ))}
               {gov.compositionVerifiedAt && (
@@ -991,6 +1035,50 @@ export default async function GovernmentPage({ params, searchParams }: PageProps
         </div>
       </div>
     </>
+  );
+}
+
+function ChangeGroupList({
+  groups,
+  label,
+  render,
+  acts,
+  className,
+}: {
+  groups: ChangeGroup[];
+  label: (c: Change) => string;
+  render: (c: Change) => string;
+  acts: Map<string, ActRef>;
+  className?: string;
+}) {
+  return (
+    <ul className={`divide-y ${className ?? ""}`}>
+      {groups.map((g) => (
+        <li key={g.key} className="p-4">
+          <p className="text-[13px] font-bold">{formatDay(g.date)}</p>
+          {g.act && (
+            <p className="mt-0.5 flex items-start gap-1.5 text-xs text-muted-foreground">
+              <FileText className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+              <span>
+                <ChangeSource change={g.changes[0]!} acts={acts} />
+              </span>
+            </p>
+          )}
+          <ul className="mt-2 space-y-2 text-sm">
+            {g.changes.map((c) => (
+              <li key={`${c.kind}-${c.membershipIds.join(",")}`}>
+                <strong>{label(c)}</strong> · {render(c)}
+                {!g.act && (c.evidence === "DATASET" || c.evidence === "DERIVED") && (
+                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                    <ChangeSource change={c} acts={acts} />
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </li>
+      ))}
+    </ul>
   );
 }
 
