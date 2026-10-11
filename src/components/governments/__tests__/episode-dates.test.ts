@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   appointedOn,
   displayTitle,
+  entryKind,
   episodeDates,
   governmentDatesLine,
   governmentPeriod,
+  lastDayShortcutLabel,
 } from "@/components/governments/format";
 import type { PublishedGovernment } from "@/lib/governments/mapping";
 
@@ -110,8 +112,91 @@ describe("governmentDatesLine : fin et démission", () => {
   it("attesté : affaires courantes jusqu'à la veille", () => {
     const line = governmentDatesLine({ ...gov, currentAffairsAttested: true });
     expect(line).toContain(
-      "Démission le 16 juillet 2024, affaires courantes jusqu'au 20 septembre 2024."
+      "Démission le 16 juillet 2024, affaires courantes jusqu'au 20 septembre 2024, remplacé le 21 septembre 2024."
     );
+  });
+
+  it("démission le jour du remplacement : la démission reste nommée", () => {
+    const line = governmentDatesLine({ ...gov, resignedAt: "2024-09-21" });
+    expect(line).toBe(
+      "Premier ministre nommé le 9 janvier 2024, équipe nommée le 11 janvier 2024. Démission le 21 septembre 2024, remplacé le 21 septembre 2024."
+    );
+    expect(
+      governmentDatesLine({ ...gov, resignedAt: "2024-09-21", currentAffairsAttested: true })
+    ).not.toContain("affaires courantes");
+  });
+
+  it("une seule tournure : des phrases, jamais de point médian", () => {
+    const shapes = [
+      gov,
+      { ...gov, resignedAt: null },
+      { ...gov, endedAt: null },
+      { ...gov, resignedAt: null, endedAt: null },
+    ] as PublishedGovernment[];
+    for (const g of shapes) {
+      const line = governmentDatesLine(g);
+      expect(line).not.toContain("·");
+      expect(line).toMatch(/\.$/);
+    }
+    expect(governmentDatesLine({ ...gov, resignedAt: null })).toContain(
+      ". Fin des fonctions le 21 septembre 2024."
+    );
+    expect(governmentDatesLine({ ...gov, endedAt: null })).toContain(
+      ". Démission le 16 juillet 2024."
+    );
+  });
+});
+
+describe("entryKind", () => {
+  const pm = {
+    membershipId: "pm",
+    politicianId: "debre",
+    start: "1959-01-08",
+    title: "Premier ministre",
+  };
+  const interim = {
+    membershipId: "edu",
+    politicianId: "debre",
+    start: "1959-12-23",
+    title: "Ministre de l'éducation nationale (par intérim)",
+  };
+  const coop = {
+    membershipId: "coop",
+    politicianId: "lecourt",
+    start: "1959-03-27",
+    title: "Ministre d'État, chargé de la coopération",
+  };
+  const sahara = {
+    membershipId: "sahara",
+    politicianId: "lecourt",
+    start: "1960-02-24",
+    title: "Ministre d'État, chargé du Sahara",
+  };
+  const newcomer = {
+    membershipId: "new",
+    politicianId: "x",
+    start: "1960-02-24",
+    title: "Ministre de l'intérieur",
+  };
+  const own = [pm, interim, coop, sahara, newcomer];
+
+  it("un intérim n'est pas une entrée au gouvernement", () => {
+    expect(entryKind(interim, own)).toBe("interim");
+    expect(
+      entryKind(
+        { ...interim, title: "Ministre délégué, ministre de l'éducation nationale par intérim" },
+        own
+      )
+    ).toBe("interim");
+  });
+
+  it("une personne qui a déjà exercé une fonction dans ce gouvernement prend une nouvelle fonction", () => {
+    expect(entryKind(sahara, own)).toBe("newFunction");
+  });
+
+  it("une première fonction reste une entrée", () => {
+    expect(entryKind(newcomer, own)).toBe("entry");
+    expect(entryKind(pm, own)).toBe("entry");
   });
 });
 
@@ -164,5 +249,31 @@ describe("governmentPeriod", () => {
     expect(
       governmentPeriod({ ...base, formedAt: null, endedAt: null, resignedAt: "2024-12-05" })
     ).toBe("Premier ministre nommé le 5 septembre 2024, démission le 5 décembre 2024");
+  });
+});
+
+describe("lastDayShortcutLabel", () => {
+  it("Debré : démission par acte sans régime attesté, aucune mention d'affaires courantes", () => {
+    const debre = {
+      currentAffairsAttested: false,
+      resignedEvidence: "ACT" as const,
+      endedAt: "1962-04-15",
+    };
+    expect(lastDayShortcutLabel(debre)).toBe("Équipe suivante nommée");
+    expect(lastDayShortcutLabel(debre)).not.toContain("affaires courantes");
+  });
+
+  it("régime attesté par un acte : fin des affaires courantes", () => {
+    expect(lastDayShortcutLabel(attested)).toBe("Fin des affaires courantes");
+  });
+
+  it("démission non prouvée par un acte : pas d'affaires courantes", () => {
+    expect(lastDayShortcutLabel({ ...attested, resignedEvidence: "DATASET" })).toBe(
+      "Équipe suivante nommée"
+    );
+  });
+
+  it("gouvernement en exercice : dernière vérification", () => {
+    expect(lastDayShortcutLabel({ ...attested, endedAt: null })).toBe("Composition vérifiée");
   });
 });

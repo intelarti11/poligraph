@@ -99,7 +99,9 @@ export function isPartial(gov: Pick<PublishedGovernment, "completeness" | "hidde
 
 /**
  * Dates line of a government (2a, 2b). The team date is `formedAt`; when it differs from the
- * Prime Minister's appointment, both are named.
+ * Prime Minister's appointment, both are named. One sentence per fact, always in the same order:
+ * appointment, then resignation and replacement (or end of functions when no resignation is
+ * known). A resignation on the replacement day is still named.
  */
 export function governmentDatesLine(gov: PublishedGovernment): string {
   const pmHead =
@@ -110,26 +112,24 @@ export function governmentDatesLine(gov: PublishedGovernment): string {
         : "Nomination du Premier ministre le";
   const pm = `${pmHead} ${formatDay(gov.primeMinisterAppointedAt)}`;
 
-  let line: string;
-  if (!gov.formedAt) line = `${pm} ; date de l'équipe non documentée`;
+  const sentences: string[] = [];
+  if (!gov.formedAt) sentences.push(`${pm} ; date de l'équipe non documentée`);
   else if (gov.formedAt === gov.primeMinisterAppointedAt)
-    line = `Nommé le ${formatDay(gov.formedAt)}`;
-  else line = `${pm}, équipe nommée le ${formatDay(gov.formedAt)}`;
+    sentences.push(`Nommé le ${formatDay(gov.formedAt)}`);
+  else sentences.push(`${pm}, équipe nommée le ${formatDay(gov.formedAt)}`);
 
-  if (gov.endedAt) {
-    const resignedFirst = gov.resignedAt && gov.resignedAt !== gov.endedAt;
-    if (resignedFirst && !gov.currentAffairsAttested) {
-      line += `. Démission le ${formatDay(gov.resignedAt!)}, remplacé le ${formatDay(gov.endedAt)}.`;
-    } else {
-      line += ` · fin des fonctions le ${formatDay(gov.endedAt)}`;
-      if (resignedFirst) {
-        line += `. Démission le ${formatDay(gov.resignedAt!)}, affaires courantes jusqu'au ${formatDay(addDays(gov.endedAt, -1))}.`;
-      }
+  if (gov.endedAt && gov.resignedAt) {
+    let end = `Démission le ${formatDay(gov.resignedAt)}`;
+    if (gov.resignedAt !== gov.endedAt && gov.currentAffairsAttested) {
+      end += `, affaires courantes jusqu'au ${formatDay(addDays(gov.endedAt, -1))}`;
     }
+    sentences.push(`${end}, remplacé le ${formatDay(gov.endedAt)}`);
+  } else if (gov.endedAt) {
+    sentences.push(`Fin des fonctions le ${formatDay(gov.endedAt)}`);
   } else if (gov.resignedAt) {
-    line += ` · démission le ${formatDay(gov.resignedAt)}`;
+    sentences.push(`Démission le ${formatDay(gov.resignedAt)}`);
   }
-  return line;
+  return `${sentences.join(". ")}.`;
 }
 
 /**
@@ -176,6 +176,41 @@ export function governmentPeriod(
   }
   if (gov.resignedAt) line += `, démission le ${formatDay(gov.resignedAt)}`;
   return line;
+}
+
+/**
+ * Label of the last consultable day in the date shortcuts. « Fin des affaires courantes » only
+ * when the regime is attested (same rule as the dates line); otherwise `endedAt` is the day the
+ * next team was appointed, and a government in office stops at its last verification.
+ */
+export function lastDayShortcutLabel(
+  gov: Pick<PublishedGovernment, "currentAffairsAttested" | "resignedEvidence" | "endedAt">
+): string {
+  const caretaker = lastCaretakerDay(gov, {
+    endKind: "COLLECTIVE_RESIGNATION",
+    currentAffairsEndedAt: null,
+  });
+  if (caretaker) return "Fin des affaires courantes";
+  return gov.endedAt ? "Équipe suivante nommée" : "Composition vérifiée";
+}
+
+/**
+ * Nature of a function start that is neither the formation nor a same-day change of title. An
+ * interim is not an arrival in the government, and neither is a new function for a person who
+ * already held one in this government (« entre au gouvernement » would then be wrong).
+ */
+export type EntryKind = "entry" | "interim" | "newFunction";
+
+export function entryKind(
+  ep: Pick<GovernmentEpisode, "membershipId" | "politicianId" | "start" | "title">,
+  own: Pick<GovernmentEpisode, "membershipId" | "politicianId" | "start">[]
+): EntryKind {
+  if (/par intérim/i.test(ep.title)) return "interim";
+  const heldBefore = own.some(
+    (o) =>
+      o.politicianId === ep.politicianId && o.membershipId !== ep.membershipId && o.start < ep.start
+  );
+  return heldBefore ? "newFunction" : "entry";
 }
 
 /** Source URLs come from the database: only http(s) links are rendered as links. */

@@ -513,7 +513,9 @@ describe("composition par défaut", () => {
     expect(t).toContain("Aucune présence établie au 5 octobre 2025");
     expect(t).toContain("Période à préciser");
     expect(t).not.toContain("Absence établie");
-    expect(t).toContain("Fin des affaires courantes");
+    // Régime non attesté : la dernière date est la nomination de l'équipe suivante.
+    expect(t).toContain("5 octobre 2025 · Équipe suivante nommée");
+    expect(t).not.toContain("affaires courantes");
   });
 
   it("garde « Absence établie » pour une composition réellement vide", async () => {

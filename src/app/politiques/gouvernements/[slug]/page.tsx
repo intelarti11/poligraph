@@ -26,12 +26,15 @@ import { RememberReturn, ReturnScrollRestorer } from "@/components/governments/R
 import {
   appointedOn,
   displayTitle,
+  entryKind,
+  type EntryKind,
   episodeDates,
   formatDay,
   FUNCTION_ORDER,
   FUNCTION_SECTION_LABEL,
   governmentDatesLine,
   isPartial,
+  lastDayShortcutLabel,
   personsLabel,
   plural,
   safeExternalUrl,
@@ -59,6 +62,7 @@ import { hasActiveListingFilter, listingRobotsMetadata } from "@/lib/seo/listing
 import type { Change, CompositionResult, DateEvidence } from "@/lib/governments/types";
 
 const BASE = "/politiques/gouvernements";
+const MAX_SHORTCUTS = 6;
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -173,6 +177,23 @@ const CHANGE_LABEL: Record<Change["kind"], string> = {
   transition: "Transition à clarifier",
 };
 
+const ENTRY_LABEL: Record<EntryKind, string> = {
+  entry: "Entrée",
+  interim: "Intérim",
+  newFunction: "Nouvelle fonction",
+};
+
+function changeLabel(
+  change: Change,
+  byId: Map<string, GovernmentEpisode>,
+  people: Record<string, PersonCard>
+): string {
+  const ep = change.kind === "entry" ? byId.get(change.membershipIds[0] ?? "") : undefined;
+  // A hidden person's line stays generic: the label would give away the nature of the function.
+  if (!ep || people[ep.politicianId]?.visibility === "hidden") return CHANGE_LABEL[change.kind];
+  return ENTRY_LABEL[entryKind(ep, [...byId.values()])];
+}
+
 function joinNames(names: string[]): string {
   if (names.length <= 1) return names[0] ?? "";
   return `${names.slice(0, -1).join(", ")} et ${names.at(-1)}`;
@@ -206,9 +227,19 @@ function describeChange(
     case "entry": {
       const ep = eps[0];
       if (!ep) return "Entrée au gouvernement.";
-      return names[0]
-        ? `${names[0]} entre au gouvernement : ${displayTitle(ep.title)}.`
-        : `Entrée au gouvernement : ${displayTitle(ep.title)}.`;
+      const title = displayTitle(ep.title);
+      switch (entryKind(ep, [...byId.values()])) {
+        case "interim":
+          return names[0] ? `${names[0]} assure un intérim : ${title}.` : `Intérim : ${title}.`;
+        case "newFunction":
+          return names[0]
+            ? `${names[0]} prend une nouvelle fonction : ${title}.`
+            : `Nouvelle fonction : ${title}.`;
+        case "entry":
+          return names[0]
+            ? `${names[0]} entre au gouvernement : ${title}.`
+            : `Entrée au gouvernement : ${title}.`;
+      }
     }
     case "exit": {
       const ep = eps[0];
@@ -348,11 +379,24 @@ export default async function GovernmentPage({ params, searchParams }: PageProps
     if (lastDay !== range.from && lastDay !== defaultDate) {
       shortcuts.push({
         date: lastDay,
-        label: gov.resignedAt ? "Fin des affaires courantes" : "Fin du gouvernement",
+        label: lastDayShortcutLabel(gov),
       });
     }
   }
 
+  // Formation plus the five latest dates; the full list stays one click away. It opens by
+  // itself when the date shown is one of the folded ones.
+  const foldShortcuts = shortcuts.length > MAX_SHORTCUTS;
+  const visibleShortcuts = foldShortcuts
+    ? [shortcuts[0]!, ...shortcuts.slice(-(MAX_SHORTCUTS - 1))]
+    : shortcuts;
+  const activeVisible =
+    !date ||
+    !shortcuts.some((s) => s.date === date) ||
+    visibleShortcuts.some((s) => s.date === date);
+
+  // A partial composition is explained next to its badge, not only in the sources at the end.
+  const noteInHeader = gov.completeness === "PARTIAL" && !!gov.coverageNote;
   const ok = result.status === "ok" ? result : null;
   const partial = isPartial(gov);
   const establishedEpisodes = ok
@@ -428,7 +472,7 @@ export default async function GovernmentPage({ params, searchParams }: PageProps
     <>
       {memberProfiles.length > 0 && (
         <ItemListJsonLd
-          name={`Membres du ${gov.name}`}
+          name={`Membres du ${gov.name} ayant une fiche publiée sur Poligraph`}
           url={`${SITE_URL}${selfUrl}`}
           items={memberProfiles}
         />
@@ -482,6 +526,9 @@ export default async function GovernmentPage({ params, searchParams }: PageProps
               </StatusBadge>
             )}
           </div>
+          {noteInHeader && (
+            <p className="text-[13px] leading-snug text-muted-foreground">{gov.coverageNote}</p>
+          )}
           {gov.acts.formed && (
             <p className="flex items-start gap-1.5 text-[11.5px] leading-snug text-muted-foreground">
               <FileText className="mt-px size-3.5 shrink-0" aria-hidden="true" />
@@ -575,30 +622,46 @@ export default async function GovernmentPage({ params, searchParams }: PageProps
                 ) : (
                   <p className="font-display text-[17px] font-bold">Composition</p>
                 )}
-                {(shortcuts.length > 0 || dayShortcuts.length > 0) && (
+                {(visibleShortcuts.length > 0 || dayShortcuts.length > 0) && (
                   <div
                     role="group"
-                    aria-label="Raccourcis : formation et changements documentés"
+                    aria-label="Raccourcis : formation et derniers changements documentés"
                     className="flex flex-wrap gap-2"
                   >
-                    {[...shortcuts, ...dayShortcuts].map((s) => {
-                      const active = s.date === date;
-                      return (
-                        <Link
-                          key={`${s.label}-${s.date}`}
-                          href={`${selfUrl}?date=${s.date}`}
-                          aria-current={active ? "true" : undefined}
-                          className={
-                            active
-                              ? "inline-flex min-h-11 items-center rounded-full bg-primary px-4 text-sm font-bold text-primary-foreground"
-                              : "inline-flex min-h-11 items-center rounded-full border bg-card px-4 text-sm hover:bg-muted"
-                          }
-                        >
-                          {formatDay(s.date)} · {s.label}
-                        </Link>
-                      );
-                    })}
+                    {[...visibleShortcuts, ...dayShortcuts].map((s) => (
+                      <ShortcutLink
+                        key={`${s.label}-${s.date}`}
+                        shortcut={s}
+                        href={selfUrl}
+                        active={s.date === date}
+                      />
+                    ))}
                   </div>
+                )}
+                {foldShortcuts && (
+                  <details className="group" open={!activeVisible || undefined}>
+                    <summary className="flex min-h-11 w-fit cursor-pointer list-none items-center gap-1.5 text-sm font-bold text-primary [&::-webkit-details-marker]:hidden">
+                      <ChevronRight
+                        className="size-4 shrink-0 transition-transform group-open:rotate-90"
+                        aria-hidden="true"
+                      />
+                      Toutes les dates ({shortcuts.length})
+                    </summary>
+                    <div
+                      role="group"
+                      aria-label="Toutes les dates documentées"
+                      className="mt-2 flex flex-wrap gap-2"
+                    >
+                      {shortcuts.map((s) => (
+                        <ShortcutLink
+                          key={`${s.label}-${s.date}`}
+                          shortcut={s}
+                          href={selfUrl}
+                          active={s.date === date}
+                        />
+                      ))}
+                    </div>
+                  </details>
                 )}
                 {range && date === range.to && (
                   <p className="text-[13px] text-muted-foreground">
@@ -786,7 +849,7 @@ export default async function GovernmentPage({ params, searchParams }: PageProps
                       <span className="text-[13px] font-bold">{formatDay(c.date)}</span>
                       <div className="min-w-0 text-sm">
                         <p>
-                          <strong>{CHANGE_LABEL[c.kind]}</strong> ·{" "}
+                          <strong>{changeLabel(c, byId, data.people)}</strong> ·{" "}
                           {describeChange(c, gov, byId, data.people)}
                         </p>
                         <p className="mt-1 text-xs text-muted-foreground">
@@ -882,7 +945,7 @@ export default async function GovernmentPage({ params, searchParams }: PageProps
               <li>
                 Parti politique non affiché : l&apos;affiliation à la date n&apos;est pas établie.
               </li>
-              {gov.coverageNote && <li>{gov.coverageNote}</li>}
+              {gov.coverageNote && !noteInHeader && <li>{gov.coverageNote}</li>}
             </ul>
             <details className="group mt-3">
               <summary className="flex min-h-11 cursor-pointer list-none items-center gap-1.5 font-bold [&::-webkit-details-marker]:hidden">
@@ -925,6 +988,30 @@ export default async function GovernmentPage({ params, searchParams }: PageProps
         </div>
       </div>
     </>
+  );
+}
+
+function ShortcutLink({
+  shortcut,
+  href,
+  active,
+}: {
+  shortcut: { date: string; label: string };
+  href: string;
+  active: boolean;
+}) {
+  return (
+    <Link
+      href={`${href}?date=${shortcut.date}`}
+      aria-current={active ? "true" : undefined}
+      className={
+        active
+          ? "inline-flex min-h-11 items-center rounded-full bg-primary px-4 text-sm font-bold text-primary-foreground"
+          : "inline-flex min-h-11 items-center rounded-full border bg-card px-4 text-sm hover:bg-muted"
+      }
+    >
+      {formatDay(shortcut.date)} · {shortcut.label}
+    </Link>
   );
 }
 
