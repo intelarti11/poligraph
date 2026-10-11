@@ -8,6 +8,10 @@ import {
   type PoliticianIndexSignals,
 } from "../politician-robots";
 import { communeRobotsMetadata, COMMUNE_MIN_POPULATION } from "../commune-robots";
+import {
+  territoireCommuneRobotsMetadata,
+  TERRITOIRE_COMMUNE_MIN_POPULATION,
+} from "../territoire-robots";
 import { hasActiveListingFilter, listingRobotsMetadata } from "../listing-robots";
 import { voteDateArchiveRobotsMetadata } from "../parliament-robots";
 import { scrutinRobotsMetadata, type ScrutinIndexSignals } from "../scrutin-robots";
@@ -138,6 +142,14 @@ describe("doctrine — strong surfaces stay indexable", () => {
   it("commune with unknown population (fail-open)", () => {
     expect(communeRobotsMetadata(null)).toEqual(INDEXABLE);
   });
+  it("Territoires commune page: known population >= threshold and public mayor established", () => {
+    expect(
+      territoireCommuneRobotsMetadata({
+        population: TERRITOIRE_COMMUNE_MIN_POPULATION,
+        maireEtabli: true,
+      })
+    ).toEqual(INDEXABLE);
+  });
   it("bare /affaires listing", () => {
     expect(listingRobots({}, AFFAIRES_LISTING_FILTER_KEYS)).toEqual(INDEXABLE);
   });
@@ -175,6 +187,16 @@ describe("doctrine — thin/duplicate surfaces stay out of the index", () => {
   });
   it("small commune page (< threshold)", () => {
     expect(communeRobotsMetadata(COMMUNE_MIN_POPULATION - 1)).toEqual(NOINDEX_FOLLOW);
+  });
+  it("Territoires commune page with unknown population (not presumed rich)", () => {
+    expect(territoireCommuneRobotsMetadata({ population: null, maireEtabli: true })).toEqual(
+      NOINDEX_FOLLOW
+    );
+  });
+  it("Territoires commune page whose mayor is not established", () => {
+    expect(territoireCommuneRobotsMetadata({ population: 500_000, maireEtabli: false })).toEqual(
+      NOINDEX_FOLLOW
+    );
   });
   it("filtered /affaires (?parti)", () => {
     expect(listingRobots({ parti: "rn" }, AFFAIRES_LISTING_FILTER_KEYS)).toEqual(NOINDEX_FOLLOW);
