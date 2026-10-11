@@ -8,6 +8,7 @@ import { TerritoryShape } from "@/components/territoires/TerritoryShape";
 import type { CommuneDossier } from "@/lib/data/territoires";
 import {
   availableInformation,
+  deputeNoun,
   formatCirconscription,
   formatPopulation,
   maireSince,
@@ -157,26 +158,42 @@ function ParlementFact({ deputes }: { deputes: CommuneDossier["parlement"]["depu
       <Fact
         label="Au Parlement"
         value="Plusieurs circonscriptions"
-        detail="Le député dépend de l'adresse, voir ci-dessous."
+        detail="La circonscription dépend de l'adresse, voir ci-dessous."
       />
     );
   }
   const circo = deputes.circonscriptionEnregistree;
-  const depute = deputes.state === "DISPONIBLE" ? deputes.deputes[0] : undefined;
   if (circo == null) {
     return (
       <Fact
         label="Au Parlement"
         value="Circonscription non renseignée"
-        detail="Le député dépend de l'adresse, voir ci-dessous."
+        detail="La circonscription dépend de l'adresse, voir ci-dessous."
       />
     );
   }
+  const depute = deputes.state === "DISPONIBLE" ? deputes.deputes[0] : undefined;
+  if (!depute) {
+    // Not established: the recorded constituency is shown as such, and no one is named as
+    // the commune's deputy here (the section below names them with the reservation).
+    return (
+      <Fact
+        label="Au Parlement"
+        value={`${formatCirconscription(circo)} enregistrée`}
+        detail="Selon l'adresse, vérifiez avec Mon député, voir ci-dessous."
+      />
+    );
+  }
+  const noun = deputeNoun(depute.civility);
   return (
     <Fact
       label="Au Parlement"
       value={formatCirconscription(circo)}
-      detail={depute ? `Député : ${depute.fullName}` : "Député non établi pour cette commune"}
+      detail={
+        noun
+          ? `${noun.charAt(0).toUpperCase()}${noun.slice(1)} : ${depute.fullName}`
+          : `À l'Assemblée nationale : ${depute.fullName}`
+      }
     />
   );
 }

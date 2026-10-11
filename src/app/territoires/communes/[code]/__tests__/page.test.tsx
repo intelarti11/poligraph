@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CommuneDossier } from "@/lib/data/territoires";
-import { dossier, papeete, paris, reunion, withMaire } from "./fixtures";
+import { dossier, grandeCommune, papeete, paris, reunion, withMaire } from "./fixtures";
 
 const mocks = vi.hoisted(() => ({
   getCommuneDossier: vi.fn(),
@@ -93,6 +93,40 @@ describe("/territoires/communes/[code]", () => {
     expect(text).not.toMatch(/partie (nord|sud)/);
   });
 
+  it("accorde la fonction à la civilité enregistrée", async () => {
+    const { document, text } = await render(dossier());
+    expect(text).toContain("Députée : Dominique Député");
+    expect(document.querySelector("#parlement")?.textContent).toContain(
+      "députée de cette circonscription"
+    );
+  });
+
+  it("n'accorde rien au hasard quand la civilité est inconnue", async () => {
+    const base = dossier();
+    const depute = { ...base.parlement.deputes.deputes[0]!, civility: null };
+    const { text } = await render({
+      ...base,
+      parlement: { ...base.parlement, deputes: { ...base.parlement.deputes, deputes: [depute] } },
+    });
+    expect(text).toContain("À l'Assemblée nationale : Dominique Député");
+    expect(text).not.toMatch(/Dominique Député · député|député·e|député\(e\)/);
+  });
+
+  it("nomme le député de la circonscription enregistrée avec la réserve, jamais comme certain", async () => {
+    const { document } = await render(grandeCommune());
+    const header = document.querySelector("header")?.textContent ?? "";
+    const section = document.querySelector("#parlement")?.textContent ?? "";
+
+    expect(header).toContain("1re circonscription enregistrée");
+    expect(header).toContain("Selon l'adresse, vérifiez avec Mon député");
+    expect(header).not.toContain("Dominique Député");
+    expect(section).toContain(
+      "Rien n'établit que la commune relève de cette seule circonscription"
+    );
+    expect(section).toContain("Dominique Député");
+    expect(document.querySelector('#parlement a[href="/mon-depute"]')).not.toBeNull();
+  });
+
   it("ne désigne aucun député dans une commune à plusieurs circonscriptions", async () => {
     const { document, text } = await render(paris());
 
@@ -129,6 +163,25 @@ describe("/territoires/communes/[code]", () => {
     expect(text).toContain("Présidentielle 2027 : les résultats de la commune apparaîtront ici");
   });
 
+  it("ne déclare pas élue au 1er tour une liste majoritaire sans le quart des inscrits établi", async () => {
+    const base = dossier();
+    const block = base.elections.municipales2026!;
+    const { text } = await render({
+      ...base,
+      elections: {
+        municipales2026: {
+          ...block,
+          listes: block.listes.map((l) => ({
+            ...l,
+            electionAuPremierTour: "NON_ETABLI" as const,
+          })),
+        },
+      },
+    });
+    expect(text).toContain("54,2 %");
+    expect(text).not.toContain("élue au 1er tour");
+  });
+
   it("dit qu'aucun résultat n'est enregistré", async () => {
     const { text } = await render(papeete());
     expect(text).toContain("Aucun résultat des municipales 2026 n'est enregistré");
@@ -148,7 +201,7 @@ describe("/territoires/communes/[code]", () => {
     }
     expect(text).not.toMatch(/Décisions|Socle officiel|Dossier curé|intercommunalit|superficie/i);
     expect(text).toContain(
-      "Informations disponibles : maire, population, député, sénateurs du département, résultats des municipales 2026."
+      "Informations disponibles : maire, population, circonscription législative, sénateurs du département, résultats des municipales 2026."
     );
   });
 

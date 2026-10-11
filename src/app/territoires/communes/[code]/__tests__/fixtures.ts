@@ -29,7 +29,12 @@ export function dossier(overrides: Partial<CommuneDossier> = {}): CommuneDossier
     },
     maire: {
       state: "ETABLI",
-      person: { slug: "camille-exemple", fullName: "Camille Exemple", photoUrl: null },
+      person: {
+        slug: "camille-exemple",
+        fullName: "Camille Exemple",
+        photoUrl: null,
+        civility: null,
+      },
       functionStart: "2026-03-22T00:00:00.000Z",
       mandateStart: "2026-03-22T00:00:00.000Z",
       lastConfirmedAt: null,
@@ -48,11 +53,14 @@ export function dossier(overrides: Partial<CommuneDossier> = {}): CommuneDossier
         state: "DISPONIBLE",
         circonscriptionEnregistree: 1,
         couvertureCirconscriptions: "NON_VERIFIEE",
+        reserve: "CIRCONSCRIPTION_NON_VERIFIEE",
+        deputesCirconscriptionEnregistree: [],
         deputes: [
           {
             slug: "dominique-depute",
             fullName: "Dominique Député",
             photoUrl: null,
+            civility: "Mme",
             constituency: "Ille-et-Vilaine (1)",
             lastConfirmedAt: null,
             source: AN,
@@ -72,13 +80,19 @@ export function dossier(overrides: Partial<CommuneDossier> = {}): CommuneDossier
             listName: "Liste A",
             teteDeListe: {
               name: "Camille Exemple",
-              person: { slug: "camille-exemple", fullName: "Camille Exemple", photoUrl: null },
+              person: {
+                slug: "camille-exemple",
+                fullName: "Camille Exemple",
+                photoUrl: null,
+                civility: null,
+              },
             },
             round1Votes: 1000,
             round1Pct: 54.2,
             round2Votes: null,
             round2Pct: null,
             elueAuPremierTour: true,
+            electionAuPremierTour: "ELUE",
             elueAuSecondTour: false,
           },
           {
@@ -89,6 +103,7 @@ export function dossier(overrides: Partial<CommuneDossier> = {}): CommuneDossier
             round2Votes: null,
             round2Pct: null,
             elueAuPremierTour: false,
+            electionAuPremierTour: "NON_ELUE",
             elueAuSecondTour: false,
           },
         ],
@@ -177,6 +192,8 @@ export function papeete(): CommuneDossier {
         circonscriptionEnregistree: null,
         couvertureCirconscriptions: "NON_VERIFIEE",
         deputes: [],
+        deputesCirconscriptionEnregistree: [],
+        reserve: "CIRCONSCRIPTION_NON_VERIFIEE",
       },
       senateurs: { state: "DISPONIBLE", senateurs: [] },
     },
@@ -201,7 +218,7 @@ export function paris(): CommuneDossier {
     },
     mairesSecteur: [
       {
-        person: { slug: "alex-secteur", fullName: "Alex Secteur", photoUrl: null },
+        person: { slug: "alex-secteur", fullName: "Alex Secteur", photoUrl: null, civility: null },
         sectorLabel: "Paris Centre",
         functionStart: "2026-04-01T00:00:00.000Z",
         lastConfirmedAt: null,
@@ -214,8 +231,36 @@ export function paris(): CommuneDossier {
         circonscriptionEnregistree: 1,
         couvertureCirconscriptions: "PLUSIEURS",
         deputes: [],
+        deputesCirconscriptionEnregistree: [],
+        reserve: "PLUSIEURS_CIRCONSCRIPTIONS",
       },
       senateurs: { state: "DISPONIBLE", senateurs: [] },
     },
+  };
+}
+
+/**
+ * A commune of 20 000 inhabitants or more: the deputy of the recorded constituency is not
+ * established as the commune's own, and is given only with the reservation.
+ */
+export function grandeCommune(civility: string | null = "Mme"): CommuneDossier {
+  const base = dossier();
+  const recorded = { ...base.parlement.deputes.deputes[0]!, civility };
+  return {
+    ...base,
+    parlement: {
+      ...base.parlement,
+      deputes: {
+        ...base.parlement.deputes,
+        state: "NON_ETABLI",
+        deputes: [],
+        deputesCirconscriptionEnregistree: [recorded],
+      },
+    },
+    coverage: base.coverage.map((c) =>
+      c.bloc === "deputes"
+        ? { ...c, state: "NON_ETABLI", reserve: "CIRCONSCRIPTION_NON_VERIFIEE" }
+        : c
+    ),
   };
 }

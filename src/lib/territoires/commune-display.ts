@@ -44,7 +44,7 @@ const COVERAGE_LABELS: Partial<Record<CoverageEntry["bloc"], string>> = {
   maire: "maire",
   mairesSecteur: "maires d'arrondissement ou de secteur",
   population: "population",
-  deputes: "député",
+  deputes: "circonscription législative",
   senateurs: "sénateurs du département",
   municipales2026: "résultats des municipales 2026",
 };
@@ -85,4 +85,14 @@ export function communeDescription(dossier: CommuneDossier): string {
     "Parlementaires et élections, avec leurs sources.",
   ];
   return sentences.filter(Boolean).join(" ");
+}
+
+/**
+ * Function noun agreed with the recorded civility; null when the civility is unknown, so the
+ * caller rephrases without a gendered noun rather than guessing (no "député·e").
+ */
+export function deputeNoun(civility: string | null): "députée" | "député" | null {
+  if (civility === "Mme") return "députée";
+  if (civility === "M.") return "député";
+  return null;
 }

@@ -6,9 +6,11 @@ import type {
   CommuneDossier,
   MunicipalesBlock,
   MunicipalesListe,
+  ParlementaireRef,
   SourceRef,
 } from "@/lib/data/territoires";
 import {
+  deputeNoun,
   formatCirconscription,
   formatPct,
   formatPopulation,
@@ -225,55 +227,85 @@ const MON_DEPUTE = (
   </Link>
 );
 
+function DeputeCard({
+  depute,
+  circo,
+  reserve,
+}: {
+  depute: ParlementaireRef;
+  circo: number;
+  reserve: boolean;
+}) {
+  const noun = deputeNoun(depute.civility);
+  return (
+    <div className="rounded-xl border p-4">
+      <p className="text-sm text-muted-foreground">
+        {formatCirconscription(circo)}, enregistrée pour la commune
+      </p>
+      {reserve && (
+        <p className="mt-1 text-sm">
+          Rien n{"'"}établit que la commune relève de cette seule circonscription : selon votre
+          adresse, une autre peut s{"'"}appliquer. Vérifiez avec {MON_DEPUTE}.
+        </p>
+      )}
+      <div className="mt-1 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+        <p>
+          <Link
+            href={`/politiques/${depute.slug}`}
+            prefetch={false}
+            className={`${TAP} font-display text-lg font-bold ${LINK}`}
+          >
+            {depute.fullName}
+          </Link>
+          <span className="text-sm text-muted-foreground">
+            {noun ? ` · ${noun} de cette circonscription` : " · Assemblée nationale"}
+          </span>
+        </p>
+        <Link
+          href={`/politiques/${depute.slug}/votes`}
+          prefetch={false}
+          className={`${TAP} text-sm ${LINK}`}
+        >
+          Votes et activité
+        </Link>
+      </div>
+      <Source source={depute.source} date={depute.lastConfirmedAt} />
+    </div>
+  );
+}
+
 export function ParlementSection({ dossier }: { dossier: CommuneDossier }) {
   const { deputes } = dossier.parlement;
   const { department } = dossier.identity;
   const circo = deputes.circonscriptionEnregistree;
   const depute = deputes.state === "DISPONIBLE" ? deputes.deputes[0] : undefined;
+  // Named with an explicit reservation when the base does not establish the commune's deputy.
+  const recorded =
+    !depute && deputes.deputesCirconscriptionEnregistree.length === 1
+      ? deputes.deputesCirconscriptionEnregistree[0]
+      : undefined;
 
   return (
     <SectionCard id="parlement" title="Au Parlement">
       {deputes.couvertureCirconscriptions === "PLUSIEURS" ? (
         <p className="text-sm">
-          Plusieurs circonscriptions législatives couvrent {dossier.identity.name} : le député
-          dépend de l{"'"}adresse. Pour trouver le vôtre, utilisez {MON_DEPUTE}.
+          Plusieurs circonscriptions législatives couvrent {dossier.identity.name} : la vôtre dépend
+          de l{"'"}adresse. Pour la trouver, utilisez {MON_DEPUTE}.
         </p>
       ) : depute && circo != null ? (
         <>
-          <div className="rounded-xl border p-4">
-            <p className="text-sm text-muted-foreground">
-              {formatCirconscription(circo)}, enregistrée pour la commune
-            </p>
-            <div className="mt-1 flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-              <p>
-                <Link
-                  href={`/politiques/${depute.slug}`}
-                  prefetch={false}
-                  className={`${TAP} font-display text-lg font-bold ${LINK}`}
-                >
-                  {depute.fullName}
-                </Link>
-                <span className="text-sm text-muted-foreground"> · député</span>
-              </p>
-              <Link
-                href={`/politiques/${depute.slug}/votes`}
-                prefetch={false}
-                className={`${TAP} text-sm ${LINK}`}
-              >
-                Votes et activité
-              </Link>
-            </div>
-            <Source source={depute.source} date={depute.lastConfirmedAt} />
-          </div>
+          <DeputeCard depute={depute} circo={circo} reserve={false} />
           <p className="mt-3 text-sm text-muted-foreground">
             Selon votre adresse, une autre circonscription peut s{"'"}appliquer : vérifiez avec{" "}
             {MON_DEPUTE}.
           </p>
         </>
+      ) : recorded && circo != null ? (
+        <DeputeCard depute={recorded} circo={circo} reserve />
       ) : circo != null ? (
         <p className="text-sm">
-          La commune est enregistrée dans la {formatCirconscription(circo)}, mais son député n{"'"}
-          est pas établi dans Poligraph. Vérifiez avec {MON_DEPUTE}.
+          La commune est enregistrée dans la {formatCirconscription(circo)}, mais la personne qui y
+          siège n{"'"}est pas établie dans Poligraph. Vérifiez avec {MON_DEPUTE}.
         </p>
       ) : (
         <p className="text-sm">
@@ -365,7 +397,7 @@ function RoundResults({ block, round }: { block: MunicipalesBlock; round: 1 | 2 
       liste={liste}
       pct={pct}
       status={
-        round === 1 && liste.elueAuPremierTour
+        round === 1 && liste.electionAuPremierTour === "ELUE"
           ? "élue au 1er tour"
           : round === 2 && liste.elueAuSecondTour
             ? "élue au 2d tour"

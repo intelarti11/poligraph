@@ -5,6 +5,7 @@ import {
   formatCirconscription,
   formatPct,
   formatPopulation,
+  deputeNoun,
 } from "../commune-display";
 import { dossier, papeete, withMaire } from "@/app/territoires/communes/[code]/__tests__/fixtures";
 
@@ -24,10 +25,16 @@ describe("commune-display", () => {
   it("ne liste que les blocs disponibles, sans l'identité", () => {
     expect(availableInformation(withMaire("NON_ETABLI").coverage)).toEqual([
       "population",
-      "député",
+      "circonscription législative",
       "sénateurs du département",
       "résultats des municipales 2026",
     ]);
+  });
+
+  it("accorde la fonction à la civilité, sans deviner", () => {
+    expect(deputeNoun("Mme")).toBe("députée");
+    expect(deputeNoun("M.")).toBe("député");
+    expect(deputeNoun(null)).toBeNull();
   });
 
   it("adapte le titre nominatif aux faits établis", () => {
