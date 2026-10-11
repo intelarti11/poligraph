@@ -8,6 +8,7 @@ import type {
 import { getCollectivitesForDepartment } from "@/config/collectivites-particulieres";
 import { getRegionForDepartment, getTerritoireHorsRegion } from "@/config/regions";
 import { communeListCounter } from "@/components/territoires/CommuneIndex";
+import { DEPARTMENT_OUTLINES } from "@/config/territoires-shapes";
 
 const territoireMock = vi.fn();
 const deputesMock = vi.fn();
@@ -347,23 +348,31 @@ describe("page département : collectivités à statut particulier", () => {
     expect(doc.querySelector("#conseil")).toBeNull();
   });
 
-  it("Martinique : collectivité unique, pas de silhouette", async () => {
+  it("Martinique : collectivité unique", async () => {
     const doc = await render("martinique", territoire("972"));
     expect(text(doc)).toContain("Collectivité territoriale de Martinique");
-    expect(doc.querySelector('section[aria-labelledby="departement-titre"] svg')).toBeNull();
   });
 
-  it("Mayotte : note sur le département-région, sans silhouette", async () => {
+  it("Mayotte : note sur le département-région", async () => {
     const doc = await render("mayotte", territoire("976"));
     expect(doc.querySelector("#conseil")?.textContent).toContain("Département de Mayotte");
-    expect(doc.querySelector('section[aria-labelledby="departement-titre"] svg')).toBeNull();
     expect(doc.querySelector('a[href="/territoires/regions/mayotte"]')).not.toBeNull();
   });
 
-  it("La Réunion : bandeau sans silhouette, jamais celle d'un autre territoire", async () => {
-    const doc = await render("la-reunion", territoire("974"));
-    expect(doc.querySelector("h1")?.textContent).toBe("La Réunion (974)");
-    expect(doc.querySelector('section[aria-labelledby="departement-titre"] svg')).toBeNull();
+  // Each overseas territory gets its own outline, never metropolitan France as an inset.
+  it.each([
+    ["la-reunion", "974"],
+    ["guyane", "973"],
+    ["saint-pierre-et-miquelon", "975"],
+    ["polynesie-francaise", "987"],
+    ["nouvelle-caledonie", "988"],
+  ])("%s : silhouette de son propre territoire", async (slug, code) => {
+    const doc = await render(slug, territoire(code));
+    const svgs = [...doc.querySelectorAll('section[aria-labelledby="departement-titre"] svg')];
+    expect(svgs).toHaveLength(1);
+    expect(svgs[0]!.getAttribute("aria-hidden")).toBe("true");
+    expect(svgs[0]!.getAttribute("viewBox")).toBe(DEPARTMENT_OUTLINES[code]!.viewBox);
+    expect(svgs[0]!.querySelector("path")!.getAttribute("d")).toBe(DEPARTMENT_OUTLINES[code]!.d);
   });
 
   it("Saint-Pierre-et-Miquelon : statut affiché, aucune région", async () => {

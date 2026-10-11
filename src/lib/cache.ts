@@ -145,10 +145,13 @@ const EXPORT_TAGS_BY_ENTITY: Partial<Record<EntityType, readonly string[]>> = {
     EXPORT_CACHE_TAGS.politicians,
     EXPORT_CACHE_TAGS.affairs,
     EXPORT_CACHE_TAGS.factchecks,
+    // The territoires exports name mayors only while their profile is published.
+    EXPORT_CACHE_TAGS.territories,
   ],
   party: [EXPORT_CACHE_TAGS.politicians, EXPORT_CACHE_TAGS.affairs, EXPORT_CACHE_TAGS.factchecks],
   factcheck: [EXPORT_CACHE_TAGS.factchecks, EXPORT_CACHE_TAGS.politicians],
   vote: [EXPORT_CACHE_TAGS.votes],
+  mandate: [EXPORT_CACHE_TAGS.territories],
 };
 
 /**
@@ -301,11 +304,13 @@ const EXPORT_TAGS_BY_CACHE_TAG: Record<string, readonly string[]> = {
     EXPORT_CACHE_TAGS.politicians,
     EXPORT_CACHE_TAGS.affairs,
     EXPORT_CACHE_TAGS.factchecks,
+    EXPORT_CACHE_TAGS.territories,
   ],
   parties: [EXPORT_CACHE_TAGS.politicians, EXPORT_CACHE_TAGS.affairs, EXPORT_CACHE_TAGS.factchecks],
   factchecks: [EXPORT_CACHE_TAGS.factchecks, EXPORT_CACHE_TAGS.politicians],
   votes: [EXPORT_CACHE_TAGS.votes],
   gouvernements: [EXPORT_CACHE_TAGS.governments],
+  territoires: [EXPORT_CACHE_TAGS.territories],
 };
 
 /**

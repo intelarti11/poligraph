@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CommuneDossier } from "@/lib/data/territoires";
 import { OG_IMAGE_ROBOTS_SOURCE } from "@/lib/seo/og-image-robots";
+import { DEPARTMENT_OUTLINES } from "@/config/territoires-shapes";
 import { dossier, papeete, reunion, withMaire } from "./fixtures";
 
 const mocks = vi.hoisted(() => ({
@@ -87,16 +88,47 @@ describe("Open Graph d'une commune Territoires", () => {
     expect(text).not.toContain("Camille");
   });
 
-  it("rend une commune ultramarine sans contour, jamais celui d'un autre territoire", async () => {
-    const element = await render(reunion());
+  it.each([
+    ["La Réunion", reunion, "974"],
+    ["Polynésie française", papeete, "987"],
+  ] as const)(
+    "dessine en %s le contour du territoire lui-même, avec le repère de la commune",
+    async (_, make, code) => {
+      const element = await render(make());
+      const shapes = imgSources(element);
+      expect(shapes).toHaveLength(1);
+      const svg = Buffer.from(shapes[0]!.split(",")[1]!, "base64").toString();
+      const [, , w, h] = svg
+        .match(/viewBox="([^"]+)"/)![1]!
+        .split(" ")
+        .map(Number);
+      expect(w).toBe(h);
+      expect(svg).toContain(`d="${DEPARTMENT_OUTLINES[code]!.d}"`);
+      expect(svg).toContain("<circle");
+    }
+  );
+
+  it("ne dessine aucun contour pour les TAAF", async () => {
+    const base = papeete();
+    const element = await render({
+      ...base,
+      identity: {
+        ...base.identity,
+        inseeCode: "98411",
+        department: {
+          code: "984",
+          name: "Terres australes et antarctiques françaises",
+          slug: null,
+        },
+        coordinates: { lat: -37.8, lon: 77.5 },
+      },
+    });
     expect(imgSources(element)).toEqual([]);
-    expect(textContent(element)).toContain("Saint-Denis");
   });
 
-  it("rend une COM sans maire, sans contour, avec son statut", async () => {
+  it("rend une COM sans maire, avec son statut", async () => {
     const element = await render(papeete());
     const text = textContent(element);
-    expect(imgSources(element)).toEqual([]);
     expect(text).toContain("Collectivité d'outre-mer hors région");
     expect(text).not.toContain("Maire");
   });

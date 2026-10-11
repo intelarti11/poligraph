@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RegionTerritoire } from "@/lib/data/territoires";
 import { getCollectivitesForRegion } from "@/config/collectivites-particulieres";
 import { getRegionBySlug } from "@/config/regions";
+import { DEPARTMENT_OUTLINES } from "@/config/territoires-shapes";
 
 const mocks = vi.hoisted(() => ({
   getRegionTerritoire: vi.fn(),
@@ -135,12 +136,20 @@ describe("page région", () => {
     expect(container.textContent).not.toMatch(new RegExp("Dossier curé|\\[N\\]|[\\u2013\\u2014]"));
   });
 
-  it("rend une région d'outre-mer sans silhouette plutôt qu'avec celle d'un autre territoire", async () => {
-    mocks.getRegionTerritoire.mockResolvedValue(region("la-reunion"));
-    const { container } = render(await RegionPage(params("la-reunion")));
+  it.each([
+    ["la-reunion", "974"],
+    ["guadeloupe", "971"],
+    ["mayotte", "976"],
+  ])("dessine la région d'outre-mer %s avec son propre contour", async (slug, code) => {
+    mocks.getRegionTerritoire.mockResolvedValue(region(slug));
+    const { container } = render(await RegionPage(params(slug)));
     const banner = container.querySelector("section[aria-labelledby='region-titre']")!;
-    expect(banner.querySelector("svg")).toBeNull();
-    expect(screen.getByRole("heading", { level: 1, name: "La Réunion" })).toBeInTheDocument();
+    const svg = banner.querySelector("svg")!;
+    expect(svg.getAttribute("aria-hidden")).toBe("true");
+    expect(svg.getAttribute("viewBox")).toBe(DEPARTMENT_OUTLINES[code]!.viewBox);
+    const paths = svg.querySelectorAll("path");
+    expect(paths).toHaveLength(1);
+    expect(paths[0]!.getAttribute("d")).toBe(DEPARTMENT_OUTLINES[code]!.d);
   });
 
   it("affiche la note sourcée de la Collectivité de Corse et ne propose pas les régionales", async () => {
@@ -185,9 +194,20 @@ describe("page région", () => {
 });
 
 describe("image Open Graph de région", () => {
-  it("dessine le contour d'une région de métropole et aucun en outre-mer", () => {
+  it("dessine le contour de chaque région, outre-mer compris, et aucun pour un nom inconnu", () => {
     expect(regionOutlineDataUri("Bretagne")).toMatch(/^data:image\/svg\+xml;base64,/);
-    expect(regionOutlineDataUri("La Réunion")).toBeNull();
+    const reunion = regionOutlineDataUri("La Réunion")!;
+    const svg = Buffer.from(reunion.split(",")[1]!, "base64").toString("utf-8");
+    expect(svg).toContain(`viewBox="${DEPARTMENT_OUTLINES["974"]!.viewBox}"`);
+    expect(svg).toContain(`d="${DEPARTMENT_OUTLINES["974"]!.d}"`);
+    expect(regionOutlineDataUri("Atlantide")).toBeNull();
+  });
+
+  it("met la silhouette sur l'image d'une région d'outre-mer", async () => {
+    mocks.getRegionTerritoire.mockResolvedValue(region("guyane"));
+    await OgImage(params("guyane"));
+    const html = JSON.stringify(mocks.imageResponses.at(-1));
+    expect(html).toContain("data:image/svg+xml;base64,");
   });
 
   it("porte le nom, le nombre de départements et de communes", async () => {
