@@ -221,6 +221,7 @@ export const GET = withPublicRoute(async (request: NextRequest) => {
       deputy,
       senators,
       commune: commune.name,
+      inseeCode: commune.id,
       department: getDepartmentName(commune.departmentCode) ?? commune.departmentCode,
       departmentCode: commune.departmentCode,
       constituencyNumber: commune.constituencyNumber,

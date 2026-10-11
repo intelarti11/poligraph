@@ -14,6 +14,7 @@ import { IncumbentMaireCard } from "@/components/elections/municipales/Incumbent
 import { NATIONAL_MANDATE_TYPES } from "@/config/labels";
 import { HistoriqueSection } from "@/components/elections/municipales/HistoriqueSection";
 import { ResultatsBanner } from "@/components/elections/municipales/ResultatsBanner";
+import { CommuneTerritoireLink } from "@/components/elections/municipales/CommuneTerritoireLink";
 import { EventJsonLd, GovernmentOrganizationJsonLd } from "@/components/seo/JsonLd";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { SITE_URL } from "@/config/site";
@@ -62,7 +63,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   return {
     title,
     description,
-    // Panachage communes (<1000 hab) are thin candidate rosters: noindex,follow (issue #385).
+    // Communes under the floor are thin candidate rosters: noindex,follow (issue #385). Not because
+    // of panachage, which the 2026 list ballot ended in every commune (see commune-robots.ts).
     ...communeRobotsMetadata(commune.population),
     openGraph: {
       title,
@@ -291,6 +293,10 @@ export default async function CommuneDetailPage({ params }: PageProps) {
             <p className="text-muted-foreground">Aucune liste déposée pour le moment.</p>
           )}
         </section>
+
+        <div className="mt-8">
+          <CommuneTerritoireLink inseeCode={commune.id} name={commune.name} />
+        </div>
       </div>
     </>
   );

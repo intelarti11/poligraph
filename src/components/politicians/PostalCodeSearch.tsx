@@ -8,6 +8,7 @@ import { PoliticianAvatar } from "./PoliticianAvatar";
 import { ensureContrast } from "@/lib/contrast";
 import { useIsMounted } from "@/hooks/useIsMounted";
 import { cn } from "@/lib/utils";
+import { territoireCommunePath } from "@/lib/territoires/paths";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -38,6 +39,8 @@ interface SearchResult {
   deputy: Representative | null;
   senators: Representative[];
   commune: string;
+  /** INSEE code of a commune found in the base. Absent from responses cached before it existed. */
+  inseeCode?: string;
   department: string;
   departmentCode: string;
   constituencyNumber: number | null;
@@ -445,6 +448,15 @@ export function PostalCodeSearch() {
                 {result.constituencyNumber}
                 <sup>e</sup> circonscription
               </p>
+            )}
+            {result.inseeCode && (
+              <Link
+                href={territoireCommunePath(result.inseeCode)}
+                prefetch={false}
+                className="mt-1 inline-flex min-h-11 items-center text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Voir tout ce qui concerne {result.commune} →
+              </Link>
             )}
           </div>
 
