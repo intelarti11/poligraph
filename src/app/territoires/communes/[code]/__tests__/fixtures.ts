@@ -14,6 +14,8 @@ const RESULTS = {
 };
 
 /** A Rennes-like dossier with an established mayor, one deputy and first-round results. */
+const NO_PRESIDENTIELLE = { blocks: [], agregatTerritoire: null };
+
 export function dossier(overrides: Partial<CommuneDossier> = {}): CommuneDossier {
   return {
     identity: {
@@ -70,6 +72,7 @@ export function dossier(overrides: Partial<CommuneDossier> = {}): CommuneDossier
       senateurs: { state: "DISPONIBLE", senateurs: [] },
     },
     elections: {
+      presidentielles: NO_PRESIDENTIELLE,
       municipales2026: {
         state: "DISPONIBLE",
         electionSlug: "municipales-2026",
@@ -197,7 +200,7 @@ export function papeete(): CommuneDossier {
       },
       senateurs: { state: "DISPONIBLE", senateurs: [] },
     },
-    elections: { municipales2026: null },
+    elections: { municipales2026: null, presidentielles: NO_PRESIDENTIELLE },
   };
 }
 

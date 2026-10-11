@@ -106,7 +106,7 @@ synchronisation RNE et l'import des résultats. Aucune liste non bornée ; liens
 
 ## 7. État de livraison (11 octobre 2026)
 
-Livré : lot 0 complet, lot 1 sauf 1.7, 1.8 et 1.9, lot 3.1. La recette actualisée vit dans [`territoires-recette.md`](territoires-recette.md) et remplace `03-recette-auditable.md`.
+Livré : lot 0 complet, lot 1 sauf 1.7 et 1.8 (1.9 : parcours et importateur livrés, validés sur 2022 ; import 2027 après publication), lot 3.1. La recette actualisée vit dans [`territoires-recette.md`](territoires-recette.md) et remplace `03-recette-auditable.md`.
 
 Décisions prises pendant l'implémentation, après la revue du 10 octobre :
 
@@ -120,5 +120,6 @@ Décisions prises pendant l'implémentation, après la revue du 10 octobre :
 - **Décisions.** Pas d'onglet tant qu'aucune décision n'est documentée.
 - **`/mon-depute`.** Conservé, sous-entrée de Territoires.
 - **`ELECTION_SPOTLIGHT`.** Créé en base désactivé, `value.slug = "presidentielle-2027"`. La pastille n'apparaît que si le drapeau est actif, dans sa fenêtre de dates, que le slug figure dans `NAV_ELECTIONS`, que le drapeau propre de l'élection est actif et que l'élection existe.
+- **Présidentielle par commune (1.9).** Le parcours et l'importateur sont prêts avant le scrutin et validés sur 2022 ; les résultats 2027 n'entrent qu'après leur publication officielle. Table `CommuneCandidacyResult` (voix par commune, candidature et tour), participation dans `CommuneElectionRound`. Rapprochement exact : candidats par nom normalisé, communes par code INSEE reconstruit (codes ZA à ZX du ministère convertis). Français de l'étranger exclus. Wallis-et-Futuna, publié en un seul agrégat, reçoit une note sans chiffre. Une commune fusionnée depuis le scrutin n'a pas de résultat, et une commune qui en a absorbé d'autres affiche celui de son ancien périmètre, avec la mention « dans ses limites à la date du scrutin ». Le 2d tour passe avant le 1er : il décide de l'élection et tient en deux lignes sur mobile. Barres grises, sans étiquette ni lien vers les fiches des candidats.
 
-Restent ouverts : 1.7 population millésimée, 1.8 BANATIC, 1.9 présidentielle par commune (après publication officielle), lot 2 (décisions curées), exports et licence (lot 3.2), contours ultramarins, test du libellé à cinq lecteurs.
+Restent ouverts : 1.7 population millésimée, 1.8 BANATIC, l'import 2027 par commune (après publication officielle), lot 2 (décisions curées), exports et licence (lot 3.2), contours ultramarins, test du libellé à cinq lecteurs.

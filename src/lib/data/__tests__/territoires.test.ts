@@ -14,9 +14,13 @@ const mocks = vi.hoisted(() => ({
   electionFindUnique: vi.fn(),
   syncFindUnique: vi.fn(),
   queryRaw: vi.fn(),
+  readPresidentielles: vi.fn(async () => ({ blocks: [] as unknown[], agregatTerritoire: null })),
 }));
 
 vi.mock("server-only", () => ({}));
+vi.mock("../territoires-presidentielle", () => ({
+  readCommunePresidentielles: mocks.readPresidentielles,
+}));
 vi.mock("next/cache", () => ({ cacheTag: vi.fn(), cacheLife: vi.fn() }));
 vi.mock("@/lib/db", () => ({
   db: {
@@ -421,6 +425,30 @@ describe("getCommuneDossier", () => {
     mocks.candidacyCount.mockResolvedValue(12);
     const block = (await getCommuneDossier("35238"))?.elections.municipales2026;
     expect(block?.state).toBe("NON_ETABLI");
+  });
+  it("porte la présidentielle de la commune et sa ligne de couverture", async () => {
+    const absent = await getCommuneDossier("35238");
+    expect(absent?.elections.presidentielles.blocks).toEqual([]);
+    expect(absent?.coverage.find((c) => c.bloc === "presidentielle")?.state).toBe("ABSENT");
+
+    mocks.readPresidentielles.mockResolvedValueOnce({
+      blocks: [
+        {
+          electionSlug: "presidentielle-2022",
+          sources: [{ round: 1, label: "Ministère", url: "https://x", publishedAt: "2022-04-14" }],
+          importedAt: "2026-10-12T08:00:00.000Z",
+        },
+      ],
+      agregatTerritoire: null,
+    });
+    const present = await getCommuneDossier("35238");
+    expect(mocks.readPresidentielles).toHaveBeenLastCalledWith("35238", "35");
+    expect(present?.coverage.find((c) => c.bloc === "presidentielle")).toEqual({
+      bloc: "presidentielle",
+      state: "DISPONIBLE",
+      source: { label: "Ministère", url: "https://x" },
+      date: "2026-10-12T08:00:00.000Z",
+    });
   });
 });
 
