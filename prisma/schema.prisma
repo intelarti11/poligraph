@@ -2802,11 +2802,70 @@ model Commune {
   electoralLists        ElectoralList[]
   localMandates         MandateLocal[]
   communeElectionRounds CommuneElectionRound[]
+  intercommunalites     CommuneIntercommunalite[]
 
   @@index([departmentCode])
   @@index([departmentCode, constituencyNumber])
   @@index([name])
   @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "idx_commune_name_trgm")
+}
+
+/// Nature of an intercommunal body, as coded by INSEE and BANATIC. MET69 is the Métropole de
+/// Lyon: a territorial collectivity with special status, listed by the source alongside the EPCI
+/// but not an EPCI itself. EPT: territorial public establishment of the Métropole du Grand Paris,
+/// not an EPCI with its own taxation.
+enum IntercommunaliteNature {
+  CC
+  CA
+  CU
+  METRO
+  MET69
+  EPT
+}
+
+/// Intercommunal body from the INSEE yearly files (EPCI à fiscalité propre, EPT). #1052 lot 1.8.
+/// Its competences are never derived from membership: none are stored.
+model Intercommunalite {
+  siren         String                 @id
+  name          String
+  nature        IntercommunaliteNature
+  sourceLabel   String
+  sourceUrl     String
+  /// "Géographie au" date of the last file that listed the body.
+  situationDate DateTime               @db.Date
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  communes CommuneIntercommunalite[]
+}
+
+/// Dated membership of a commune, closed (validTo) and never deleted when a later file stops
+/// listing it. `siren` null records that the source lists the commune with no EPCI à fiscalité
+/// propre ("Sans objet"): an absence established by the source, distinct from no row at all.
+model CommuneIntercommunalite {
+  id            String    @id @default(cuid())
+  communeId     String
+  siren         String?
+  /// Situation date of the first file that listed the membership. Not the joining date: the
+  /// source does not publish it.
+  validFrom     DateTime  @db.Date
+  /// Situation date of the first file that no longer listed it. Null while current.
+  validTo       DateTime? @db.Date
+  sourceLabel   String
+  sourceUrl     String
+  /// Situation date of the last file that listed it.
+  situationDate DateTime  @db.Date
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Restrict on both sides: history is closed, never erased, and a deleted body must not turn its
+  // memberships into "no EPCI" (siren null).
+  commune          Commune           @relation(fields: [communeId], references: [id], onDelete: Restrict)
+  intercommunalite Intercommunalite? @relation(fields: [siren], references: [siren], onDelete: Restrict)
+
+  @@unique([communeId, siren, validFrom])
+  @@index([communeId, validTo])
+  @@index([siren])
 }
 
 model CommuneElectionRound {
