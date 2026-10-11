@@ -3,6 +3,7 @@ import { MandateType } from "@/generated/prisma";
 import { db } from "@/lib/db";
 import { getDepartmentName } from "@/config/departments";
 import { LOCAL_MANDATE_TYPES } from "@/config/labels";
+import { PUBLIC_POLITICIAN_WHERE } from "@/lib/api/public-contract";
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -17,6 +18,8 @@ export interface EluSummary {
   isCurrent: boolean;
   mandateStart: string | null;
   functionStart: string | null;
+  /** Last time the source asserted the mandate was held. Null when never recorded. */
+  lastConfirmedAt: string | null;
   commune: {
     inseeCode: string;
     name: string;
@@ -68,6 +71,7 @@ type RawMandate = {
   isCurrent: boolean;
   departmentCode: string | null;
   source: string | null;
+  lastConfirmedAt: Date | null;
   politician: {
     id: string;
     slug: string;
@@ -107,6 +111,7 @@ function toSummary(m: RawMandate): EluSummary {
     isCurrent: m.isCurrent,
     mandateStart: m.startDate?.toISOString() ?? null,
     functionStart: m.localData?.functionStart?.toISOString() ?? null,
+    lastConfirmedAt: m.lastConfirmedAt?.toISOString() ?? null,
     commune: m.localData?.commune
       ? {
           inseeCode: m.localData.commune.id,
@@ -306,9 +311,48 @@ export async function getEluById(id: string) {
 
 // ─── Commune: info + elected officials ───────────────────────────
 
+/**
+ * What can be said about the mayor of a commune.
+ * - ETABLI: exactly one current mayor, and that profile is public.
+ * - NON_ETABLI: the records do not designate one public holder (two current mayors, or the only
+ *   one is not public). No name is given, and the reason is not exposed either: saying "a
+ *   non-public profile holds it" would reveal that profile.
+ * - ABSENT: no current mayor recorded for this commune.
+ */
+export type MaireStatus = "ETABLI" | "NON_ETABLI" | "ABSENT";
+
+/**
+ * Counts current mayors BEFORE the public filter, on purpose: filtering first would turn
+ * "two holders, one of them private" into a single public holder, a false certainty. Only the
+ * count leaves this function. Sector mayors (PLM) are a distinct type and a `sectorLabel`
+ * marks sector-level rows, so neither inflates the count.
+ */
+export async function getMaireStatus(inseeCode: string): Promise<{
+  status: MaireStatus;
+  publicMandateId: string | null;
+}> {
+  const current = await db.mandate.findMany({
+    where: {
+      type: "MAIRE",
+      isCurrent: true,
+      localData: { communeId: inseeCode, sectorLabel: null },
+    },
+    select: { id: true, politician: { select: { publicationStatus: true } } },
+    // Two rows are enough to prove a conflict; the bound keeps an anomaly from loading more.
+    take: 3,
+  });
+
+  if (current.length === 0) return { status: "ABSENT", publicMandateId: null };
+  const only = current[0]!;
+  if (current.length > 1 || only.politician.publicationStatus !== "PUBLISHED") {
+    return { status: "NON_ETABLI", publicMandateId: null };
+  }
+  return { status: "ETABLI", publicMandateId: only.id };
+}
+
 export async function getCommuneWithElus(inseeCode: string) {
   "use cache";
-  cacheTag("elections");
+  cacheTag("elections", "politicians", `territoire:${inseeCode}`);
   cacheLife("synced");
 
   const commune = await db.commune.findUnique({
@@ -330,11 +374,14 @@ export async function getCommuneWithElus(inseeCode: string) {
 
   if (!commune) return null;
 
+  const maireStatus = await getMaireStatus(inseeCode);
+
   const mandates = await db.mandate.findMany({
     where: {
       type: { in: LOCAL_MANDATE_TYPES },
       isCurrent: true,
       localData: { communeId: inseeCode },
+      politician: PUBLIC_POLITICIAN_WHERE,
     },
     include: {
       politician: {
@@ -355,7 +402,9 @@ export async function getCommuneWithElus(inseeCode: string) {
     orderBy: [{ type: "asc" }, { politician: { lastName: "asc" } }],
   });
 
-  const maire = mandates.find((m) => m.type === "MAIRE");
+  const maire = mandates.find((m) => m.id === maireStatus.publicMandateId);
+  // When the holder is not established, no MAIRE row may name one through the list either.
+  const officials = mandates.filter((m) => m.type !== "MAIRE" || m === maire);
 
   return {
     commune: {
@@ -372,7 +421,8 @@ export async function getCommuneWithElus(inseeCode: string) {
       totalSeats: commune.totalSeats,
       website: commune.website,
     },
+    maireStatus: maireStatus.status,
     maire: maire ? toSummary(maire) : null,
-    officials: mandates.map(toSummary),
+    officials: officials.map(toSummary),
   };
 }
