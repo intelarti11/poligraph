@@ -246,6 +246,33 @@ describe("/territoires/communes/[code]", () => {
     expect(document.querySelector('a[href^="/territoires/regions/"]')).toBeNull();
   });
 
+  it("ne présente pas un district des TAAF comme une commune", async () => {
+    const base = papeete();
+    const { text } = await render({
+      ...base,
+      identity: {
+        ...base.identity,
+        inseeCode: "98411",
+        name: "Îles Saint-Paul et Nouvelle-Amsterdam",
+        department: {
+          code: "984",
+          name: "Terres australes et antarctiques françaises",
+          slug: null,
+        },
+        territoireHorsRegion: {
+          code: "984",
+          name: "Terres australes et antarctiques françaises",
+          statut: "Territoire d'outre-mer à statut particulier (loi du 6 août 1955)",
+        },
+      },
+    });
+
+    expect(text).toContain("District · ");
+    expect(text).toContain("Pas de conseil municipal");
+    expect(text).not.toContain("Composition actuelle non établie");
+    expect(text).not.toContain("Présidentielle 2027");
+  });
+
   it("met la réponse principale (le maire) avant les repères secondaires", async () => {
     const { document } = await render(withMaire("NON_ETABLI"));
     const facts = [...document.querySelectorAll("header dt")].map((dt) => dt.textContent);

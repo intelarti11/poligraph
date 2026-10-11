@@ -44,7 +44,7 @@ export const COLLECTIVITES_PARTICULIERES: readonly CollectiviteParticuliere[] = 
   },
   {
     id: "paris-arrondissements",
-    collectivite: "Ville de Paris",
+    collectivite: "Arrondissements et secteurs de Paris",
     communes: ["75056"],
     note: "Paris est divisée en arrondissements regroupés en secteurs. Les conseillers d'arrondissement sont élus par secteur et désignent un maire pour chaque secteur.",
     source: PLM_SOURCE,
