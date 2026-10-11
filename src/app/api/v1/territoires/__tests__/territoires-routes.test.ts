@@ -134,6 +134,27 @@ describe("contrat commun de l'API v1", () => {
     expect(getRateLimitTier("/api/v1/territoires/regions/bretagne")).toBe("general");
   });
 
+  it("valide le code INSEE de /api/v1/communes avant de lire le cache", async () => {
+    for (const raw of ["abc", "../x", "3523", "352388", "35 238%"]) {
+      const res = await getLegacyCommune(
+        new NextRequest(`https://poligraph.fr/api/v1/communes/${encodeURIComponent(raw)}`),
+        { params: Promise.resolve({ codeInsee: raw }) }
+      );
+      expect(res.status, raw).toBe(400);
+    }
+    expect(mocks.getCommuneWithElus).not.toHaveBeenCalled();
+
+    mocks.getCommuneWithElus.mockResolvedValue(null);
+    const res = await getLegacyCommune(
+      new NextRequest("https://poligraph.fr/api/v1/communes/2a004"),
+      {
+        params: Promise.resolve({ codeInsee: " 2a004" }),
+      }
+    );
+    expect(res.status).toBe(404);
+    expect(mocks.getCommuneWithElus).toHaveBeenCalledWith("2A004");
+  });
+
   it("garde /api/v1/communes cohérent : état du maire transmis tel quel", async () => {
     const payload = { commune: { inseeCode: "35238" }, maireStatus: "NON_ETABLI", maire: null };
     mocks.getCommuneWithElus.mockResolvedValue(payload);

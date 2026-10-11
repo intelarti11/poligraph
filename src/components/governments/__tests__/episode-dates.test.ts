@@ -121,7 +121,13 @@ describe("governmentPeriod", () => {
     primeMinisterAppointedAt: "2024-09-05",
     endedAt: "2024-12-23" as string | null,
     resignedAt: null as string | null,
-    primeMinister: { slug: "x", fullName: "X", gender: "M" as const },
+    primeMinister: {
+      slug: "x",
+      fullName: "X",
+      gender: "M" as const,
+      photoUrl: null,
+      blobPhotoUrl: null,
+    },
     hasDerivedDate: false,
   };
 
