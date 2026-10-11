@@ -462,6 +462,138 @@ describe("détail d'un gouvernement", () => {
   });
 });
 
+describe("changements documentés", () => {
+  const act = (n: number, signedAt: string) => ({
+    label: `Décret n° ${n} relatif à la composition du Gouvernement`,
+    url: `https://www.legifrance.gouv.fr/jorf/id/JORFTEXT00000000${n}`,
+    signedAt,
+    effectiveAt: null,
+    journalPublishedAt: signedAt,
+    journalNumber: null,
+    jorfId: null,
+  });
+  const extra = {
+    "lea-une": person("lea-une", "Léa Une", "published", "F"),
+    "marc-deux": person("marc-deux", "Marc Deux", "published"),
+  };
+
+  async function section(slug: string) {
+    const { container } = render(await detail(slug));
+    const el = container.querySelector("#changements")!;
+    const outside = [...el.children].map((c) => c.cloneNode(true) as Element);
+    outside.forEach((c) => c.querySelectorAll("details").forEach((d) => d.remove()));
+    return {
+      all: (el.textContent ?? "").replace(/\s+/g, " "),
+      visible: outside
+        .map((c) => c.textContent ?? "")
+        .join(" ")
+        .replace(/\s+/g, " "),
+      details: el.querySelector("details"),
+    };
+  }
+
+  it("cite une seule fois l'acte commun à deux changements du même jour", async () => {
+    const decree = act(1, "2023-03-01");
+    setData({
+      episodes: [
+        ...episodes,
+        ...["lea-une", "marc-deux"].map((politicianId) =>
+          ep({
+            governmentId: "ga",
+            politicianId,
+            title: `Secrétaire d'État ${politicianId}`,
+            start: "2023-03-01",
+            startEvidence: "ACT",
+            startSourceUrl: decree.url,
+            startAct: decree,
+            end: "2024-01-08",
+            endEvidence: "ACT",
+          })
+        ),
+      ],
+      people: { ...people, ...extra },
+    });
+    const { all } = await section("gouvernement-a");
+    expect(all).toContain("Léa Une entre au gouvernement");
+    expect(all).toContain("Marc Deux entre au gouvernement");
+    expect(all.split(decree.label)).toHaveLength(2);
+    expect(all.split("signé le 1er mars 2023").length).toBeLessThanOrEqual(2);
+  });
+
+  it("garde la preuve de chaque changement sans acte", async () => {
+    setData({
+      episodes: [
+        ...episodes,
+        ...["lea-une", "marc-deux"].map((politicianId) =>
+          ep({
+            governmentId: "ga",
+            politicianId,
+            title: `Secrétaire d'État ${politicianId}`,
+            start: "2023-05-02",
+            startEvidence: "DATASET",
+            end: "2024-01-08",
+            endEvidence: "ACT",
+          })
+        ),
+      ],
+      people: { ...people, ...extra },
+    });
+    const { all } = await section("gouvernement-a");
+    expect(all).toContain("Léa Une entre au gouvernement");
+    expect(all).toContain("Marc Deux entre au gouvernement");
+    // Deux entrées du 2 mai et la transition du 4 juillet : trois mentions, une par changement.
+    expect(all.split("jeu de données").length - 1).toBe(3);
+  });
+
+  it("replie les changements les plus anciens au-delà de huit groupes", async () => {
+    const dated = Array.from({ length: 10 }, (_, i) => {
+      const day = `2023-0${Math.floor(i / 5) + 1}-${String((i % 5) * 5 + 2).padStart(2, "0")}`;
+      const decree = act(i + 10, day);
+      return ep({
+        governmentId: "ga",
+        politicianId: `p${i}`,
+        title: `Fonction ${i}`,
+        start: day,
+        startEvidence: "ACT",
+        startSourceUrl: decree.url,
+        startAct: decree,
+        end: "2024-01-08",
+        endEvidence: "ACT",
+      });
+    });
+    const morePeople = Object.fromEntries(
+      dated.map((e, i) => [
+        e.politicianId,
+        person(e.politicianId, `Personne Numéro${i}`, "published"),
+      ])
+    );
+    setData({ episodes: [...episodes, ...dated], people: { ...people, ...morePeople } });
+    const { all, visible, details } = await section("gouvernement-a");
+    expect(details).not.toBeNull();
+    expect(details!.querySelector("summary")!.textContent).toMatch(
+      /^Tous les changements \(\d+\)$/
+    );
+    // Le plus récent reste visible, le plus ancien est replié mais toujours dans la page.
+    expect(visible).toContain("Personne Numéro9 entre au gouvernement");
+    expect(visible).not.toContain("Personne Numéro0 entre au gouvernement");
+    expect(all).toContain("Personne Numéro0 entre au gouvernement");
+  });
+
+  it("ne replie rien pour un gouvernement à faible rotation", async () => {
+    const { details } = await section("gouvernement-a");
+    expect(details).toBeNull();
+  });
+
+  it("lie la page Membres filtrée sur ce gouvernement", async () => {
+    const { container } = render(await detail("gouvernement-a"));
+    const link = container.querySelector(
+      'a[href="/politiques/gouvernements/membres?gouvernement=gouvernement-a"]'
+    );
+    expect(link?.textContent).toContain("Membres de ce gouvernement");
+    expect(link?.className).toContain("min-h-11");
+  });
+});
+
 describe("composition par défaut", () => {
   const E = gov({
     id: "ge",
