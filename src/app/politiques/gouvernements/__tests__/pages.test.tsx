@@ -571,7 +571,7 @@ describe("changements documentés", () => {
     const { all, visible, details } = await section("gouvernement-a");
     expect(details).not.toBeNull();
     expect(details!.querySelector("summary")!.textContent).toMatch(
-      /^Tous les changements \(\d+\)$/
+      /^Changements plus anciens \(\d+\)$/
     );
     // Le plus récent reste visible, le plus ancien est replié mais toujours dans la page.
     expect(visible).toContain("Personne Numéro9 entre au gouvernement");

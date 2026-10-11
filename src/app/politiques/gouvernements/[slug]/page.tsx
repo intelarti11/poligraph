@@ -375,6 +375,7 @@ export default async function GovernmentPage({ params, searchParams }: PageProps
   const changeGroups = groupChanges(changeRows);
   const recentChangeGroups = changeGroups.slice(0, MAX_CHANGE_GROUPS);
   const olderChangeGroups = changeGroups.slice(MAX_CHANGE_GROUPS);
+  const olderChangeCount = olderChangeGroups.reduce((n, g) => n + g.changes.length, 0);
 
   // Shortcuts: formation, each documented change day, last documented composition.
   const shortcuts: { date: string; label: string }[] = [];
@@ -880,7 +881,7 @@ export default async function GovernmentPage({ params, searchParams }: PageProps
                           className="size-4 shrink-0 transition-transform group-open:rotate-90"
                           aria-hidden="true"
                         />
-                        Tous les changements ({changeRows.length})
+                        Changements plus anciens ({olderChangeCount})
                       </summary>
                       <ChangeGroupList
                         groups={olderChangeGroups}
