@@ -29,7 +29,7 @@ const MUNICIPAL_TYPES = new Set(["MAIRE", "ADJOINT_MAIRE", "CONSEILLER_MUNICIPAL
 
 export interface MandateDecisionsLinkInput {
   type: string;
-  /** As stored in the profile document; older documents lack the count and get no link. */
+  /** As stored in the profile document: `decisionsCommuneId` is set only while a decision is published. */
   localData?: { commune?: unknown } | null;
 }
 
@@ -40,11 +40,7 @@ export interface MandateDecisionsLinkInput {
  */
 export function mandateDecisionsHref(mandate: MandateDecisionsLinkInput): string | null {
   if (!MUNICIPAL_TYPES.has(mandate.type)) return null;
-  const commune = mandate.localData?.commune as
-    | { id?: unknown; _count?: { decisions?: unknown } }
-    | null
-    | undefined;
-  const count = commune?._count?.decisions;
-  if (typeof commune?.id !== "string" || typeof count !== "number" || count < 1) return null;
-  return territoireCommuneDecisionsPath(commune.id);
+  const commune = mandate.localData?.commune as { decisionsCommuneId?: unknown } | null | undefined;
+  const code = commune?.decisionsCommuneId;
+  return typeof code === "string" && code ? territoireCommuneDecisionsPath(code) : null;
 }

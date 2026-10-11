@@ -11,7 +11,6 @@ import {
   QuiDecideSection,
 } from "@/components/territoires/CommuneSections";
 import { getCommuneDossier } from "@/lib/data/territoires";
-import { getCommunePublishedDecisionCount } from "@/lib/data/territoire-decisions";
 import { missingEntityMetadata } from "@/lib/seo/not-found-metadata";
 import { territoireCommuneRobotsMetadata } from "@/lib/seo/territoire-robots";
 import { communeDescription, communeTitle } from "@/lib/territoires/commune-display";
@@ -58,16 +57,13 @@ const ANCHORS = [
 
 export default async function TerritoireCommunePage({ params }: PageProps) {
   const { code } = await params;
-  const [dossier, decisionCount] = await Promise.all([
-    loadDossier(code),
-    getCommunePublishedDecisionCount(code),
-  ]);
+  const dossier = await loadDossier(code);
   if (!dossier) notFound();
 
   const { identity } = dossier;
   // No link to the decisions while none is published (plan §7).
   const anchors =
-    decisionCount > 0
+    dossier.decisionsPubliees > 0
       ? [
           ...ANCHORS,
           { href: territoireCommuneDecisionsPath(identity.inseeCode), label: "Décisions" },

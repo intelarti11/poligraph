@@ -54,31 +54,28 @@ describe("mandateTerritoireHref", () => {
 });
 
 describe("mandateDecisionsHref", () => {
-  const commune = (decisions: unknown) => ({ commune: { id: "35238", _count: { decisions } } });
+  const withDecisions = { commune: { population: 1200, decisionsCommuneId: "35238" } };
 
   it("links a municipal mandate, current or past, once a decision is published", () => {
-    expect(mandateDecisionsHref({ type: "MAIRE", localData: commune(1) })).toBe(
+    expect(mandateDecisionsHref({ type: "MAIRE", localData: withDecisions })).toBe(
       "/territoires/communes/35238/decisions"
     );
-    expect(mandateDecisionsHref({ type: "CONSEILLER_MUNICIPAL", localData: commune(3) })).toBe(
+    expect(mandateDecisionsHref({ type: "CONSEILLER_MUNICIPAL", localData: withDecisions })).toBe(
       "/territoires/communes/35238/decisions"
     );
   });
 
-  it("gives no link without a published decision", () => {
-    expect(mandateDecisionsHref({ type: "MAIRE", localData: commune(0) })).toBeNull();
-  });
-
-  it("gives no link from a profile document stored before the count existed", () => {
+  it("gives no link while the commune has no published decision", () => {
     expect(
       mandateDecisionsHref({ type: "MAIRE", localData: { commune: { population: 1200 } } })
     ).toBeNull();
+    expect(mandateDecisionsHref({ type: "MAIRE", localData: null })).toBeNull();
   });
 
   it("never links a non-municipal mandate", () => {
-    expect(mandateDecisionsHref({ type: "DEPUTE", localData: commune(5) })).toBeNull();
+    expect(mandateDecisionsHref({ type: "DEPUTE", localData: withDecisions })).toBeNull();
     expect(
-      mandateDecisionsHref({ type: "MAIRE_ARRONDISSEMENT", localData: commune(5) })
+      mandateDecisionsHref({ type: "MAIRE_ARRONDISSEMENT", localData: withDecisions })
     ).toBeNull();
   });
 });

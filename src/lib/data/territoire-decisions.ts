@@ -60,20 +60,6 @@ export interface CommuneDecisions {
 
 const PUBLISHED = "PUBLISHED" as const;
 
-/** Count only: decides whether the commune page links to its decisions at all. */
-export async function getCommunePublishedDecisionCount(code: string): Promise<number> {
-  const inseeCode = normalizeInseeCode(code);
-  if (!inseeCode) return 0;
-  return readPublishedDecisionCount(inseeCode);
-}
-
-async function readPublishedDecisionCount(inseeCode: string): Promise<number> {
-  "use cache";
-  cacheLife("synced");
-  cacheTag("territoires", `territoire:${inseeCode}`);
-  return db.decision.count({ where: { communeId: inseeCode, status: PUBLISHED } });
-}
-
 /** Null when the commune does not exist or has no published decision: the page then 404s. */
 export async function getCommuneDecisions(code: string): Promise<CommuneDecisions | null> {
   const inseeCode = normalizeInseeCode(code);

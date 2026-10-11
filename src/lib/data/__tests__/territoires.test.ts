@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   roundFindMany: vi.fn(),
   electionFindUnique: vi.fn(),
   syncFindUnique: vi.fn(),
+  decisionCount: vi.fn(async () => 0),
   queryRaw: vi.fn(),
 }));
 
@@ -35,6 +36,7 @@ vi.mock("@/lib/db", () => ({
     communeElectionRound: { findMany: mocks.roundFindMany },
     election: { findUnique: mocks.electionFindUnique },
     syncMetadata: { findUnique: mocks.syncFindUnique },
+    decision: { count: mocks.decisionCount },
     $queryRaw: mocks.queryRaw,
   },
 }));
@@ -207,6 +209,18 @@ describe("getCommuneDossier", () => {
     expect(await getCommuneDossier("../etc")).toBeNull();
     expect(await getCommuneDossier("123")).toBeNull();
     expect(mocks.communeFindUnique).not.toHaveBeenCalled();
+  });
+
+  it("compte les seules décisions publiées de la commune, dans la même lecture", async () => {
+    serveMandates([{ id: "maire", type: "MAIRE" }]);
+    mocks.decisionCount.mockResolvedValueOnce(3);
+
+    const dossier = await getCommuneDossier("35238");
+
+    expect(dossier?.decisionsPubliees).toBe(3);
+    expect(mocks.decisionCount).toHaveBeenCalledWith({
+      where: { communeId: "35238", status: "PUBLISHED" },
+    });
   });
 
   it("établit le maire unique public, avec source et date de prise de fonction", async () => {

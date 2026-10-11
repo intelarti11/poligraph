@@ -373,6 +373,8 @@ export interface CommuneDossier {
     senateurs: { state: BlockState; senateurs: ParlementaireRef[] };
   };
   elections: { municipales2026: MunicipalesBlock | null };
+  /** Published curated decisions concerning the commune (#1052, lot 2). 0 hides the link. */
+  decisionsPubliees: number;
   coverage: CoverageEntry[];
 }
 
@@ -614,6 +616,9 @@ async function readCommuneDossier(inseeCode: string): Promise<CommuneDossier | n
   const departmentDeputies = await readParlementaires("DEPUTE", commune.departmentCode);
   const senateurs = await readParlementaires("SENATEUR", commune.departmentCode);
   const municipales2026 = await readMunicipales2026(inseeCode);
+  const decisionsPubliees = await db.decision.count({
+    where: { communeId: inseeCode, status: "PUBLISHED" },
+  });
 
   const plusieursCirconscriptions = PLM_COMMUNES.has(inseeCode);
   const circo = commune.constituencyNumber;
@@ -692,6 +697,7 @@ async function readCommuneDossier(inseeCode: string): Promise<CommuneDossier | n
   ];
 
   return {
+    decisionsPubliees,
     identity: {
       inseeCode: commune.id,
       name: commune.name,

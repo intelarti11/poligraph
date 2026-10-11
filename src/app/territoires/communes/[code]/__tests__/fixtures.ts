@@ -16,6 +16,7 @@ const RESULTS = {
 /** A Rennes-like dossier with an established mayor, one deputy and first-round results. */
 export function dossier(overrides: Partial<CommuneDossier> = {}): CommuneDossier {
   return {
+    decisionsPubliees: 0,
     identity: {
       inseeCode: "35238",
       name: "Rennes",
