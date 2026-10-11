@@ -200,6 +200,7 @@
     "sync:resultats-csv:dry": "tsx scripts/sync-resultats-csv.ts --dry-run",
     "sync:resultats-csv:t2": "tsx scripts/sync-resultats-csv.ts --round=2",
     "sync:resultats-csv:t2:dry": "tsx scripts/sync-resultats-csv.ts --round=2 --dry-run",
+    "sync:presidentielle-communes": "tsx scripts/sync-presidentielle-communes.ts",
     "seed:fixtures": "tsx scripts/seed-fixtures.ts",
     "seed:fixtures:clean": "tsx scripts/seed-fixtures.ts --clean",
     "seed:communes": "npx dotenv -e .env -- npx tsx scripts/seed-communes.ts",
