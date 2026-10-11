@@ -9,6 +9,7 @@ import {
   FileCheck2,
   FileText,
   HeartPulse,
+  Landmark,
   History,
   LayoutDashboard,
   ListChecks,
@@ -139,6 +140,14 @@ const entries: readonly AdminNavigationEntry[] = [
     description: "Données municipales.",
     group: "content",
     icon: Crown,
+  },
+  {
+    id: "territorial-decisions",
+    href: "/admin/territoires/decisions",
+    label: "Décisions territoriales",
+    description: "Décisions des conseils du pilote Territoires.",
+    group: "content",
+    icon: Landmark,
   },
   {
     id: "factchecks",

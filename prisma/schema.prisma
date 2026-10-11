@@ -360,9 +360,9 @@ model Mandate {
   // code can derive it: see src/config/senatoriales.ts.
   senateSeries   Int?
 
-  startDate DateTime
-  endDate   DateTime?
-  isCurrent Boolean   @default(true)
+  startDate       DateTime
+  endDate         DateTime?
+  isCurrent       Boolean   @default(true)
   // Date à laquelle la source de ce mandat a affirmé pour la dernière fois qu'il était détenu.
   // Pour une API (Assemblée, Sénat), c'est la date du sync : elle répond au présent. Pour un
   // fichier publié comme le RNE, c'est la date de PUBLICATION du fichier et non celle du run :
@@ -2805,6 +2805,8 @@ model Commune {
   communeElectionRounds CommuneElectionRound[]
   intercommunalites     CommuneIntercommunalite[]
   candidacyResults      CommuneCandidacyResult[]
+  institutions          Institution[]
+  decisions             Decision[]
 
   @@index([departmentCode])
   @@index([departmentCode, constituencyNumber])
@@ -3915,4 +3917,114 @@ model ProgramEdition {
   @@unique([partyId, electionId, version])
   @@unique([candidacyId, electionId, version])
   @@index([electionId, publicationStatus])
+}
+
+// ============================================
+// TERRITOIRES : DÉCISIONS CURÉES (#1052, lot 2)
+// ============================================
+// A decision is collective: it belongs to the institution that adopted it, never to a person.
+// The link between a person and a decision is computed from the institution, the adoption date
+// and the dates of the person's mandate. It is never stored, so a corrected mandate date cannot
+// leave a stale relation behind.
+
+/// Editorial state of a curated record. Public surfaces read PUBLISHED only.
+enum CurationStatus {
+  DRAFT
+  IN_REVIEW
+  PUBLISHED
+  REJECTED
+}
+
+enum InstitutionKind {
+  CONSEIL_MUNICIPAL
+  CONSEIL_COMMUNAUTAIRE
+}
+
+enum TerritorialSourceKind {
+  DELIBERATION
+  PROCES_VERBAL
+  LISTE_DELIBERATIONS
+  RECUEIL_ACTES_ADMINISTRATIFS
+}
+
+enum DecisionOutcome {
+  ADOPTEE
+  REJETEE
+}
+
+/// A deliberative body. A municipal council carries its commune; an intercommunal council
+/// carries its SIREN, since BANATIC is not imported.
+model Institution {
+  id        String          @id @default(cuid())
+  kind      InstitutionKind
+  name      String
+  commune   Commune?        @relation(fields: [communeId], references: [id])
+  communeId String?
+  sirenEpci String?
+
+  decisions Decision[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([kind, communeId])
+  @@unique([kind, sirenEpci])
+}
+
+/// An official document a decision is read from. The URL is stored and shown, never fetched
+/// by the server.
+model TerritorialSource {
+  id             String                @id @default(cuid())
+  kind           TerritorialSourceKind
+  title          String
+  producer       String
+  url            String
+  archiveUrl     String?
+  documentDate   DateTime?             @db.Date
+  lastVerifiedAt DateTime
+
+  decisions Decision[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Canonical notice of a collective decision: authority, reference, dates, outcome, and the
+/// exact place in the source that proves them.
+model Decision {
+  id            String      @id @default(cuid())
+  institution   Institution @relation(fields: [institutionId], references: [id])
+  institutionId String
+  /// Territory the decision concerns. Equals the institution's commune for a municipal council.
+  commune       Commune     @relation(fields: [communeId], references: [id])
+  communeId     String
+
+  reference             String?
+  title                 String
+  adoptionDate          DateTime        @db.Date
+  adoptionDatePrecision DatePrecision   @default(DAY)
+  publicationDate       DateTime?       @db.Date
+  effectiveDate         DateTime?       @db.Date
+  outcome               DecisionOutcome
+  /// The source's own wording of the collective result ("adoptée à l'unanimité").
+  outcomeWording        String?
+
+  source        TerritorialSource @relation(fields: [sourceId], references: [id])
+  sourceId      String
+  /// Where the proof sits in the source: page, item number.
+  sourceLocator String
+
+  status          CurationStatus @default(DRAFT)
+  submittedAt     DateTime?
+  reviewedAt      DateTime?
+  reviewedBy      String?
+  rejectionReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([communeId, status, adoptionDate])
+  @@index([institutionId, status, adoptionDate])
+  @@index([status, updatedAt])
+  @@index([sourceId])
 }
