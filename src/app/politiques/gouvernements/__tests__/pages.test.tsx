@@ -46,7 +46,13 @@ function gov(overrides: Partial<PublishedGovernment>): PublishedGovernment {
     compositionVerifiedAt: null,
     currentAffairsAttested: false,
     hasDerivedDate: false,
-    primeMinister: { slug: "alix-premiere", fullName: "Alix Première", gender: "F" },
+    primeMinister: {
+      slug: "alix-premiere",
+      fullName: "Alix Première",
+      gender: "F",
+      photoUrl: null,
+      blobPhotoUrl: null,
+    },
     completeness: "COMPLETE",
     pendingChanges: null,
     coverageNote: null,
@@ -137,7 +143,13 @@ const A = gov({
   slug: "gouvernement-a",
   name: "Gouvernement Alpha",
   sequence: 1,
-  primeMinister: { slug: "alix-premiere", fullName: "Alix Première", gender: "F" },
+  primeMinister: {
+    slug: "alix-premiere",
+    fullName: "Alix Première",
+    gender: "F",
+    photoUrl: null,
+    blobPhotoUrl: null,
+  },
   endedAt: "2024-01-08",
   compositionVerifiedAt: "2024-01-08",
   participantCount: 5,
@@ -153,7 +165,13 @@ const B = gov({
   formedAt: "2024-01-09",
   endedAt: "2024-09-01",
   compositionVerifiedAt: "2024-09-01",
-  primeMinister: { slug: "bruno-second", fullName: "Bruno Second", gender: "M" },
+  primeMinister: {
+    slug: "bruno-second",
+    fullName: "Bruno Second",
+    gender: "M",
+    photoUrl: null,
+    blobPhotoUrl: null,
+  },
   participantCount: 1,
   hiddenCount: 1,
 });
@@ -171,7 +189,13 @@ const C = gov({
   endedAt: "2024-12-23",
   compositionVerifiedAt: "2024-12-23",
   currentAffairsAttested: true,
-  primeMinister: { slug: "chloe-tierce", fullName: "Chloé Tierce", gender: "F" },
+  primeMinister: {
+    slug: "chloe-tierce",
+    fullName: "Chloé Tierce",
+    gender: "F",
+    photoUrl: null,
+    blobPhotoUrl: null,
+  },
   participantCount: 1,
 });
 
@@ -183,7 +207,13 @@ const D = gov({
   sequence: 4,
   primeMinisterAppointedAt: "2025-10-10",
   formedAt: "2025-10-12",
-  primeMinister: { slug: "denis-quart", fullName: "Denis Quart", gender: "M" },
+  primeMinister: {
+    slug: "denis-quart",
+    fullName: "Denis Quart",
+    gender: "M",
+    photoUrl: null,
+    blobPhotoUrl: null,
+  },
   participantCount: 1,
 });
 
@@ -444,7 +474,13 @@ describe("composition par défaut", () => {
     endedAt: "2025-10-05",
     compositionVerifiedAt: "2025-10-05",
     currentAffairsAttested: false,
-    primeMinister: { slug: "denis-quart", fullName: "Denis Quart", gender: "M" },
+    primeMinister: {
+      slug: "denis-quart",
+      fullName: "Denis Quart",
+      gender: "M",
+      photoUrl: null,
+      blobPhotoUrl: null,
+    },
     participantCount: 1,
   });
   const resigned = ep({
@@ -588,6 +624,30 @@ describe("répertoire", () => {
       name: "Gouvernement Delta",
       url: expect.stringMatching(/\/politiques\/gouvernements\/gouvernement-d$/),
     });
+  });
+
+  it("montre la photo d'un Premier ministre publié et les initiales sinon", async () => {
+    const photo = "https://upload.wikimedia.org/alix.jpg";
+    vi.mocked(getPublishedGovernments).mockResolvedValue([
+      { ...A, primeMinister: { ...A.primeMinister, blobPhotoUrl: photo } },
+      B,
+    ]);
+    const div = document.createElement("div");
+    div.innerHTML = await html(DirectoryPage({ searchParams: sp() }));
+    const card = (name: string) =>
+      [...div.querySelectorAll("article")].find((a) => a.textContent?.includes(name))!;
+
+    const alpha = card("Gouvernement Alpha");
+    const img = alpha.querySelector("img");
+    expect(img?.getAttribute("src")).toBe(photo);
+    expect(img?.getAttribute("loading")).toBe("lazy");
+    expect(img?.closest('[aria-hidden="true"]')).not.toBeNull();
+    expect(alpha.querySelectorAll("a")).toHaveLength(1);
+
+    // B : fiche non publiée, le mapping a mis la photo à null, seules les initiales restent.
+    const bravo = card("Gouvernement Bravo");
+    expect(bravo.querySelector("img")).toBeNull();
+    expect(bravo.querySelector('[aria-hidden="true"]')?.textContent).toBe("BS");
   });
 
   it("filtre par nom sans tenir compte des accents", async () => {

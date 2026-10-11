@@ -109,5 +109,7 @@ export function GovernmentBadges({
     );
   }
 
+  // No empty wrapper: in a flex row its gap would push the next item to the right.
+  if (badges.length === 0) return null;
   return <div className="flex flex-wrap items-center gap-2">{badges}</div>;
 }
