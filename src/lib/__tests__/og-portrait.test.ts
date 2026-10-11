@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadOgPortrait } from "../og-utils";
 
-function imageResponse(contentType: string, bytes: Uint8Array = new Uint8Array([1, 2, 3])) {
+const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0]);
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+
+function imageResponse(contentType: string, bytes: Uint8Array = JPEG) {
   return {
     ok: true,
     headers: new Headers({ "content-type": contentType }),
@@ -22,16 +25,30 @@ describe("loadOgPortrait", () => {
     vi.mocked(fetch).mockResolvedValue(imageResponse("image/jpeg"));
 
     await expect(loadOgPortrait("https://blob.test/portrait.jpg")).resolves.toBe(
-      `data:image/jpeg;base64,${Buffer.from([1, 2, 3]).toString("base64")}`
+      `data:image/jpeg;base64,${Buffer.from(JPEG).toString("base64")}`
     );
   });
 
   it("tolère un content-type paramétré", async () => {
-    vi.mocked(fetch).mockResolvedValue(imageResponse("image/PNG; charset=binary"));
+    vi.mocked(fetch).mockResolvedValue(imageResponse("image/PNG; charset=binary", PNG));
 
     await expect(loadOgPortrait("https://blob.test/portrait.png")).resolves.toContain(
       "data:image/png;base64,"
     );
+  });
+
+  it("se fie aux octets quand le type annoncé est faux (PNG servi en image/jpeg)", async () => {
+    vi.mocked(fetch).mockResolvedValue(imageResponse("image/jpeg", PNG));
+
+    await expect(loadOgPortrait("https://blob.test/portrait")).resolves.toContain(
+      "data:image/png;base64,"
+    );
+  });
+
+  it("refuse des octets qui ne sont pas une image décodable", async () => {
+    vi.mocked(fetch).mockResolvedValue(imageResponse("image/jpeg", new Uint8Array([1, 2, 3])));
+
+    await expect(loadOgPortrait("https://blob.test/portrait.jpg")).resolves.toBeNull();
   });
 
   it("passe une source http en https plutôt que de la refuser", async () => {
