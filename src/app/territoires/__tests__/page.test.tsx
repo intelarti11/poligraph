@@ -126,8 +126,19 @@ describe("page d'entrée Territoires", () => {
       within(section).getByRole("link", { name: /Voir les 48 communes de Polynésie française/ })
     ).toHaveAttribute("href", "/departements/polynesie-francaise");
     expect(within(section).getByText("Île de Clipperton")).toBeInTheDocument();
-    // The map is decorative.
-    expect(section.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
+    // The map lives in the banner, not beside the list.
+    expect(section.querySelector("svg:not(.lucide)")).toBeNull();
+  });
+
+  it("place la carte de France décorative dans le bandeau", async () => {
+    const { container } = render(await TerritoiresPage());
+    const banner = container.querySelector('[aria-labelledby="territoires-titre"]') as HTMLElement;
+    const map = banner.querySelector("svg:not(.lucide)");
+    expect(map).not.toBeNull();
+    expect(map?.getAttribute("aria-hidden")).toBe("true");
+    for (const link of map?.querySelectorAll("a") ?? []) {
+      expect(link.getAttribute("tabindex")).toBe("-1");
+    }
   });
 
   it("propose les accès rapides et masque Mon député quand la rubrique est désactivée", async () => {
