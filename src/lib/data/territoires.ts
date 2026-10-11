@@ -281,6 +281,8 @@ export interface CommuneDossier {
     /** Set for 975 to 989: the territory and its status, in place of a region. */
     territoireHorsRegion: { code: string; name: string; statut: string } | null;
     collectivitesParticulieres: CollectiviteParticuliere[];
+    /** Town-centre position from the COG import, used only to place a decorative marker. */
+    coordinates: { lat: number; lon: number } | null;
     source: SourceRef;
   };
   maire: MaireBlock;
@@ -531,6 +533,8 @@ async function readCommuneDossier(inseeCode: string): Promise<CommuneDossier | n
       postalCodes: true,
       population: true,
       constituencyNumber: true,
+      latitude: true,
+      longitude: true,
     },
   });
   if (!commune) return null;
@@ -619,6 +623,10 @@ async function readCommuneDossier(inseeCode: string): Promise<CommuneDossier | n
       region: regionRef(region),
       territoireHorsRegion: getTerritoireHorsRegion(commune.departmentCode),
       collectivitesParticulieres: getCollectivitesForCommune(inseeCode),
+      coordinates:
+        commune.latitude != null && commune.longitude != null
+          ? { lat: commune.latitude, lon: commune.longitude }
+          : null,
       source: COG_SOURCE,
     },
     maire,

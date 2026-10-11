@@ -115,6 +115,8 @@ const RENNES = {
   postalCodes: ["35000"],
   population: 230890,
   constituencyNumber: 1,
+  latitude: 48.1159,
+  longitude: -1.6884,
 };
 
 beforeEach(() => {
@@ -188,6 +190,7 @@ describe("getCommuneDossier", () => {
     expect(dossier?.parlement.deputes.couvertureCirconscriptions).toBe("NON_VERIFIEE");
     expect(dossier?.parlement.senateurs.senateurs).toHaveLength(1);
     expect(dossier?.identity.region?.name).toBe("Bretagne");
+    expect(dossier?.identity.coordinates).toEqual({ lat: 48.1159, lon: -1.6884 });
   });
 
   it("ne nomme aucun maire quand deux sont courants, dont un non public", async () => {
@@ -242,10 +245,13 @@ describe("getCommuneDossier", () => {
       name: "Papeete",
       departmentCode: "987",
       constituencyNumber: null,
+      latitude: null,
+      longitude: null,
     });
 
     const dossier = await getCommuneDossier("98735");
 
+    expect(dossier?.identity.coordinates).toBeNull();
     expect(dossier?.identity.region).toBeNull();
     expect(dossier?.identity.territoireHorsRegion?.statut).toBe("Collectivité d'outre-mer");
   });
