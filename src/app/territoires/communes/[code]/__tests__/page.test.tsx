@@ -3,8 +3,9 @@ import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CommuneDossier } from "@/lib/data/territoires";
+import { getCollectivitesForCommune } from "@/config/collectivites-particulieres";
 import { DEPARTMENT_OUTLINES } from "@/config/territoires-shapes";
-import { dossier, grandeCommune, papeete, paris, reunion, withMaire } from "./fixtures";
+import { dossier, grandeCommune, interco, papeete, paris, reunion, withMaire } from "./fixtures";
 
 const mocks = vi.hoisted(() => ({
   getCommuneDossier: vi.fn(),
@@ -343,12 +344,117 @@ describe("metadata /territoires/communes/[code]", () => {
   });
 });
 
+describe("intercommunalité", () => {
+  const MGP = {
+    siren: "200054781",
+    name: "Métropole du Grand Paris",
+    nature: "METRO" as const,
+    natureLabel: "métropole",
+  };
+  const PLAINE = {
+    siren: "200057867",
+    name: "Plaine Commune",
+    nature: "EPT" as const,
+    natureLabel: "établissement public territorial",
+  };
+
+  /** Text of the intercommunality card, located by its label. */
+  function card(document: Document, label: string): Element | null {
+    const p = [...document.querySelectorAll("#qui-decide p")].find(
+      (el) => el.textContent === label
+    );
+    return p?.parentElement ?? null;
+  }
+
+  it("nomme la MGP et l'EPT, nature en toutes lettres, situation et source, sans lien ni compétence", async () => {
+    const { document } = await render(
+      dossier({ intercommunalite: interco("DISPONIBLE", [MGP, PLAINE]) })
+    );
+    const el = card(document, "Intercommunalité");
+    const text = el?.textContent?.replace(/\s+/g, " ") ?? "";
+
+    expect(text).toContain("Métropole du Grand Paris");
+    expect(text).toContain("Métropole, situation au 1er janvier 2026");
+    expect(text).toContain("Plaine Commune");
+    expect(text).toContain("Établissement public territorial, situation au 1er janvier 2026");
+    expect(text).toContain("INSEE, EPCI à fiscalité propre au 1er janvier 2026");
+    expect(text).toContain("INSEE, établissements publics territoriaux au 1er janvier 2026");
+    expect(text).toContain("dernière vérification le 12 octobre 2026");
+    expect(text).not.toMatch(/compétence/i);
+    // Only the external source links: Poligraph has no intercommunality page to link to.
+    const hrefs = [...(el?.querySelectorAll("a") ?? [])].map((a) => a.getAttribute("href"));
+    expect(hrefs.length).toBe(2);
+    expect(new Set(hrefs)).toEqual(new Set(["https://www.insee.fr/fr/information/2510634"]));
+  });
+
+  it("garde le maire avant l'intercommunalité dans l'ordre de lecture", async () => {
+    const { html } = await render(dossier({ intercommunalite: interco("DISPONIBLE", [MGP]) }));
+    expect(html.indexOf("Camille Exemple")).toBeGreaterThan(-1);
+    expect(html.indexOf("Camille Exemple")).toBeLessThan(html.indexOf("Métropole du Grand Paris"));
+  });
+
+  it("ne présente pas la Métropole de Lyon comme une intercommunalité", async () => {
+    const lyon = {
+      siren: "200046977",
+      name: "Métropole de Lyon",
+      nature: "MET69" as const,
+      natureLabel: "collectivité territoriale à statut particulier",
+    };
+    const { document, text } = await render(
+      dossier({ intercommunalite: interco("DISPONIBLE", [lyon]) })
+    );
+    expect(card(document, "Intercommunalité")).toBeNull();
+    expect(text).toContain(
+      "Rennes est sur le territoire de la Métropole de Lyon, une collectivité territoriale à statut particulier et non une intercommunalité. Situation au 1er janvier 2026."
+    );
+  });
+
+  it("ne répète pas la Métropole de Lyon déjà présentée par la note de statut de Lyon", async () => {
+    const lyon = {
+      siren: "200046977",
+      name: "Métropole de Lyon",
+      nature: "MET69" as const,
+      natureLabel: "collectivité territoriale à statut particulier",
+    };
+    const base = dossier({ intercommunalite: interco("DISPONIBLE", [lyon]) });
+    const { text } = await render({
+      ...base,
+      identity: {
+        ...base.identity,
+        inseeCode: "69123",
+        name: "Lyon",
+        collectivitesParticulieres: getCollectivitesForCommune("69123"),
+      },
+    });
+    expect(text).toContain("Lyon fait partie de la Métropole de Lyon");
+    expect(text).not.toContain("non une intercommunalité");
+  });
+
+  it("dit l'absence établie par la source pour une île mono-communale", async () => {
+    const { text } = await render(dossier({ intercommunalite: interco("AUCUNE") }));
+    expect(text).toContain("Aucune intercommunalité à fiscalité propre");
+    expect(text).toContain(
+      "Selon l'INSEE, Rennes n'appartient à aucune intercommunalité à fiscalité propre. Situation au 1er janvier 2026."
+    );
+  });
+
+  it("dit « non établie » pour une collectivité d'outre-mer, jamais « aucune »", async () => {
+    const { text } = await render({ ...papeete(), intercommunalite: interco("NON_ETABLI") });
+    expect(text).toContain("Non établie");
+    expect(text).toContain(
+      "Ce territoire (Polynésie française) ne figure pas dans les fichiers nationaux de l'INSEE : l'intercommunalité de Papeete n'est pas établie dans Poligraph."
+    );
+    expect(text).not.toContain("Aucune intercommunalité");
+  });
+});
+
 describe("absence de composant client cartographique", () => {
   const ROOT = process.cwd();
   it.each([
     "src/app/territoires/communes/[code]/page.tsx",
     "src/components/territoires/CommuneHero.tsx",
     "src/components/territoires/CommuneSections.tsx",
+    "src/components/territoires/IntercommunaliteCard.tsx",
     "src/components/territoires/TerritoryShape.tsx",
   ])("%s reste un composant serveur sans bibliothèque de carte", (path) => {
     const source = readFileSync(join(ROOT, path), "utf8");

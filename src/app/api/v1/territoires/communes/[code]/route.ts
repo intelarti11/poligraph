@@ -18,7 +18,11 @@ import { withPublicRoute } from "@/lib/api/with-public-route";
  *       (`elections.presidentielles` : participation et voix par candidat et par tour, avec la
  *       source du ministère de l'Intérieur et la date d'import ; vide quand rien n'est publié
  *       pour la commune ; `agregatTerritoire` quand le territoire n'est publié qu'en un seul
- *       agrégat, comme Wallis-et-Futuna) et matrice de couverture par bloc. Seules les fiches
+ *       agrégat, comme Wallis-et-Futuna), intercommunalité (`intercommunalite` : null avant le
+ *       premier import ; `state` DISPONIBLE, AUCUNE quand l'INSEE indique qu'aucune
+ *       intercommunalité à fiscalité propre ne regroupe la commune, NON_ETABLI quand la source
+ *       ne couvre pas la commune, comme les collectivités d'outre-mer ; date de situation et
+ *       source ; aucune compétence) et matrice de couverture par bloc. Seules les fiches
  *       publiques sont nommées. La composition du conseil municipal n'est pas établie.
  *     tags: [Territoires]
  *     parameters:
