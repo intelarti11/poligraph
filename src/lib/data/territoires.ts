@@ -69,6 +69,8 @@ export interface PersonRef {
   slug: string;
   fullName: string;
   photoUrl: string | null;
+  /** "M." or "Mme" as recorded, null when unknown: drives grammatical agreement only. */
+  civility: string | null;
 }
 
 export interface DepartmentRef {
@@ -181,8 +183,14 @@ function personRef(p: {
   fullName: string;
   photoUrl: string | null;
   blobPhotoUrl: string | null;
+  civility?: string | null;
 }): PersonRef {
-  return { slug: p.slug, fullName: p.fullName, photoUrl: p.blobPhotoUrl ?? p.photoUrl };
+  return {
+    slug: p.slug,
+    fullName: p.fullName,
+    photoUrl: p.blobPhotoUrl ?? p.photoUrl,
+    civility: p.civility ?? null,
+  };
 }
 
 /** "Vendée (3)" -> 3. Null when the label carries no number. */
@@ -220,6 +228,7 @@ const PERSON_SELECT = {
   fullName: true,
   photoUrl: true,
   blobPhotoUrl: true,
+  civility: true,
 } as const;
 
 // ═══ Commune dossier ════════════════════════════════════════════
