@@ -1,5 +1,6 @@
-// Navigation configuration
-// 3 top-level links + 2 thematic dropdowns + icon tool rail
+// Navigation configuration: primary sections, election block, icon tool rail
+
+import { TERRITOIRES_PATH, TERRITOIRES_REGIONS_ANCHOR } from "@/lib/territoires/paths";
 
 export interface NavItem {
   href: string;
@@ -14,6 +15,11 @@ export interface NavItem {
   external?: boolean;
   /** Sub-links, rendered by the mobile menu only (the desktop header ignores them) */
   children?: NavItem[];
+  /**
+   * Rendered by the mobile menu only. On desktop the item lives in the panel of the election put
+   * forward (see `getElectionSpotlight`), and in the footer.
+   */
+  mobileOnly?: boolean;
 }
 
 export interface NavGroup {
@@ -21,9 +27,8 @@ export interface NavGroup {
   items: NavItem[];
 }
 
-// Primary navigation links (5 direct links, no dropdowns)
-// Note: supersedes the old NAV_TOP_LEVEL max-3 rule.
-// The new full-screen mobile menu eliminates the overflow constraint.
+// Primary navigation. Desktop shows the six sections without `mobileOnly`; the mobile menu shows
+// every item, with the `children` as sub-links.
 export const NAV_PRIMARY: NavItem[] = [
   {
     href: "/statistiques",
@@ -52,10 +57,34 @@ export const NAV_PRIMARY: NavItem[] = [
     ],
   },
   {
+    href: TERRITOIRES_PATH,
+    label: "Territoires",
+    icon: "mapPin",
+    description: "Communes, départements, régions et leurs élus",
+    children: [
+      { href: TERRITOIRES_PATH, label: "Ma commune" },
+      { href: "/departements", label: "Départements" },
+      { href: TERRITOIRES_REGIONS_ANCHOR, label: "Régions" },
+      { href: "/mon-depute", label: "Mon député", featureFlag: "MON_DEPUTE_SECTION" },
+    ],
+  },
+  {
     href: "/affaires",
     label: "Affaires",
     icon: "scale",
     description: "Dossiers judiciaires documentés avec sources",
+  },
+  {
+    href: "/factchecks",
+    label: "Fact-checks",
+    icon: "searchCheck",
+    description: "Déclarations vérifiées par les fact-checkeurs",
+  },
+  {
+    href: "/parlement",
+    label: "Parlement",
+    icon: "landmark",
+    description: "Scrutins et positions des élus",
   },
   {
     href: "/programmes",
@@ -63,12 +92,7 @@ export const NAV_PRIMARY: NavItem[] = [
     icon: "bookOpen",
     description: "Programmes des partis par axe thématique",
     featureFlag: "PROGRAMMES_ENABLED",
-  },
-  {
-    href: "/parlement",
-    label: "Parlement",
-    icon: "landmark",
-    description: "Scrutins et positions des élus",
+    mobileOnly: true,
   },
 ];
 
@@ -96,13 +120,6 @@ export const NAV_SECONDARY: NavItem[] = [
     featureFlag: "COMPARISON_TOOL",
   },
   {
-    href: "/mon-depute",
-    label: "Mon député",
-    icon: "mapPin",
-    description: "Trouvez votre député par code postal",
-    featureFlag: "MON_DEPUTE_SECTION",
-  },
-  {
     href: "/partis",
     label: "Partis",
     icon: "building",
@@ -126,13 +143,8 @@ export const NAV_SECONDARY: NavItem[] = [
     icon: "shieldAlert",
     description: "Catalogue documenté des procédures-bâillons (SLAPP) en France",
   },
-  // No Boussole here: the mobile menu already shows it next to the theme toggle.
-  {
-    href: "/factchecks",
-    label: "Fact-checks",
-    icon: "searchCheck",
-    description: "Déclarations vérifiées par les fact-checkeurs",
-  },
+  // No Boussole here: the mobile menu already shows it next to the theme toggle. Neither
+  // Fact-checks nor Mon député: both are reached from NAV_PRIMARY.
 ];
 
 export interface ElectionNavItem extends NavItem {
