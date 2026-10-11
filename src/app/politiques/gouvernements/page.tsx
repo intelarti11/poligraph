@@ -290,6 +290,7 @@ export default async function GouvernementsPage({ searchParams }: PageProps) {
                               fullName={g.primeMinister.fullName}
                               size="sm"
                               className="size-12"
+                              fixedPx={48}
                             />
                           </div>
                           <div className="min-w-0 flex-1">
