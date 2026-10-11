@@ -37,9 +37,8 @@ const DEPARTEMENT_PATH = /^\/departements\/([a-z0-9-]+)$/;
 
 /**
  * Internal path for a filtered department URL, or null when the URL is the bare page (no letter,
- * page 1 or an unreadable page number): that one is served by the page route as is. Values are
- * passed through untouched; the internal route validates them and answers 404 when they are not
- * a letter and a page of the list.
+ * page 1) or when the letter or page cannot designate a view of the list: the bare page route
+ * serves those as is. The internal route still answers 404 for a page past the end of the list.
  */
 export function departementCommunesRewritePath(
   pathname: string,
@@ -50,6 +49,11 @@ export function departementCommunesRewritePath(
   const lettre = searchParams.get("lettre")?.trim() || undefined;
   const page = searchParams.get("page") ?? undefined;
   if (!hasActiveListingFilter({ lettre, page }, DEPARTEMENT_COMMUNES_FILTER_KEYS)) return null;
+
+  // Only rewrite views that can exist: arbitrary values would each render (and cache) a 404 on
+  // the ISR route, which costs ISR writes. Anything else falls back to the bare cached page.
+  if (lettre !== undefined && !COMMUNE_INDEX_LETTERS.includes(lettre.toUpperCase())) return null;
+  if (page !== undefined && !/^[1-9][0-9]?$/.test(page)) return null;
 
   const pageNumber = Number(page);
   const pageSegment = Number.isInteger(pageNumber) && pageNumber > 1 ? String(pageNumber) : "1";

@@ -44,6 +44,14 @@ describe("departementCommunesRewritePath", () => {
     expect(rewrite("/departements/aisne?page=3")).toBe("/departements/aisne/communes/toutes/3");
   });
 
+  it("ne réécrit pas une lettre ou une page qui ne désigne aucune vue (écritures ISR)", () => {
+    expect(rewrite("/departements/eure?lettre=zzz1")).toBeNull();
+    expect(rewrite("/departements/eure?lettre=%2F..")).toBeNull();
+    expect(rewrite("/departements/eure?lettre=E&page=100")).toBeNull();
+    expect(rewrite("/departements/eure?lettre=E&page=2x")).toBeNull();
+    expect(rewrite("/departements/eure?lettre=e")).toBe("/departements/eure/communes/e/1");
+  });
+
   it("ne touche à aucune autre route", () => {
     expect(rewrite("/departements?lettre=A")).toBeNull();
     expect(rewrite("/departements/eure/opengraph-image?lettre=A")).toBeNull();
