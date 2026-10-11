@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 import { DATA_SOURCE_URLS } from "@/config/labels";
+import { TERRITOIRES_SANS_COMMUNE } from "@/config/regions";
 import { PoliticianAvatar } from "@/components/politicians/PoliticianAvatar";
 import type {
   CommuneDossier,
@@ -161,6 +162,7 @@ function MaireBlock({
 
 export function QuiDecideSection({ dossier }: { dossier: CommuneDossier }) {
   const { maire, mairesSecteur, identity } = dossier;
+  const sansCommune = TERRITOIRES_SANS_COMMUNE.has(identity.territoireHorsRegion?.code ?? "");
   return (
     <SectionCard id="qui-decide" title="Qui décide ici">
       <MaireBlock maire={maire} communeName={identity.name} />
@@ -194,14 +196,25 @@ export function QuiDecideSection({ dossier }: { dossier: CommuneDossier }) {
         </div>
       )}
 
-      <div className="mt-4 rounded-xl border p-4">
-        <p className="text-sm text-muted-foreground">Conseil municipal</p>
-        <p className="font-semibold">Composition actuelle non établie</p>
-        <p className="mt-1 text-sm">
-          Poligraph ne dispose pas de la liste à jour des conseillers municipaux. Les résultats de
-          mars 2026 ne la remplacent pas : des élus ont pu démissionner ou être remplacés depuis.
-        </p>
-      </div>
+      {sansCommune ? (
+        <div className="mt-4 rounded-xl border p-4">
+          <p className="text-sm text-muted-foreground">Conseil municipal</p>
+          <p className="font-semibold">Pas de conseil municipal</p>
+          <p className="mt-1 text-sm">
+            {identity.territoireHorsRegion?.name} : {identity.territoireHorsRegion?.statut}. Ce
+            territoire figure au code officiel géographique sans être une commune au sens usuel.
+          </p>
+        </div>
+      ) : (
+        <div className="mt-4 rounded-xl border p-4">
+          <p className="text-sm text-muted-foreground">Conseil municipal</p>
+          <p className="font-semibold">Composition actuelle non établie</p>
+          <p className="mt-1 text-sm">
+            Poligraph ne dispose pas de la liste à jour des conseillers municipaux. Les résultats de
+            mars 2026 ne la remplacent pas : des élus ont pu démissionner ou être remplacés depuis.
+          </p>
+        </div>
+      )}
 
       {identity.collectivitesParticulieres.length > 0 && (
         <div className="mt-4 space-y-3">
@@ -469,10 +482,12 @@ export function ElectionsSection({ dossier }: { dossier: CommuneDossier }) {
         </>
       )}
 
-      <div className="mt-4 rounded-xl bg-muted/60 p-4 text-sm">
-        <strong>Présidentielle 2027 :</strong> les résultats de la commune apparaîtront ici après
-        leur publication officielle.
-      </div>
+      {!TERRITOIRES_SANS_COMMUNE.has(dossier.identity.territoireHorsRegion?.code ?? "") && (
+        <div className="mt-4 rounded-xl bg-muted/60 p-4 text-sm">
+          <strong>Présidentielle 2027 :</strong> les résultats de la commune apparaîtront ici après
+          leur publication officielle.
+        </div>
+      )}
     </SectionCard>
   );
 }

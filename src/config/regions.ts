@@ -183,6 +183,12 @@ export const TERRITOIRES_HORS_REGION: Readonly<Record<string, { name: string; st
   "989": { name: "Île de Clipperton", statut: "Île du domaine public de l'État" },
 };
 
+/**
+ * TAAF districts and Clipperton appear in the COG with a commune code but have no municipal
+ * council and no electorate of their own: pages must not present them as communes.
+ */
+export const TERRITOIRES_SANS_COMMUNE: ReadonlySet<string> = new Set(["984", "989"]);
+
 const BY_SLUG = new Map(REGIONS.map((r) => [r.slug, r]));
 const BY_CODE = new Map(REGIONS.map((r) => [r.code, r]));
 const BY_DEPARTMENT = new Map(REGIONS.flatMap((r) => r.departmentCodes.map((d) => [d, r])));

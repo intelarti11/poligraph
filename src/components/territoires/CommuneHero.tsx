@@ -222,7 +222,7 @@ export function CommuneHero({ dossier }: { dossier: CommuneDossier }) {
             <HeroBreadcrumb crumbs={crumbsFor(identity)} />
 
             <p className="mt-3 inline-flex rounded-full border border-white/40 px-3 py-1 text-xs font-semibold">
-              Commune · {territoireLabel(identity)}
+              {natureLabel(identity)} · {territoireLabel(identity)}
             </p>
             <h1 className="mt-2 break-words font-display text-3xl font-extrabold tracking-tight md:text-5xl">
               {identity.name}
@@ -303,4 +303,12 @@ export function CommuneHero({ dossier }: { dossier: CommuneDossier }) {
       </div>
     </header>
   );
+}
+
+/** TAAF districts and Clipperton carry a commune code in the COG without being communes. */
+function natureLabel(identity: CommuneDossier["identity"]): string {
+  const code = identity.territoireHorsRegion?.code;
+  if (code === "984") return "District";
+  if (code === "989") return "Territoire";
+  return "Commune";
 }
