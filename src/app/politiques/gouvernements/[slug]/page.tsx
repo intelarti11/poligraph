@@ -83,7 +83,10 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
   // stays in the canonical. An invalid one is ignored by the page, so is the canonical.
   const date = parseCompositionDate(first(sp.date));
   const title = `${gov.name} : composition et ministres`;
-  const description = `Composition du ${gov.name} à chaque date, avec l'acte officiel de chaque nomination, les changements documentés et la liste des participants.`;
+  const description =
+    gov.completeness === "COMPLETE"
+      ? `Composition du ${gov.name} à chaque date, avec l'acte officiel de chaque nomination, les changements documentés et la liste des participants.`
+      : `Composition du ${gov.name} à chaque date, avec les actes officiels disponibles, les changements documentés et la liste des participants.`;
   const canonical = `${BASE}/${gov.slug}${date ? `?date=${date}` : ""}`;
   return {
     title,
@@ -442,7 +445,7 @@ export default async function GovernmentPage({ params, searchParams }: PageProps
         return {
           key: ep.membershipId,
           title: displayTitle(ep.title),
-          detail: `${appointedOn(ep.start)}${previous ? ` · intitulé précédent : ${previous}` : ""}`,
+          detail: `${appointedOn(ep.start, ep.startEvidence)}${previous ? ` · intitulé précédent : ${previous}` : ""}`,
           badge: currentAffairsIds.has(ep.membershipId) ? (
             <StatusBadge tone="neutral">Affaires courantes</StatusBadge>
           ) : undefined,
