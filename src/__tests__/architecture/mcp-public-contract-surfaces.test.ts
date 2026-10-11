@@ -166,6 +166,10 @@ const PARTY_SURFACES = [
   "src/app/statistiques/legislatif/page.tsx",
   "src/app/statistiques/page.tsx",
   "src/app/statistiques/participation/page.tsx",
+  // Territoires commune page and its image: same reason as the Territoires API above, they read
+  // `getCommuneDossier` only and render no party data.
+  "src/app/territoires/communes/[code]/opengraph-image.tsx",
+  "src/app/territoires/communes/[code]/page.tsx",
 ] as const;
 
 const FACTCHECK_SURFACES = [
