@@ -28,6 +28,12 @@ import {
   type CollectiviteParticuliere,
 } from "@/config/collectivites-particulieres";
 import { COMMUNE_DATA_SYNC_KEY, COMMUNE_POPULATION_SOURCE } from "@/config/communes";
+import { DEPUTE_UNIQUE_MAX_POPULATION } from "@/config/populations-reference";
+import {
+  readDepartementPopulationVintages,
+  readPopulationEnVigueur,
+  type PopulationVintage,
+} from "./commune-population";
 import { DATA_SOURCE_LABELS, DATA_SOURCE_URLS } from "@/config/labels";
 import {
   readCommunePresidentielles,
@@ -150,8 +156,7 @@ const MUNICIPALES_2026_SLUG = "municipales-2026";
  */
 const PLM_COMMUNES = new Set(["75056", "69123", "13055"]);
 
-/** From this population on, a single recorded constituency is never shown as established. */
-export const DEPUTE_UNIQUE_MAX_POPULATION = 20_000;
+export { DEPUTE_UNIQUE_MAX_POPULATION };
 
 const COG_SOURCE: SourceRef = {
   label: "Code officiel géographique (INSEE), via geo.api.gouv.fr",
@@ -357,8 +362,8 @@ export interface CommuneDossier {
   };
   population: {
     value: number | null;
-    /** The vintage is not published by the source: never claim one. */
-    vintage: null;
+    /** Vintage in force (CommunePopulation). Null: geo.api.gouv.fr figure, vintage unknown. */
+    vintage: PopulationVintage | null;
     importedAt: string | null;
     source: SourceRef;
   };
@@ -628,6 +633,11 @@ async function readCommuneDossier(inseeCode: string): Promise<CommuneDossier | n
   const departmentDeputies = await readParlementaires("DEPUTE", commune.departmentCode);
   const senateurs = await readParlementaires("SENATEUR", commune.departmentCode);
   const municipales2026 = await readMunicipales2026(inseeCode);
+  const populationEnVigueur = await readPopulationEnVigueur(inseeCode);
+  const populationSource: SourceRef = populationEnVigueur
+    ? { label: populationEnVigueur.vintage.sourceLabel, url: populationEnVigueur.vintage.sourceUrl }
+    : POPULATION_SOURCE;
+  const populationImportedAt = populationEnVigueur?.verifiedAt ?? importedAt;
   const intercommunalite = await readIntercommunalites(inseeCode);
   const presidentielles = await readCommunePresidentielles(inseeCode, commune.departmentCode);
   const lastPresidentielle = presidentielles.blocks[0];
@@ -683,9 +693,9 @@ async function readCommuneDossier(inseeCode: string): Promise<CommuneDossier | n
     { bloc: "conseilMunicipal", state: "NON_ETABLI", source: null, date: null },
     {
       bloc: "population",
-      state: commune.population != null ? "DISPONIBLE" : "ABSENT",
-      source: POPULATION_SOURCE,
-      date: importedAt,
+      state: (populationEnVigueur?.value ?? commune.population) != null ? "DISPONIBLE" : "ABSENT",
+      source: populationSource,
+      date: populationImportedAt,
     },
     {
       bloc: "deputes",
@@ -749,10 +759,10 @@ async function readCommuneDossier(inseeCode: string): Promise<CommuneDossier | n
     mairesSecteur,
     conseilMunicipal: { state: "NON_ETABLI" },
     population: {
-      value: commune.population,
-      vintage: null,
-      importedAt,
-      source: POPULATION_SOURCE,
+      value: populationEnVigueur?.value ?? commune.population,
+      vintage: populationEnVigueur?.vintage ?? null,
+      importedAt: populationImportedAt,
+      source: populationSource,
     },
     parlement: {
       deputes: {
@@ -957,6 +967,8 @@ export interface DepartementTerritoire {
   territoireHorsRegion: { code: string; name: string; statut: string } | null;
   collectivitesParticulieres: CollectiviteParticuliere[];
   communeCount: number;
+  /** Population vintages in force across the department's communes, most common first. */
+  populationVintages: (PopulationVintage & { communes: number })[];
   /** Exact count per initial letter (accents folded), letters without communes omitted. */
   letterCounts: Record<string, number>;
   communes: {
@@ -1087,6 +1099,7 @@ async function readDepartementTerritoire(
     territoireHorsRegion: getTerritoireHorsRegion(departmentCode),
     collectivitesParticulieres: getCollectivitesForDepartment(departmentCode),
     communeCount,
+    populationVintages: await readDepartementPopulationVintages(departmentCode),
     letterCounts,
     communes: { letter, page, pageSize: DEPARTEMENT_PAGE_SIZE, total, totalPages, rows },
     presidence,

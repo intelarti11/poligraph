@@ -25,6 +25,7 @@ import {
 import { PRESIDENTIELLE_2027_SLUG } from "@/lib/presidentielle/themes";
 import { formatDate } from "@/lib/utils";
 import { TERRITOIRES_DONNEES_PATH } from "@/lib/territoires/paths";
+import { populationVintageLabel } from "@/lib/territoires/population-label";
 
 /**
  * Sections of the Territoires commune page (#1052). Server components only: no map, no client
@@ -591,13 +592,21 @@ export function CommuneSidebar({ dossier }: { dossier: CommuneDossier }) {
           <p className="font-display text-xl font-bold">
             {population.value != null ? formatPopulation(population.value) : "Non disponible"}
           </p>
+          {population.vintage && (
+            <p className="text-xs">{populationVintageLabel(population.vintage)}</p>
+          )}
           <p className="mt-1 text-xs text-muted-foreground">
             {population.source.url ? (
               <ExternalLink href={population.source.url}>{population.source.label}</ExternalLink>
             ) : (
               population.source.label
             )}
-            {population.importedAt && <>, importée le {formatDate(population.importedAt)}</>}
+            {population.importedAt && (
+              <>
+                , {population.vintage ? "vérifiée" : "importée"} le{" "}
+                {formatDate(population.importedAt)}
+              </>
+            )}
           </p>
         </SideCard>
       </div>

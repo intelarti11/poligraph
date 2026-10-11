@@ -265,6 +265,77 @@ describe("/territoires/communes/[code]", () => {
     expect(document.querySelector('a[href^="/territoires/regions/"]')).toBeNull();
   });
 
+  it("date la population par son millésime et sa date d'entrée en vigueur, avec la source", async () => {
+    const base = dossier();
+    const { document, text } = await render({
+      ...base,
+      population: {
+        value: 230890,
+        vintage: {
+          millesime: 2023,
+          effectiveFrom: "2026-01-01",
+          producer: "INSEE",
+          sourceLabel: "INSEE, populations de référence 2023 (décret n° 2025-1362)",
+          sourceUrl: "https://www.insee.fr/fr/statistiques/8680726",
+          importedAt: "2026-10-11T08:00:00.000Z",
+        },
+        importedAt: "2026-10-11T08:00:00.000Z",
+        source: {
+          label: "INSEE, populations de référence 2023 (décret n° 2025-1362)",
+          url: "https://www.insee.fr/fr/statistiques/8680726",
+        },
+      },
+    });
+
+    const hero = document.querySelector("header")?.textContent ?? "";
+    expect(hero).toContain("Population municipale 2023, en vigueur au 1er janvier 2026 (INSEE)");
+    expect(hero).not.toContain("geo.api.gouv.fr");
+    expect(
+      document.querySelector('header a[href="https://www.insee.fr/fr/statistiques/8680726"]')
+    ).not.toBeNull();
+    expect(document.querySelector("#sources")?.textContent).toContain(
+      "vérifiée le 11 octobre 2026"
+    );
+    expect(text).not.toContain("importée le");
+  });
+
+  it("porte la source propre d'une collectivité à recensement distinct", async () => {
+    const base = papeete();
+    const { document } = await render({
+      ...base,
+      population: {
+        value: 26654,
+        vintage: {
+          millesime: 2022,
+          effectiveFrom: "2023-01-01",
+          producer: "ISPF",
+          sourceLabel: "ISPF et INSEE, recensement de la Polynésie française 2022",
+          sourceUrl: "https://www.insee.fr/fr/statistiques/6689891",
+          importedAt: "2026-10-11T08:00:00.000Z",
+        },
+        importedAt: "2026-10-11T08:00:00.000Z",
+        source: {
+          label: "ISPF et INSEE, recensement de la Polynésie française 2022",
+          url: "https://www.insee.fr/fr/statistiques/6689891",
+        },
+      },
+    });
+
+    expect(document.querySelector("header")?.textContent).toContain(
+      "Population municipale 2022, en vigueur au 1er janvier 2023 (ISPF)"
+    );
+  });
+
+  it("sans série millésimée, n'invente aucun millésime", async () => {
+    const { document, text } = await render(dossier());
+
+    expect(document.querySelector("header")?.textContent).toContain(
+      "Source INSEE via geo.api.gouv.fr"
+    );
+    expect(text).not.toMatch(/en vigueur au/);
+    expect(text).toContain("importée le");
+  });
+
   it("ne présente pas un district des TAAF comme une commune", async () => {
     const base = papeete();
     const { text } = await render({
