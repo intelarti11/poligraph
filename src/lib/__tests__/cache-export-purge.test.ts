@@ -94,7 +94,12 @@ describe("purge des exports depuis invalidateEntity, revalidateAll et revalidate
     invalidateEntity("politician", "un-politique");
     await flushAfter();
     const purged = dangerouslyDeleteByTag.mock.calls.map((call) => call[0]).sort();
-    expect(purged).toEqual(["export:affairs", "export:factchecks", "export:politicians"]);
+    expect(purged).toEqual([
+      "export:affairs",
+      "export:factchecks",
+      "export:politicians",
+      "export:territories",
+    ]);
   });
 
   it("purges the politiques export when an affair is written, for its affairs count", async () => {
@@ -151,7 +156,12 @@ describe("purge des exports depuis invalidateEntity, revalidateAll et revalidate
     revalidateTags(["dossiers", "stats", "politicians", "factchecks"]);
     await flushAfter();
     const purged = dangerouslyDeleteByTag.mock.calls.map((call) => call[0]).sort();
-    expect(purged).toEqual(["export:affairs", "export:factchecks", "export:politicians"]);
+    expect(purged).toEqual([
+      "export:affairs",
+      "export:factchecks",
+      "export:politicians",
+      "export:territories",
+    ]);
   });
 
   it("purges an export once when several posted tags share it", async () => {
@@ -159,13 +169,34 @@ describe("purge des exports depuis invalidateEntity, revalidateAll et revalidate
     revalidateTags(["politicians", "factchecks"]);
     await flushAfter();
     const purged = dangerouslyDeleteByTag.mock.calls.map((call) => call[0]).sort();
-    expect(purged).toEqual(["export:affairs", "export:factchecks", "export:politicians"]);
+    expect(purged).toEqual([
+      "export:affairs",
+      "export:factchecks",
+      "export:politicians",
+      "export:territories",
+    ]);
   });
 
   it("purges nothing for a tag with no export behind it", async () => {
     revalidateTags(["elections", "dossiers", "stats"]);
     await flushAfter();
     expect(dangerouslyDeleteByTag).not.toHaveBeenCalled();
+  });
+
+  it("hard-deletes the territoires export when the territoires tag is refreshed", async () => {
+    revalidateTags(["territoires"]);
+    await flushAfter();
+    expect(dangerouslyDeleteByTag.mock.calls.map((call) => call[0])).toEqual([
+      "export:territories",
+    ]);
+  });
+
+  it("hard-deletes the territoires export when a mandate is written, a mayor may change", async () => {
+    invalidateEntity("mandate");
+    await flushAfter();
+    expect(dangerouslyDeleteByTag.mock.calls.map((call) => call[0])).toEqual([
+      "export:territories",
+    ]);
   });
 
   it("hard-deletes the governments export when the gouvernements tag is refreshed", async () => {

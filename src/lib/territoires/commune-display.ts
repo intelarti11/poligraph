@@ -25,6 +25,11 @@ export function formatPct(value: number): string {
   return `${frNumber(value, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}${NBSP}%`;
 }
 
+/** "1 234" with a visible thousands separator. */
+export function formatCount(value: number): string {
+  return frNumber(value);
+}
+
 export function formatPopulation(value: number): string {
   return `${frNumber(value)} habitant${value > 1 ? "s" : ""}`;
 }
@@ -48,6 +53,7 @@ const COVERAGE_LABELS: Partial<Record<CoverageEntry["bloc"], string>> = {
   senateurs: "sénateurs du département",
   municipales2026: "résultats des municipales 2026",
   intercommunalite: "intercommunalité",
+  presidentielle: "résultats de la présidentielle",
 };
 
 /** Blocks shown with a source, in the order of the coverage matrix. Identity is implied. */

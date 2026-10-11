@@ -2308,6 +2308,7 @@ model Candidacy {
   isElected   Boolean  @default(false)
 
   presidentialData CandidacyPresidential?
+  communeResults   CommuneCandidacyResult[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2803,6 +2804,7 @@ model Commune {
   localMandates         MandateLocal[]
   communeElectionRounds CommuneElectionRound[]
   intercommunalites     CommuneIntercommunalite[]
+  candidacyResults      CommuneCandidacyResult[]
 
   @@index([departmentCode])
   @@index([departmentCode, constituencyNumber])
@@ -2886,6 +2888,24 @@ model CommuneElectionRound {
 
   @@unique([communeId, electionId, round])
   @@index([electionId, round])
+}
+
+/// Votes of one national candidacy in one commune, for one round (présidentielle by commune).
+/// Narrow on purpose: about 490 000 rows per presidential election. Participation of the commune
+/// lives in CommuneElectionRound; shares are computed from its validVotes, never stored.
+model CommuneCandidacyResult {
+  communeId   String
+  candidacyId String
+  round       Int // 1 or 2
+  votes       Int
+
+  commune   Commune   @relation(fields: [communeId], references: [id])
+  candidacy Candidacy @relation(fields: [candidacyId], references: [id], onDelete: Cascade)
+
+  // The primary key serves the commune page (one commune, every election); the second index
+  // serves the import (delete one election round) and the cascade from Candidacy.
+  @@id([communeId, candidacyId, round])
+  @@index([candidacyId, round])
 }
 
 // ============================================
