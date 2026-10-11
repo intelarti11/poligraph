@@ -173,6 +173,9 @@ const PARTY_SURFACES = [
   // `getCommuneDossier` only and render no party data.
   "src/app/territoires/communes/[code]/opengraph-image.tsx",
   "src/app/territoires/communes/[code]/page.tsx",
+  // Decisions sub-page: `getCommuneDossier` for the robots verdict only, and the decisions reader,
+  // which selects decision, institution, source and mayor name fields. No party data.
+  "src/app/territoires/communes/[code]/decisions/page.tsx",
   // Territoires entry, search and region pages: flagged through the same territoires readers
   // (and `getElections` on the region page, which selects election rows only). No party data.
   "src/app/territoires/page.tsx",

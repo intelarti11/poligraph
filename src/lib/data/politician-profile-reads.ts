@@ -67,10 +67,26 @@ export async function readPoliticianIdentity(where: PoliticianWhere) {
               europeanGroup: { select: { name: true } },
             },
           },
-          // Commune population feeds the SEO richness predicate (politician-robots).
+          // Commune population feeds the SEO richness predicate (politician-robots). The count
+          // of published council decisions decides the link to them (#1052, lot 2).
           localData: {
             select: {
-              commune: { select: { population: true } },
+              commune: {
+                select: {
+                  id: true,
+                  population: true,
+                  _count: {
+                    select: {
+                      decisions: {
+                        where: {
+                          status: "PUBLISHED",
+                          institution: { kind: "CONSEIL_MUNICIPAL" },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
             },
           },
           // Link from a ministerial mandate to its government page, when that one is published.

@@ -13,3 +13,8 @@ export function territoireCommunePath(inseeCode: string): string {
 export function territoireRegionPath(slug: string): string {
   return `/territoires/regions/${encodeURIComponent(slug)}`;
 }
+
+/** Exists only while the commune has at least one published decision (#1052, lot 2). */
+export function territoireCommuneDecisionsPath(inseeCode: string): string {
+  return `${territoireCommunePath(inseeCode)}/decisions`;
+}

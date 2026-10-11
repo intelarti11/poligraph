@@ -7,6 +7,7 @@ import { dossier, grandeCommune, papeete, paris, reunion, withMaire } from "./fi
 
 const mocks = vi.hoisted(() => ({
   getCommuneDossier: vi.fn(),
+  decisionCount: vi.fn(),
   notFound: vi.fn(() => {
     throw new Error("NEXT_NOT_FOUND");
   }),
@@ -16,6 +17,9 @@ vi.mock("server-only", () => ({}));
 vi.mock("next/navigation", () => ({ notFound: mocks.notFound }));
 vi.mock("@/lib/data/territoires", () => ({
   getCommuneDossier: (code: string) => mocks.getCommuneDossier(code),
+}));
+vi.mock("@/lib/data/territoire-decisions", () => ({
+  getCommunePublishedDecisionCount: (code: string) => mocks.decisionCount(code),
 }));
 
 import Page, { generateMetadata, generateStaticParams } from "../page";
@@ -33,11 +37,28 @@ const metadataFor = async (data: CommuneDossier | null, code = "35238") => {
   return generateMetadata({ params: Promise.resolve({ code }) });
 };
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.decisionCount.mockResolvedValue(0);
+});
 
 describe("/territoires/communes/[code]", () => {
   it("ne génère aucune commune au build", () => {
     expect(generateStaticParams()).toEqual([]);
+  });
+
+  it("ne lie aucune page de décisions tant qu'aucune n'est publiée", async () => {
+    const { document, text } = await render(dossier());
+    expect(document.querySelector('a[href="/territoires/communes/35238/decisions"]')).toBeNull();
+    expect(text).not.toContain("Décisions");
+  });
+
+  it("lie la page des décisions dès qu'une décision est publiée", async () => {
+    mocks.decisionCount.mockResolvedValue(2);
+    const { document } = await render(dossier());
+    expect(
+      document.querySelector('a[href="/territoires/communes/35238/decisions"]')?.textContent
+    ).toBe("Décisions");
   });
 
   it("répond 404 pour un code sans commune", async () => {

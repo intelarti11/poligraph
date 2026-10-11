@@ -1,4 +1,4 @@
-import { territoireCommunePath } from "./paths";
+import { territoireCommuneDecisionsPath, territoireCommunePath } from "./paths";
 
 /** INSEE code at the end of a local mandate label: "Carcassonne (11069)", "Ajaccio (2A004)". */
 const INSEE_SUFFIX = /\(([0-9]{5}|2[AB][0-9]{3})\)$/;
@@ -23,4 +23,28 @@ export function mandateTerritoireHref(mandate: MandateCommuneLinkInput): string 
   if (!mandate.isCurrent || !mandate.localData?.commune) return null;
   const code = mandate.constituency?.trim().match(INSEE_SUFFIX)?.[1];
   return code ? territoireCommunePath(code) : null;
+}
+
+const MUNICIPAL_TYPES = new Set(["MAIRE", "ADJOINT_MAIRE", "CONSEILLER_MUNICIPAL"]);
+
+export interface MandateDecisionsLinkInput {
+  type: string;
+  /** As stored in the profile document; older documents lack the count and get no link. */
+  localData?: { commune?: unknown } | null;
+}
+
+/**
+ * Link from a municipal mandate, current or past, to the council decisions of its commune
+ * (#1052, lot 2). Present only while the commune has a published municipal council decision;
+ * the destination places each decision in its period and never attributes it to the person.
+ */
+export function mandateDecisionsHref(mandate: MandateDecisionsLinkInput): string | null {
+  if (!MUNICIPAL_TYPES.has(mandate.type)) return null;
+  const commune = mandate.localData?.commune as
+    | { id?: unknown; _count?: { decisions?: unknown } }
+    | null
+    | undefined;
+  const count = commune?._count?.decisions;
+  if (typeof commune?.id !== "string" || typeof count !== "number" || count < 1) return null;
+  return territoireCommuneDecisionsPath(commune.id);
 }
