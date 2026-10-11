@@ -37,7 +37,7 @@ export default async function Image({ params }: { params: Promise<{ code: string
   const populationLine =
     population.value != null ? `Population : ${formatPopulation(population.value)}` : null;
 
-  // Metropolitan outlines only: an overseas commune gets no silhouette, never another one.
+  // Overseas communes use their territory's own outline; TAAF and Clipperton get none.
   const shapeUri = getDepartmentShapeWithDot(
     identity.department.code,
     identity.coordinates?.lat ?? null,
