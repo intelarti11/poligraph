@@ -15,12 +15,15 @@ import { buildVotesListingRedirect } from "@/lib/parlement-votes-redirect";
 import { ADMIN_COOKIE_NAME, verifySessionToken } from "@/lib/auth-token";
 import { getLegacyMeasureId } from "@/lib/presidentielle/measure-route";
 import { departementCommunesRewritePath } from "@/lib/territoires/departement-communes";
+import { TERRITOIRES_SEARCH_PATH } from "@/lib/territoires/paths";
 
 // ─── Rate limit tiers ────────────────────────────────────────────
 
 type RateLimitTier = "general" | "search" | "autocomplete" | "export" | "admin" | "subscribe";
 
 const PRESIDENTIAL_SEARCH_PAGE_PATH = "/elections/presidentielle-2027/recherche";
+/** HTML search pages: rate-limited like the search API, answered with an HTML state when limited. */
+const SEARCH_PAGE_PATHS = new Set([PRESIDENTIAL_SEARCH_PAGE_PATH, TERRITOIRES_SEARCH_PATH]);
 
 const TIER_CONFIG: Record<RateLimitTier, { tokens: number; window: string }> = {
   general: { tokens: 60, window: "1m" },
@@ -167,7 +170,7 @@ export function getRateLimitTier(pathname: string): RateLimitTier | null {
     return "subscribe";
   }
   if (pathname.startsWith("/api/export")) return "export";
-  if (pathname === PRESIDENTIAL_SEARCH_PAGE_PATH) return "search";
+  if (SEARCH_PAGE_PATHS.has(pathname)) return "search";
   if (pathname.startsWith("/api/elections/presidentielle-2027/recherche")) {
     return "autocomplete";
   }
@@ -314,7 +317,7 @@ export function buildRateLimitExceededResponse(
     ...(isV1Route(pathname) ? CORS_HEADERS : {}),
   };
 
-  if (pathname === PRESIDENTIAL_SEARCH_PAGE_PATH) {
+  if (SEARCH_PAGE_PATHS.has(pathname)) {
     const target = request.nextUrl.clone();
     target.searchParams.set("limite", "1");
     return NextResponse.rewrite(target, { status: 429, headers });

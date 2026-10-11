@@ -173,6 +173,12 @@ const PARTY_SURFACES = [
   // `getCommuneDossier` only and render no party data.
   "src/app/territoires/communes/[code]/opengraph-image.tsx",
   "src/app/territoires/communes/[code]/page.tsx",
+  // Territoires entry, search and region pages: flagged through the same territoires readers
+  // (and `getElections` on the region page, which selects election rows only). No party data.
+  "src/app/territoires/page.tsx",
+  "src/app/territoires/recherche/page.tsx",
+  "src/app/territoires/regions/[slug]/opengraph-image.tsx",
+  "src/app/territoires/regions/[slug]/page.tsx",
 ] as const;
 
 const FACTCHECK_SURFACES = [

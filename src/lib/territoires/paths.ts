@@ -3,6 +3,8 @@
 
 export const TERRITOIRES_PATH = "/territoires";
 export const TERRITOIRES_REGIONS_ANCHOR = "/territoires#regions";
+/** Server-rendered search results: dynamic, so kept off the cached entry page. */
+export const TERRITOIRES_SEARCH_PATH = "/territoires/recherche";
 
 export function territoireCommunePath(inseeCode: string): string {
   return `/territoires/communes/${encodeURIComponent(inseeCode)}`;
