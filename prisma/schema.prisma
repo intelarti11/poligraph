@@ -2864,7 +2864,6 @@ model CommuneIntercommunalite {
   intercommunalite Intercommunalite? @relation(fields: [siren], references: [siren], onDelete: Restrict)
 
   @@unique([communeId, siren, validFrom])
-  @@index([communeId, validTo])
   @@index([siren])
 }
 

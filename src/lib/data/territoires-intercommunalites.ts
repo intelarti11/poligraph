@@ -1,6 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
-import type { IntercommunaliteNature } from "@/generated/prisma";
+import { Prisma, type IntercommunaliteNature } from "@/generated/prisma";
 import {
   INTERCOMMUNALITE_NATURE_LABELS,
   INTERCOMMUNALITES_PAGE_URL,
@@ -62,16 +62,31 @@ export async function readIntercommunalites(
   });
   if (!meta) return null;
 
-  const rows = await db.communeIntercommunalite.findMany({
-    where: { communeId: inseeCode, validTo: null },
-    select: {
-      situationDate: true,
-      sourceLabel: true,
-      sourceUrl: true,
-      intercommunalite: { select: { siren: true, name: true, nature: true } },
-    },
-    take: 5,
-  });
+  // One round trip: open memberships of the commune with their body, if any (null siren is
+  // "Sans objet"). Served by the unique index (communeId, siren, validFrom).
+  const raw = await db.$queryRaw<
+    {
+      situationDate: Date;
+      sourceLabel: string;
+      sourceUrl: string;
+      siren: string | null;
+      name: string | null;
+      nature: IntercommunaliteNature | null;
+    }[]
+  >(Prisma.sql`
+    SELECT ci."situationDate", ci."sourceLabel", ci."sourceUrl",
+           i."siren", i."name", i."nature"::text AS "nature"
+    FROM "CommuneIntercommunalite" ci
+    LEFT JOIN "Intercommunalite" i ON i."siren" = ci."siren"
+    WHERE ci."communeId" = ${inseeCode} AND ci."validTo" IS NULL
+    LIMIT 5`);
+  const rows = raw.map((r) => ({
+    situationDate: r.situationDate,
+    sourceLabel: r.sourceLabel,
+    sourceUrl: r.sourceUrl,
+    intercommunalite:
+      r.siren && r.name && r.nature ? { siren: r.siren, name: r.name, nature: r.nature } : null,
+  }));
   const lastCheckedAt = meta.lastSyncAt?.toISOString() ?? null;
 
   if (rows.length === 0) {

@@ -38,9 +38,6 @@ CREATE TABLE "CommuneIntercommunalite" (
 );
 
 -- CreateIndex
-CREATE INDEX "CommuneIntercommunalite_communeId_validTo_idx" ON "CommuneIntercommunalite"("communeId", "validTo");
-
--- CreateIndex
 CREATE INDEX "CommuneIntercommunalite_siren_idx" ON "CommuneIntercommunalite"("siren");
 
 -- CreateIndex
