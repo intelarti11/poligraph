@@ -4,9 +4,11 @@ const NOINDEX_FOLLOW = { index: false, follow: true } as const;
 
 /**
  * Communes below this population get noindex,follow on their municipales-2026
- * page: under 1000 inhabitants the ballot is panachage (no structured lists),
- * so the page is a bare candidate roster Google refuses to index (issue #385).
- * At 1000+ the list-based ballot produces real content (~10k communes).
+ * page (issue #385). The threshold was first justified by panachage under
+ * 1000 inhabitants; that reason no longer holds, since the 2026 municipales
+ * apply the list ballot below 1000 too. It stays as an editorial trade-off:
+ * about 10k communes of 1000+ inhabitants carry the richest pages, the others
+ * remain crawlable. Behaviour unchanged.
  */
 export const COMMUNE_MIN_POPULATION = 1_000;
 

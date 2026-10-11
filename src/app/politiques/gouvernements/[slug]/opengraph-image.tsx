@@ -1,5 +1,5 @@
 import { ImageResponse } from "next/og";
-import { formatDay } from "@/components/governments/format";
+import { governmentPeriod } from "@/components/governments/format";
 import { PUBLIC_POLITICIAN_WHERE } from "@/lib/api/public-contract";
 import { getPublishedGovernments } from "@/lib/data/governments";
 import { db } from "@/lib/db";
@@ -13,7 +13,8 @@ import { loadOgPortrait, OgLayout, OG_SIZE } from "@/lib/og-utils";
  * Nothing perishable is rendered, for the reason given on the candidacy card: platforms
  * cache a card for as long as they like. No member count (a reshuffle changes it), and a
  * government still in office gets its appointment date rather than "en fonction", which
- * would keep being shared after it ends. A closed government's range never changes.
+ * would keep being shared after it ends. A closed government's range never changes. The
+ * dates come from `governmentPeriod`, as on the directory card.
  */
 
 export const alt = "Composition d'un gouvernement sur Poligraph";
@@ -62,9 +63,8 @@ export default async function Image({ params }: { params: Promise<{ slug: string
   const portrait = pm ? await loadOgPortrait(pm.blobPhotoUrl ?? pm.photoUrl) : null;
   const initials = pm ? `${pm.firstName[0] ?? ""}${pm.lastName[0] ?? ""}`.toUpperCase() : "";
 
-  const dates = gov.endedAt
-    ? `Du ${formatDay(gov.primeMinisterAppointedAt)} au ${formatDay(gov.endedAt)}`
-    : `Nommé le ${formatDay(gov.primeMinisterAppointedAt)}`;
+  // Same period as the directory card and the page; nothing when a date is estimated.
+  const dates = governmentPeriod(gov);
 
   return new ImageResponse(
     <OgLayout>
@@ -136,7 +136,7 @@ export default async function Image({ params }: { params: Promise<{ slug: string
             {gov.name}
           </span>
 
-          <span style={{ fontSize: 30, color: "#cbd5e1" }}>{dates}</span>
+          {dates && <span style={{ fontSize: 30, color: "#cbd5e1" }}>{dates}</span>}
 
           <span style={{ fontSize: 24, color: "#94a3b8" }}>
             Sa composition jour par jour, chaque nomination sourcée par le Journal officiel.

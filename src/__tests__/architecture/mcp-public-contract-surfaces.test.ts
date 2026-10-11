@@ -100,6 +100,12 @@ const PARTY_SURFACES = [
   "src/app/api/v1/elus/[id]/route.ts",
   "src/app/api/v1/elus/route.ts",
   "src/app/api/v1/elus/search/route.ts",
+  // Territoires API: flagged only through `getMaireStatus` from `@/lib/data/elus`, whose module
+  // also holds `PARTY_SELECT` for the elus readers. The territoires readers select person fields
+  // only and expose no party data (decision 8 of #1052: results without party colours).
+  "src/app/api/v1/territoires/communes/[code]/route.ts",
+  "src/app/api/v1/territoires/departements/[code]/route.ts",
+  "src/app/api/v1/territoires/regions/[slug]/route.ts",
   "src/app/api/votes/stats/route.ts",
   "src/app/carte/page.tsx",
   "src/app/comparer/page.tsx",

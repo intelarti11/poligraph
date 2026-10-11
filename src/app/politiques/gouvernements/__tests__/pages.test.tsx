@@ -46,7 +46,13 @@ function gov(overrides: Partial<PublishedGovernment>): PublishedGovernment {
     compositionVerifiedAt: null,
     currentAffairsAttested: false,
     hasDerivedDate: false,
-    primeMinister: { slug: "alix-premiere", fullName: "Alix Première", gender: "F" },
+    primeMinister: {
+      slug: "alix-premiere",
+      fullName: "Alix Première",
+      gender: "F",
+      photoUrl: null,
+      blobPhotoUrl: null,
+    },
     completeness: "COMPLETE",
     pendingChanges: null,
     coverageNote: null,
@@ -137,7 +143,13 @@ const A = gov({
   slug: "gouvernement-a",
   name: "Gouvernement Alpha",
   sequence: 1,
-  primeMinister: { slug: "alix-premiere", fullName: "Alix Première", gender: "F" },
+  primeMinister: {
+    slug: "alix-premiere",
+    fullName: "Alix Première",
+    gender: "F",
+    photoUrl: null,
+    blobPhotoUrl: null,
+  },
   endedAt: "2024-01-08",
   compositionVerifiedAt: "2024-01-08",
   participantCount: 5,
@@ -153,7 +165,13 @@ const B = gov({
   formedAt: "2024-01-09",
   endedAt: "2024-09-01",
   compositionVerifiedAt: "2024-09-01",
-  primeMinister: { slug: "bruno-second", fullName: "Bruno Second", gender: "M" },
+  primeMinister: {
+    slug: "bruno-second",
+    fullName: "Bruno Second",
+    gender: "M",
+    photoUrl: null,
+    blobPhotoUrl: null,
+  },
   participantCount: 1,
   hiddenCount: 1,
 });
@@ -171,7 +189,13 @@ const C = gov({
   endedAt: "2024-12-23",
   compositionVerifiedAt: "2024-12-23",
   currentAffairsAttested: true,
-  primeMinister: { slug: "chloe-tierce", fullName: "Chloé Tierce", gender: "F" },
+  primeMinister: {
+    slug: "chloe-tierce",
+    fullName: "Chloé Tierce",
+    gender: "F",
+    photoUrl: null,
+    blobPhotoUrl: null,
+  },
   participantCount: 1,
 });
 
@@ -183,7 +207,13 @@ const D = gov({
   sequence: 4,
   primeMinisterAppointedAt: "2025-10-10",
   formedAt: "2025-10-12",
-  primeMinister: { slug: "denis-quart", fullName: "Denis Quart", gender: "M" },
+  primeMinister: {
+    slug: "denis-quart",
+    fullName: "Denis Quart",
+    gender: "M",
+    photoUrl: null,
+    blobPhotoUrl: null,
+  },
   participantCount: 1,
 });
 
@@ -338,6 +368,17 @@ describe("détail d'un gouvernement", () => {
     expect(text(markup)).toContain("Présidence d'Emmanuel Macron");
   });
 
+  it("nomme le gouvernement voisin sans répéter « Gouvernement »", async () => {
+    const markup = await html(detail("gouvernement-b"));
+    const div = document.createElement("div");
+    div.innerHTML = markup;
+    const prev = div.querySelector('a[href="/politiques/gouvernements/gouvernement-a"]');
+    const next = div.querySelector('a[href="/politiques/gouvernements/gouvernement-c"]');
+    expect(prev?.getAttribute("aria-label")).toBe("Précédent : Gouvernement Alpha");
+    expect(next?.getAttribute("aria-label")).toBe("Suivant : Gouvernement Charlie");
+    expect(text(markup)).not.toMatch(/Gouvernement (précédent|suivant) :/);
+  });
+
   it("renvoie notFound pour un slug inconnu ou non publié", async () => {
     await expect(detail("inconnu")).rejects.toThrow("NEXT_NOT_FOUND");
     // Un gouvernement DRAFT n'est jamais renvoyé par getPublishedGovernments.
@@ -433,7 +474,13 @@ describe("composition par défaut", () => {
     endedAt: "2025-10-05",
     compositionVerifiedAt: "2025-10-05",
     currentAffairsAttested: false,
-    primeMinister: { slug: "denis-quart", fullName: "Denis Quart", gender: "M" },
+    primeMinister: {
+      slug: "denis-quart",
+      fullName: "Denis Quart",
+      gender: "M",
+      photoUrl: null,
+      blobPhotoUrl: null,
+    },
     participantCount: 1,
   });
   const resigned = ep({
@@ -566,6 +613,43 @@ describe("répertoire", () => {
     expect(all).toContain("Gouvernement Alpha");
   });
 
+  it("décrit la liste affichée en JSON-LD", async () => {
+    const markup = await html(DirectoryPage({ searchParams: sp() }));
+    const div = document.createElement("div");
+    div.innerHTML = markup;
+    const ld = JSON.parse(div.querySelector('script[type="application/ld+json"]')!.textContent!);
+    expect(ld["@type"]).toBe("ItemList");
+    expect(ld.numberOfItems).toBe(GOVS.length);
+    expect(ld.itemListElement[0]).toMatchObject({
+      name: "Gouvernement Delta",
+      url: expect.stringMatching(/\/politiques\/gouvernements\/gouvernement-d$/),
+    });
+  });
+
+  it("montre la photo d'un Premier ministre publié et les initiales sinon", async () => {
+    const photo = "https://upload.wikimedia.org/alix.jpg";
+    vi.mocked(getPublishedGovernments).mockResolvedValue([
+      { ...A, primeMinister: { ...A.primeMinister, blobPhotoUrl: photo } },
+      B,
+    ]);
+    const div = document.createElement("div");
+    div.innerHTML = await html(DirectoryPage({ searchParams: sp() }));
+    const card = (name: string) =>
+      [...div.querySelectorAll("article")].find((a) => a.textContent?.includes(name))!;
+
+    const alpha = card("Gouvernement Alpha");
+    const img = alpha.querySelector("img");
+    expect(img?.getAttribute("src")).toBe(photo);
+    expect(img?.getAttribute("loading")).toBe("lazy");
+    expect(img?.closest('[aria-hidden="true"]')).not.toBeNull();
+    expect(alpha.querySelectorAll("a")).toHaveLength(1);
+
+    // B : fiche non publiée, le mapping a mis la photo à null, seules les initiales restent.
+    const bravo = card("Gouvernement Bravo");
+    expect(bravo.querySelector("img")).toBeNull();
+    expect(bravo.querySelector('[aria-hidden="true"]')?.textContent).toBe("BS");
+  });
+
   it("filtre par nom sans tenir compte des accents", async () => {
     const t = text(await html(DirectoryPage({ searchParams: sp({ q: "chloe" }) })));
     expect(t).toContain("Gouvernement Charlie");
@@ -684,6 +768,48 @@ describe("membres", () => {
     );
     expect(hollandeOnly).toContain("Ministre de l'Intérieur");
     expect(hollandeOnly).not.toContain("Inès Entrante");
+  });
+
+  it("résume la période couverte par la présidence filtrée, pas toute la couverture", async () => {
+    const H = gov({
+      id: "gh",
+      slug: "gouvernement-h",
+      name: "Gouvernement Hôtel",
+      sequence: 0,
+      primeMinisterAppointedAt: "2016-12-06",
+      formedAt: "2016-12-06",
+      endedAt: "2017-05-15",
+      compositionVerifiedAt: "2017-05-15",
+    });
+    vi.mocked(getPublishedGovernments).mockResolvedValue([H, ...GOVS]);
+    const dates = (markup: string) => {
+      const div = document.createElement("div");
+      div.innerHTML = markup;
+      return [
+        div.querySelector<HTMLInputElement>("#membres-du")?.getAttribute("value"),
+        div.querySelector<HTMLInputElement>("#membres-au")?.getAttribute("value"),
+      ];
+    };
+
+    const all = await html(MembersPage({ searchParams: sp() }));
+    expect(text(all)).toContain("entre le 6 décembre 2016 et le 23 décembre 2024");
+    expect(dates(all)).toEqual(["2016-12-06", "2024-12-23"]);
+
+    const hollande = await html(MembersPage({ searchParams: sp({ presidence: "hollande" }) }));
+    expect(text(hollande)).toContain("entre le 6 décembre 2016 et le 15 mai 2017");
+    expect(dates(hollande)).toEqual(["2016-12-06", "2017-05-15"]);
+
+    const macron = await html(MembersPage({ searchParams: sp({ presidence: "macron" }) }));
+    expect(text(macron)).toContain("entre le 20 mai 2022 et le 23 décembre 2024");
+    expect(dates(macron)).toEqual(["2022-05-20", "2024-12-23"]);
+
+    // Une période choisie plus étroite que la présidence reste celle affichée.
+    const narrow = await html(
+      MembersPage({
+        searchParams: sp({ presidence: "macron", du: "2023-01-01", au: "2023-06-30" }),
+      })
+    );
+    expect(text(narrow)).toContain("entre le 1er janvier 2023 et le 30 juin 2023");
   });
 
   it("n'affiche pas de raccourci quand une seule présidence est couverte", async () => {

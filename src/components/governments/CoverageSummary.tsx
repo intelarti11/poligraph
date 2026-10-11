@@ -23,7 +23,7 @@ export function CoverageSummary({
     {
       title: "Périmètre",
       body: coverage
-        ? `Périodes documentées : ${formatMonth(coverage.from)} à ${formatMonth(coverage.to)}. Les lacunes sont signalées gouvernement par gouvernement.`
+        ? `Périodes documentées : ${formatMonth(coverage.from)} à ${formatMonth(coverage.to)}. Les lacunes sont signalées sur chaque gouvernement concerné.`
         : "Aucune période documentée pour le moment.",
     },
     {
@@ -31,7 +31,7 @@ export function CoverageSummary({
       body:
         partial > 0
           ? `Partielle : ${plural(partial, "gouvernement comporte", "gouvernements comportent")} des changements ou des personnes encore à documenter.`
-          : "Indiquée gouvernement par gouvernement.",
+          : "Indiquée sur chaque gouvernement.",
     },
     {
       title: "Vérification",

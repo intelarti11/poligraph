@@ -6,9 +6,12 @@ import { PRESIDENCIES, presidencyOfGovernment } from "@/config/presidencies";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { Button } from "@/components/ui/button";
 import { MissingData } from "@/components/ui/MissingData";
+import { AffairItemListJsonLd } from "@/components/seo/JsonLd";
+import { SITE_URL } from "@/config/site";
 import { CoverageSummary } from "@/components/governments/CoverageSummary";
 import { GovernmentBadges } from "@/components/governments/GovernmentBadges";
 import { PolitiquesLocalNav } from "@/components/governments/PolitiquesLocalNav";
+import { PoliticianAvatar } from "@/components/politicians/PoliticianAvatar";
 import {
   governmentPeriod,
   isPartial,
@@ -135,6 +138,12 @@ export default async function GouvernementsPage({ searchParams }: PageProps) {
 
   return (
     <>
+      {filtered.length > 0 && (
+        <AffairItemListJsonLd
+          name="Gouvernements"
+          items={filtered.map((g) => ({ name: g.name, url: `${SITE_URL}${PATH}/${g.slug}` }))}
+        />
+      )}
       <PolitiquesLocalNav current="gouvernements" />
       <div className="container mx-auto flex flex-col gap-6 px-4 pb-10 pt-4">
         <Breadcrumb
@@ -270,27 +279,40 @@ export default async function GouvernementsPage({ searchParams }: PageProps) {
                       return (
                         <article
                           key={g.id}
-                          className="relative rounded-2xl border bg-card p-5 transition-colors has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring hover:border-primary/40"
+                          className="relative flex gap-4 rounded-2xl border bg-card p-5 transition-colors has-[a:focus-visible]:ring-2 has-[a:focus-visible]:ring-ring hover:border-primary/40"
                         >
-                          <h3 className="font-display text-lg font-bold">
-                            {/* The link covers the whole card (after:inset-0): one <a> per card. */}
-                            <Link
-                              href={`${PATH}/${g.slug}`}
-                              className="text-foreground underline-offset-4 outline-none after:absolute after:inset-0 after:rounded-2xl after:content-[''] hover:text-primary hover:underline"
-                            >
-                              {g.name}
-                            </Link>
-                          </h3>
-                          {period && (
-                            <p className="mt-1 text-[13px] text-muted-foreground">{period}</p>
-                          )}
-                          <div className="mt-3 flex flex-wrap items-center gap-3">
-                            <GovernmentBadges gov={g} showEnded={false} />
-                            <span className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground">
-                              <Users className="size-4" aria-hidden="true" />
-                              {participantsLabel(g)}
-                              {present && ` · ${present}`}
-                            </span>
+                          {/* Decorative: the title already names the Prime Minister. Photo only
+                              for a published profile (null otherwise), initials as fallback. */}
+                          <div aria-hidden="true" className="shrink-0">
+                            <PoliticianAvatar
+                              photoUrl={g.primeMinister.photoUrl}
+                              blobPhotoUrl={g.primeMinister.blobPhotoUrl}
+                              fullName={g.primeMinister.fullName}
+                              size="sm"
+                              className="size-12"
+                            />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <h3 className="font-display text-lg font-bold">
+                              {/* The link covers the whole card (after:inset-0): one <a> per card. */}
+                              <Link
+                                href={`${PATH}/${g.slug}`}
+                                className="text-foreground underline-offset-4 outline-none after:absolute after:inset-0 after:rounded-2xl after:content-[''] hover:text-primary hover:underline"
+                              >
+                                {g.name}
+                              </Link>
+                            </h3>
+                            {period && (
+                              <p className="mt-1 text-[13px] text-muted-foreground">{period}</p>
+                            )}
+                            <div className="mt-3 flex flex-wrap items-center gap-3">
+                              <GovernmentBadges gov={g} showEnded={false} />
+                              <span className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground">
+                                <Users className="size-4 shrink-0" aria-hidden="true" />
+                                {participantsLabel(g)}
+                                {present && ` · ${present}`}
+                              </span>
+                            </div>
                           </div>
                         </article>
                       );
