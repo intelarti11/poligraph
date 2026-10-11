@@ -14,6 +14,7 @@ import { recordApiCall } from "@/lib/api/usage-stats";
 import { buildVotesListingRedirect } from "@/lib/parlement-votes-redirect";
 import { ADMIN_COOKIE_NAME, verifySessionToken } from "@/lib/auth-token";
 import { getLegacyMeasureId } from "@/lib/presidentielle/measure-route";
+import { departementCommunesRewritePath } from "@/lib/territoires/departement-communes";
 
 // ─── Rate limit tiers ────────────────────────────────────────────
 
@@ -404,6 +405,16 @@ export async function proxy(request: NextRequest, event: NextFetchEvent) {
   if (legacyMeasureId !== null) {
     const target = request.nextUrl.clone();
     target.pathname = `/elections/presidentielle-2027/mesures/par-id/${legacyMeasureId}`;
+    return NextResponse.rewrite(target);
+  }
+
+  // A filtered commune list of a department page (?lettre=, ?page=) is served by its own cached
+  // segment, so the page route never reads searchParams. See departement-communes.ts.
+  const communesPath = departementCommunesRewritePath(pathname, request.nextUrl.searchParams);
+  if (communesPath !== null) {
+    const target = request.nextUrl.clone();
+    target.pathname = communesPath;
+    target.search = "";
     return NextResponse.rewrite(target);
   }
 
