@@ -71,6 +71,10 @@ Le paramètre \`limit\` plafonne chaque export à 50 000 enregistrements par req
         description: "Élus locaux (maires, conseillers municipaux, etc.)",
       },
       {
+        name: "Territoires",
+        description: "Communes, départements et régions : élus, parlementaires, résultats, sources",
+      },
+      {
         name: "Affaires",
         description: "Affaires judiciaires documentées avec sources",
       },
@@ -116,6 +120,9 @@ Le paramètre \`limit\` plafonne chaque export à 50 000 enregistrements par req
     "./src/app/api/v1/elus/[[]id[]]/route.ts",
     "./src/app/api/v1/elus/search/route.ts",
     "./src/app/api/v1/communes/[[]codeInsee[]]/route.ts",
+    "./src/app/api/v1/territoires/communes/[[]code[]]/route.ts",
+    "./src/app/api/v1/territoires/departements/[[]code[]]/route.ts",
+    "./src/app/api/v1/territoires/regions/[[]slug[]]/route.ts",
   ],
 };
 
