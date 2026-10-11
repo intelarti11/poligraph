@@ -59,6 +59,7 @@ const government = (overrides: Record<string, unknown> = {}) => ({
   resignedAt: null,
   endedAt: null,
   hasDerivedDate: false,
+  completeness: "COMPLETE",
   ...overrides,
 });
 
@@ -112,6 +113,60 @@ describe("Open Graph d'un gouvernement", () => {
 
     expect(imgSources(element)).toHaveLength(0);
     expect(textContent(element)).toContain("CR");
+  });
+
+  it("affirme le sourçage au Journal officiel pour une composition complète", async () => {
+    expect(textContent(await render())).toContain(
+      "Sa composition jour par jour, chaque nomination sourcée par le Journal officiel."
+    );
+  });
+
+  it("n'affirme aucun sourçage pour une composition partielle", async () => {
+    mocks.getPublishedGovernments.mockResolvedValue([government({ completeness: "PARTIAL" })]);
+
+    const rendered = textContent(await render());
+
+    expect(rendered).toContain("Sa composition documentée et les actes officiels qui l'appuient.");
+    expect(rendered).not.toMatch(/chaque nomination|jour par jour/);
+  });
+
+  it("n'affirme aucun sourçage quand une date est estimée", async () => {
+    mocks.getPublishedGovernments.mockResolvedValue([government({ hasDerivedDate: true })]);
+
+    expect(textContent(await render())).not.toMatch(/chaque nomination/);
+  });
+
+  it("affiche les initiales, sans photo, quand la fiche du Premier ministre n'est pas publiée", async () => {
+    // Debré : fiche exclue, la lecture filtrée par PUBLIC_POLITICIAN_WHERE ne renvoie rien.
+    mocks.getPublishedGovernments.mockResolvedValue([
+      government({
+        slug: "debre",
+        name: "Gouvernement Michel Debré",
+        primeMinister: { slug: "michel-debre", fullName: "Michel Debré", gender: "M" },
+      }),
+    ]);
+    mocks.findUnique.mockResolvedValue(null);
+
+    const element = await render("debre");
+
+    expect(mocks.loadOgPortrait).not.toHaveBeenCalled();
+    expect(imgSources(element)).toHaveLength(0);
+    expect(textContent(element)).toContain("MD");
+  });
+
+  it("saute les particules dans les initiales", async () => {
+    mocks.getPublishedGovernments.mockResolvedValue([
+      government({
+        primeMinister: {
+          slug: "maurice-couve-de-murville",
+          fullName: "Maurice Couve de Murville",
+          gender: "M",
+        },
+      }),
+    ]);
+    mocks.findUnique.mockResolvedValue(null);
+
+    expect(textContent(await render())).toContain("MC");
   });
 
   it("donne la date de nomination d'un gouvernement en cours, sans le dire en fonction", async () => {
