@@ -14,6 +14,8 @@ interface SelectFilterProps {
   onChange: (value: string) => void;
   placeholder?: string;
   className?: string;
+  /** Extra classes for the <select> itself (e.g. a 44 px height on a mobile-first page). */
+  selectClassName?: string;
   id?: string;
   label?: string;
   disabled?: boolean;
@@ -25,6 +27,7 @@ export function SelectFilter({
   onChange,
   placeholder,
   className,
+  selectClassName,
   id,
   label,
   disabled,
@@ -42,7 +45,8 @@ export function SelectFilter({
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
         className={cn(
-          "h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 cursor-pointer hover:border-primary/50 transition-colors disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-input"
+          "h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 cursor-pointer hover:border-primary/50 transition-colors disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-input",
+          selectClassName
         )}
       >
         {placeholder && <option value="">{placeholder}</option>}

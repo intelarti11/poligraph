@@ -175,7 +175,7 @@ export function SearchAutocomplete({
         onKeyDown={handleKeyDown}
         onFocus={() => results.length > 0 && setIsOpen(true)}
         placeholder={placeholder}
-        className="w-full"
+        className="h-11 w-full"
         autoComplete="off"
         aria-expanded={isOpen}
         aria-controls="search-results"

@@ -101,6 +101,7 @@ export function FilterBar({
           value={currentSort}
           onChange={(v) => updateParams({ sort: v === "alpha" ? "" : v })}
           options={sortOptions}
+          selectClassName="h-11"
         />
       </div>
 
@@ -114,13 +115,14 @@ export function FilterBar({
           value={currentMandate}
           onChange={(v) => updateParams({ mandate: v })}
           options={mandateOptions}
+          selectClassName="h-11"
         />
       </div>
 
       {/* Conviction filters: probité et financement politique, cumulés en « l'un ou l'autre » */}
       <label
         htmlFor="conviction-toggle"
-        className="flex items-center gap-2 min-h-11 text-sm text-muted-foreground cursor-pointer whitespace-nowrap"
+        className="flex items-center gap-2 min-h-11 text-sm text-muted-foreground cursor-pointer sm:whitespace-nowrap"
         title="Condamnation définitive pour atteinte à la probité"
       >
         <input
@@ -134,7 +136,7 @@ export function FilterBar({
       </label>
       <label
         htmlFor="financing-toggle"
-        className="flex items-center gap-2 min-h-11 text-sm text-muted-foreground cursor-pointer whitespace-nowrap"
+        className="flex items-center gap-2 min-h-11 text-sm text-muted-foreground cursor-pointer sm:whitespace-nowrap"
         title="Condamnation définitive pour financement illégal de campagne ou de parti"
       >
         <input

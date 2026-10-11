@@ -50,14 +50,14 @@ export function SearchForm({
         <button
           type="button"
           onClick={() => handleSearch(defaultSearch)}
-          className="h-9 px-4 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-sm font-medium transition-colors"
+          className="h-11 px-4 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 text-sm font-medium transition-colors"
         >
           Rechercher
         </button>
         {hasFilters && (
           <Link
             href="/politiques"
-            className="h-9 flex items-center px-4 border rounded-md hover:bg-muted text-sm text-muted-foreground transition-colors"
+            className="h-11 flex items-center px-4 border rounded-md hover:bg-muted text-sm text-muted-foreground transition-colors"
           >
             Réinitialiser
           </Link>
