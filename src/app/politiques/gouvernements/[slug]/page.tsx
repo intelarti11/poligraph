@@ -976,7 +976,7 @@ export default async function GovernmentPage({ params, searchParams }: PageProps
                         href={safeExternalUrl(gov.compositionVerifiedSourceUrl)!}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-primary underline-offset-4 hover:underline"
+                        className="inline-flex min-h-11 items-center text-primary underline-offset-4 hover:underline"
                       >
                         la source officielle
                       </a>
