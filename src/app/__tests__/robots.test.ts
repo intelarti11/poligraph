@@ -75,7 +75,10 @@ describe("robots.txt (production)", () => {
   });
 
   it("announces every sitemap shard", () => {
-    expect(asArray(robots.sitemap as string[])).toHaveLength(5);
+    // One entry per id returned by generateSitemaps() in src/app/sitemap.ts (5: Territoires).
+    const sitemaps = asArray(robots.sitemap as string[]);
+    expect(sitemaps).toHaveLength(6);
+    expect(sitemaps.at(-1)).toMatch(/\/sitemap\/5\.xml$/);
   });
 
   describe("generic crawlers", () => {
