@@ -21,9 +21,14 @@ export function formatMonth(day: string): string {
   });
 }
 
-/** Neutral « Nomination le … » (no per-civility agreement). */
-export function appointedOn(day: string): string {
-  return `Nomination le ${formatDay(day)}`;
+/**
+ * Neutral « Nomination le … » (no per-civility agreement). An estimated start (DERIVED: no act
+ * dates the appointment) is never written as an appointment date.
+ */
+export function appointedOn(day: string, evidence?: string | null): string {
+  return evidence === "DERIVED"
+    ? `Début estimé au ${formatDay(day)}, nomination non datée`
+    : `Nomination le ${formatDay(day)}`;
 }
 
 /**
@@ -51,18 +56,21 @@ export function episodeDates(
   ep: Pick<
     GovernmentEpisode,
     "start" | "end" | "endKind" | "currentAffairsEndedAt" | "lastConfirmedAt"
-  >,
+  > &
+    Partial<Pick<GovernmentEpisode, "startEvidence" | "endEvidence">>,
   gov:
     | Pick<PublishedGovernment, "currentAffairsAttested" | "resignedEvidence" | "endedAt">
     | undefined
 ): string {
   if (ep.end) {
-    let text = `du ${formatDay(ep.start)} au ${formatDay(ep.end)}`;
+    const startNote = ep.startEvidence === "DERIVED" ? " (date estimée)" : "";
+    const endNote = ep.endEvidence === "DERIVED" ? " (date estimée)" : "";
+    let text = `du ${formatDay(ep.start)}${startNote} au ${formatDay(ep.end)}${endNote}`;
     const caretakerEnd = gov ? lastCaretakerDay(gov, ep) : null;
     if (caretakerEnd) text += `, puis affaires courantes jusqu'au ${formatDay(caretakerEnd)}`;
     return text;
   }
-  const head = appointedOn(ep.start);
+  const head = appointedOn(ep.start, ep.startEvidence);
   return ep.lastConfirmedAt
     ? `${head} ; fonction confirmée au ${formatDay(ep.lastConfirmedAt)}`
     : `${head} ; fin de fonction non documentée`;

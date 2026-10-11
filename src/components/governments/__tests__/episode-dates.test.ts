@@ -277,3 +277,26 @@ describe("lastDayShortcutLabel", () => {
     expect(lastDayShortcutLabel({ ...attested, endedAt: null })).toBe("Composition vérifiée");
   });
 });
+
+describe("dates estimées (DERIVED)", () => {
+  it("n'écrit jamais un début estimé comme une date de nomination", () => {
+    expect(appointedOn("1980-10-31", "DERIVED")).toBe(
+      "Début estimé au 31 octobre 1980, nomination non datée"
+    );
+    expect(appointedOn("1980-10-31", "ACT")).toBe("Nomination le 31 octobre 1980");
+  });
+
+  it("signale les bornes estimées d'une fonction terminée", () => {
+    const text = episodeDates(
+      {
+        ...episode,
+        start: "1980-10-31",
+        end: "1980-12-13",
+        startEvidence: "DERIVED",
+        endEvidence: "DERIVED",
+      },
+      undefined
+    );
+    expect(text).toBe("du 31 octobre 1980 (date estimée) au 13 décembre 1980 (date estimée)");
+  });
+});
