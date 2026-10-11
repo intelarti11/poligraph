@@ -165,7 +165,13 @@ describe("transitionDecision", () => {
       { action: "PUBLISH", reviewedBy: "Relecteur", reason: null },
       META
     );
-    expect(result).toEqual({ ok: true, id: "dec-1", status: "PUBLISHED" });
+    expect(result).toEqual({
+      ok: true,
+      id: "dec-1",
+      status: "PUBLISHED",
+      visibilityChanged: true,
+      communeId: "35238",
+    });
     expect(h.tx.decision.updateMany).toHaveBeenCalledWith({
       where: { id: "dec-1", status: "IN_REVIEW" },
       data: expect.objectContaining({ status: "PUBLISHED", reviewedBy: "Relecteur" }),

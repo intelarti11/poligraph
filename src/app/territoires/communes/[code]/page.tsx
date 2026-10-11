@@ -14,7 +14,7 @@ import { getCommuneDossier } from "@/lib/data/territoires";
 import { missingEntityMetadata } from "@/lib/seo/not-found-metadata";
 import { territoireCommuneRobotsMetadata } from "@/lib/seo/territoire-robots";
 import { communeDescription, communeTitle } from "@/lib/territoires/commune-display";
-import { territoireCommunePath } from "@/lib/territoires/paths";
+import { territoireCommuneDecisionsPath, territoireCommunePath } from "@/lib/territoires/paths";
 
 // ISR: 24 h backstop; freshness comes from the reader's cache tags.
 export const revalidate = 86400;
@@ -61,6 +61,14 @@ export default async function TerritoireCommunePage({ params }: PageProps) {
   if (!dossier) notFound();
 
   const { identity } = dossier;
+  // No link to the decisions while none is published (plan §7).
+  const anchors =
+    dossier.decisionsPubliees > 0
+      ? [
+          ...ANCHORS,
+          { href: territoireCommuneDecisionsPath(identity.inseeCode), label: "Décisions" },
+        ]
+      : ANCHORS;
   const departmentName = identity.department.name ?? identity.territoireHorsRegion?.name ?? null;
 
   return (
@@ -85,7 +93,7 @@ export default async function TerritoireCommunePage({ params }: PageProps) {
       <div className="container mx-auto max-w-6xl px-4 py-6 md:py-8">
         <nav aria-label="Sections de la page" className="mb-6">
           <ul className="flex flex-wrap gap-2">
-            {ANCHORS.map((a) => (
+            {anchors.map((a) => (
               <li key={a.href}>
                 <a
                   href={a.href}

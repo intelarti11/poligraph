@@ -67,10 +67,26 @@ export async function readPoliticianIdentity(where: PoliticianWhere) {
               europeanGroup: { select: { name: true } },
             },
           },
-          // Commune population feeds the SEO richness predicate (politician-robots).
+          // Commune population feeds the SEO richness predicate (politician-robots). The count
+          // of published council decisions decides the link to them (#1052, lot 2).
           localData: {
             select: {
-              commune: { select: { population: true } },
+              commune: {
+                select: {
+                  id: true,
+                  population: true,
+                  _count: {
+                    select: {
+                      decisions: {
+                        where: {
+                          status: "PUBLISHED",
+                          institution: { kind: "CONSEIL_MUNICIPAL" },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
             },
           },
           // Link from a ministerial mandate to its government page, when that one is published.
@@ -122,16 +138,22 @@ export async function readPoliticianIdentity(where: PoliticianWhere) {
   // `governmentData` is kept only for a PUBLISHED government. Prisma returns `null` for every other
   // mandate, and a key added to every stored document would change every profile's fingerprint
   // (mass invalidation). Documents stored before it was read lack the key too.
+  // `localData.commune` carries the population only, plus `decisionsCommuneId` when the commune
+  // has a published council decision (#1052). Same reason: a key or a count added to every
+  // stored document would change their fingerprints, and a count would re-invalidate every
+  // elected official of the commune at each new decision. Only the boolean reaches the document.
   const mandates: Array<
-    Omit<(typeof politician.mandates)[number], "party" | "governmentData"> & {
+    Omit<(typeof politician.mandates)[number], "party" | "governmentData" | "localData"> & {
       party: { name: string } | null;
       governmentData?: ProfileMandateGovernment;
+      localData: ProfileMandateLocal | null;
     }
-  > = politician.mandates.map(({ governmentData, ...mandate }) => ({
+  > = politician.mandates.map(({ governmentData, localData, ...mandate }) => ({
     ...mandate,
     party:
       mandate.party && mandate.party._count.politicians > 0 ? { name: mandate.party.name } : null,
     ...(governmentData?.government?.publicationStatus === "PUBLISHED" ? { governmentData } : {}),
+    localData: localData && { commune: localData.commune && profileCommune(localData.commune) },
   }));
   const partyHistory = politician.partyHistory.flatMap((membership) => {
     if (!membership.party || membership.party._count.politicians === 0) return [];
@@ -148,6 +170,20 @@ export async function readPoliticianIdentity(where: PoliticianWhere) {
     ];
   });
   return { ...politician, mandates, partyHistory };
+}
+
+/** Commune of a local mandate, as stored in the profile document. */
+export type ProfileMandateLocal = {
+  commune: { population: number | null; decisionsCommuneId?: string } | null;
+};
+
+export function profileCommune(commune: {
+  id: string;
+  population: number | null;
+  _count: { decisions: number };
+}): NonNullable<ProfileMandateLocal["commune"]> {
+  const { id, _count, ...rest } = commune;
+  return _count.decisions > 0 ? { ...rest, decisionsCommuneId: id } : rest;
 }
 
 /** Government of a ministerial mandate, as stored in the profile document. */

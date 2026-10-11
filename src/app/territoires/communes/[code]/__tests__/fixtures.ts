@@ -18,6 +18,7 @@ const NO_PRESIDENTIELLE = { blocks: [], agregatTerritoire: null };
 
 export function dossier(overrides: Partial<CommuneDossier> = {}): CommuneDossier {
   return {
+    decisionsPubliees: 0,
     identity: {
       inseeCode: "35238",
       name: "Rennes",

@@ -152,11 +152,15 @@ export async function updateDecision(
   });
 }
 
+export type DecisionTransitionResult =
+  | { ok: true; id: string; status: CurationStatus; visibilityChanged: boolean; communeId: string }
+  | Extract<DecisionWriteResult, { ok: false }>;
+
 export async function transitionDecision(
   id: string,
   input: DecisionTransitionInput,
   meta: RequestMeta
-): Promise<DecisionWriteResult> {
+): Promise<DecisionTransitionResult> {
   const missing = missingTransitionInput(input);
   if (missing) return { ok: false, httpStatus: 400, message: missing };
 
@@ -213,10 +217,11 @@ export async function transitionDecision(
   });
 
   // Only a change of public visibility reaches the public pages, keyed by the commune concerned.
-  if (result.ok && (to === "PUBLISHED" || current.status === "PUBLISHED")) {
+  const visibilityChanged = to === "PUBLISHED" || current.status === "PUBLISHED";
+  if (result.ok && visibilityChanged) {
     revalidateTags([`territoire:${current.communeId}`]);
   }
-  return result;
+  return result.ok ? { ...result, visibilityChanged, communeId: current.communeId } : result;
 }
 
 // ─── Institutions and sources ─────────────────────────────────
@@ -279,4 +284,21 @@ export async function createTerritorialSource(
     });
     return { ok: true as const, id: source.id };
   });
+}
+
+/** Municipal mandates whose profile shows a link to the commune's decisions. */
+export const MUNICIPAL_MANDATE_TYPES = ["MAIRE", "ADJOINT_MAIRE", "CONSEILLER_MUNICIPAL"] as const;
+
+/**
+ * Politicians whose profile document carries the commune's published-decision count. Bounded:
+ * a commune's council has at most 69 seats, kept with margin for past mandates.
+ */
+export async function municipalPoliticianIds(communeId: string): Promise<string[]> {
+  const rows = await db.mandate.findMany({
+    where: { type: { in: [...MUNICIPAL_MANDATE_TYPES] }, localData: { communeId } },
+    select: { politicianId: true },
+    distinct: ["politicianId"],
+    take: 300,
+  });
+  return rows.map((r) => r.politicianId);
 }

@@ -392,6 +392,8 @@ export interface CommuneDossier {
   elections: { municipales2026: MunicipalesBlock | null; presidentielles: CommunePresidentielles };
   /** Null until the first intercommunality import: no block is shown then. */
   intercommunalite: IntercommunaliteBlock | null;
+  /** Published curated decisions concerning the commune (#1052, lot 2). 0 hides the link. */
+  decisionsPubliees: number;
   coverage: CoverageEntry[];
 }
 
@@ -638,6 +640,9 @@ async function readCommuneDossier(inseeCode: string): Promise<CommuneDossier | n
     ? { label: populationEnVigueur.vintage.sourceLabel, url: populationEnVigueur.vintage.sourceUrl }
     : POPULATION_SOURCE;
   const populationImportedAt = populationEnVigueur?.verifiedAt ?? importedAt;
+  const decisionsPubliees = await db.decision.count({
+    where: { communeId: inseeCode, status: "PUBLISHED" },
+  });
   const intercommunalite = await readIntercommunalites(inseeCode);
   const presidentielles = await readCommunePresidentielles(inseeCode, commune.departmentCode);
   const lastPresidentielle = presidentielles.blocks[0];
@@ -741,6 +746,7 @@ async function readCommuneDossier(inseeCode: string): Promise<CommuneDossier | n
   ];
 
   return {
+    decisionsPubliees,
     identity: {
       inseeCode: commune.id,
       name: commune.name,

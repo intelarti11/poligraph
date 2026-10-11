@@ -7,7 +7,7 @@ import type { SerializedMandate, MandateType } from "@/types";
 import type { ProfileMandateGovernment } from "@/lib/data/politician-profile-reads";
 import { mandateGovernmentLink } from "@/components/governments/profile-link";
 import { formatDay } from "@/components/governments/format";
-import { mandateTerritoireHref } from "@/lib/territoires/mandate-link";
+import { mandateDecisionsHref, mandateTerritoireHref } from "@/lib/territoires/mandate-link";
 
 const MAIRE_TYPES: MandateType[] = ["MAIRE", "ADJOINT_MAIRE", "CONSEILLER_MUNICIPAL"];
 
@@ -41,6 +41,21 @@ interface MandateTimelineProps {
   civility?: string | null;
   /** « gouvernements » feature flag, resolved by the server page. */
   governmentsEnabled?: boolean;
+}
+
+/** Collective decisions of the council during a municipal mandate, once one is published. */
+function DecisionsLink({ mandate }: { mandate: MandateWithGroup }) {
+  const href = mandateDecisionsHref(mandate);
+  if (!href) return null;
+  return (
+    <Link
+      href={href}
+      prefetch={false}
+      className="inline-flex min-h-11 items-center text-xs text-primary hover:underline"
+    >
+      Décisions du conseil pendant ce mandat (collectives) →
+    </Link>
+  );
 }
 
 /** Links to the government of a ministerial mandate, when that government is published. */
@@ -276,6 +291,7 @@ export function MandateTimeline({
                       })()}
                     </div>
                     <GovernmentLinks mandate={mandate} enabled={governmentsEnabled} />
+                    <DecisionsLink mandate={mandate} />
                   </div>
                 </div>
               );
@@ -350,6 +366,7 @@ export function MandateTimeline({
                                     </span>
                                   </div>
                                   <GovernmentLinks mandate={mandate} enabled={governmentsEnabled} />
+                                  <DecisionsLink mandate={mandate} />
                                 </div>
                               );
                             })}
