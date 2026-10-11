@@ -308,7 +308,7 @@ export default async function GouvernementsPage({ searchParams }: PageProps) {
                             <div className="mt-3 flex flex-wrap items-center gap-3">
                               <GovernmentBadges gov={g} showEnded={false} />
                               <span className="inline-flex items-center gap-1.5 text-[13px] text-muted-foreground">
-                                <Users className="size-4" aria-hidden="true" />
+                                <Users className="size-4 shrink-0" aria-hidden="true" />
                                 {participantsLabel(g)}
                                 {present && ` · ${present}`}
                               </span>
