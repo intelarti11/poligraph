@@ -98,12 +98,21 @@ export type CoverageBloc =
   | "conseil"
   | "communes";
 
+/**
+ * Reservation attached to a block whose fact is shown with a caveat.
+ * CIRCONSCRIPTION_NON_VERIFIEE: the deputy is the one of the constituency recorded for the
+ * commune, and nothing in the base says the commune lies in that constituency alone.
+ * PLUSIEURS_CIRCONSCRIPTIONS: the commune is known to span several constituencies.
+ */
+export type CoverageReserve = "CIRCONSCRIPTION_NON_VERIFIEE" | "PLUSIEURS_CIRCONSCRIPTIONS";
+
 export interface CoverageEntry {
   bloc: CoverageBloc;
   state: BlockState;
   source: SourceRef | null;
   /** ISO date the fact refers to or was last confirmed, null when unknown. */
   date: string | null;
+  reserve?: CoverageReserve;
 }
 
 // ─── Constants ──────────────────────────────────────────────────
@@ -126,6 +135,9 @@ const MUNICIPALES_2026_SLUG = "municipales-2026";
  * designates no deputy.
  */
 const PLM_COMMUNES = new Set(["75056", "69123", "13055"]);
+
+/** From this population on, a single recorded constituency is never shown as established. */
+export const DEPUTE_UNIQUE_MAX_POPULATION = 20_000;
 
 const COG_SOURCE: SourceRef = {
   label: "Code officiel géographique (INSEE), via geo.api.gouv.fr",
@@ -245,10 +257,40 @@ export interface MunicipalesListe {
   round1Pct: number | null;
   round2Votes: number | null;
   round2Pct: number | null;
-  /** Derived from round1Pct > 50: a list, not a commune, is elected at the first round. */
+  /** True only when `electionAuPremierTour` is ELUE. */
   elueAuPremierTour: boolean;
+  /**
+   * Election at the first round (Code électoral, art. L. 262): absolute majority of the votes
+   * cast AND at least a quarter of the registered voters. NON_ETABLI when the registered count
+   * is missing and the results import does not say either.
+   */
+  electionAuPremierTour: PremierTourVerdict;
   /** Elected at the second round, as recorded by the results import. */
   elueAuSecondTour: boolean;
+}
+
+export type PremierTourVerdict = "ELUE" | "NON_ELUE" | "NON_ETABLI";
+
+/**
+ * A list is elected at the first round only with more than half of the votes cast and a number
+ * of votes at least equal to a quarter of the registered voters (art. L. 262 du Code électoral).
+ * Without the registered count, the import's own `isElected` is the only other evidence, and it
+ * is trusted only when the list did not go to a second round.
+ */
+export function resolvePremierTour(input: {
+  round1Pct: number | null;
+  round1Votes: number | null;
+  registeredVoters: number | null;
+  round2Pct: number | null;
+  importIsElected: boolean;
+}): PremierTourVerdict {
+  const { round1Pct, round1Votes, registeredVoters } = input;
+  if (round1Pct == null || round1Pct <= 50) return "NON_ELUE";
+  if (input.round2Pct != null) return "NON_ELUE";
+  if (registeredVoters != null && registeredVoters > 0 && round1Votes != null) {
+    return round1Votes * 4 >= registeredVoters ? "ELUE" : "NON_ELUE";
+  }
+  return input.importIsElected ? "ELUE" : "NON_ETABLI";
 }
 
 export interface Participation {
@@ -308,7 +350,14 @@ export interface CommuneDossier {
        * is the one of the recorded constituency, and may depend on the address.
        */
       couvertureCirconscriptions: "PLUSIEURS" | "NON_VERIFIEE";
+      /** Named only when state is DISPONIBLE. */
       deputes: ParlementaireRef[];
+      /**
+       * Deputy of the recorded constituency, whatever the state, so a page can name them WITH
+       * the reservation. Empty for PLM communes, where the recorded number designates nobody.
+       */
+      deputesCirconscriptionEnregistree: ParlementaireRef[];
+      reserve: CoverageReserve;
     };
     senateurs: { state: BlockState; senateurs: ParlementaireRef[] };
   };
@@ -456,10 +505,19 @@ async function readMunicipales2026(inseeCode: string): Promise<MunicipalesBlock 
     take: 2,
   });
 
+  const registeredT1 = rounds.find((r) => r.round === 1)?.registeredVoters ?? null;
+
   const listes: MunicipalesListe[] = heads.map((h) => {
     const round1Pct = h.round1Pct != null ? Number(h.round1Pct) : null;
     const round2Pct = h.round2Pct != null ? Number(h.round2Pct) : null;
-    const elueAuPremierTour = round1Pct != null && round1Pct > 50;
+    const electionAuPremierTour = resolvePremierTour({
+      round1Pct,
+      round1Votes: h.round1Votes,
+      registeredVoters: registeredT1,
+      round2Pct,
+      importIsElected: h.isElected,
+    });
+    const elueAuPremierTour = electionAuPremierTour === "ELUE";
     const isPublic = h.politician?.publicationStatus === PUBLIC_POLITICIAN_PUBLICATION_STATUS;
     return {
       listName: h.listName,
@@ -472,6 +530,7 @@ async function readMunicipales2026(inseeCode: string): Promise<MunicipalesBlock 
       round2Votes: h.round2Votes,
       round2Pct,
       elueAuPremierTour,
+      electionAuPremierTour,
       elueAuSecondTour: !elueAuPremierTour && round2Pct != null && h.isElected,
     };
   });
@@ -549,12 +608,20 @@ async function readCommuneDossier(inseeCode: string): Promise<CommuneDossier | n
     circo != null && !plusieursCirconscriptions
       ? departmentDeputies.filter((d) => parseConstituencyNumber(d.constituency) === circo)
       : [];
+  // A commune of 20,000 inhabitants or more may well lie across several constituencies, and the
+  // single recorded number cannot say otherwise: its deputy is named with the reservation, never
+  // as established. Unknown population is treated the same way, nothing is presumed.
+  const mayBeSplit =
+    commune.population == null || commune.population >= DEPUTE_UNIQUE_MAX_POPULATION;
   const deputesState: BlockState =
-    deputes.length === 1
+    deputes.length === 1 && !mayBeSplit
       ? "DISPONIBLE"
       : circo == null && !plusieursCirconscriptions && departmentDeputies.length === 0
         ? "ABSENT"
         : "NON_ETABLI";
+  const deputesReserve: CoverageReserve = plusieursCirconscriptions
+    ? "PLUSIEURS_CIRCONSCRIPTIONS"
+    : "CIRCONSCRIPTION_NON_VERIFIEE";
 
   const region = getRegionForDepartment(commune.departmentCode);
   const latestDeputyConfirmation = deputes[0]?.lastConfirmedAt ?? null;
@@ -595,6 +662,7 @@ async function readCommuneDossier(inseeCode: string): Promise<CommuneDossier | n
       state: deputesState,
       source: deputes[0]?.source ?? null,
       date: latestDeputyConfirmation,
+      reserve: deputesReserve,
     },
     {
       bloc: "senateurs",
@@ -636,6 +704,8 @@ async function readCommuneDossier(inseeCode: string): Promise<CommuneDossier | n
         circonscriptionEnregistree: circo,
         couvertureCirconscriptions: plusieursCirconscriptions ? "PLUSIEURS" : "NON_VERIFIEE",
         deputes: deputesState === "DISPONIBLE" ? deputes : [],
+        deputesCirconscriptionEnregistree: deputes,
+        reserve: deputesReserve,
       },
       senateurs: { state: senateurs.length > 0 ? "DISPONIBLE" : "ABSENT", senateurs },
     },
@@ -654,6 +724,11 @@ export interface PresidenceBlock {
   source: SourceRef | null;
 }
 
+/**
+ * Executive mandates are entered by hand, not synced: on 2026-10-11 the base held one current
+ * PRESIDENT_REGION (Martinique) and one PRESIDENT_DEPARTEMENT (Bouches-du-Rhône). An empty
+ * result therefore means "not recorded", never "no president": it is NON_ETABLI, not ABSENT.
+ */
 async function readPresidence(where: Prisma.MandateWhereInput): Promise<PresidenceBlock> {
   const holders = await db.mandate.findMany({
     where: { ...where, isCurrent: true },
@@ -669,7 +744,7 @@ async function readPresidence(where: Prisma.MandateWhereInput): Promise<Presiden
     holders.map((h) => ({ ...h, publicationStatus: h.politician.publicationStatus }))
   );
   return {
-    state,
+    state: state === "ABSENT" ? "NON_ETABLI" : state,
     person: holder ? personRef(holder.politician) : null,
     title: holder?.title ?? null,
     lastConfirmedAt: iso(holder?.lastConfirmedAt),
@@ -695,7 +770,7 @@ export interface RegionTerritoire {
   departements: RegionDepartement[];
   communeCount: number;
   presidence: PresidenceBlock;
-  /** Regional councillors in the base: none today, so the composition is not established. */
+  /** Regional councillors are not synced: the composition is never established (NON_ETABLI). */
   conseil: { state: BlockState; recordedCount: number };
   coverage: CoverageEntry[];
 }
@@ -750,9 +825,18 @@ async function readRegionTerritoire(regionCode: string): Promise<RegionTerritoir
   const communes = await countCommunesByDepartment(region.departmentCodes);
   const deputes = await countParlementairesByDepartment("DEPUTE", region.departmentCodes);
   const senateurs = await countParlementairesByDepartment("SENATEUR", region.departmentCodes);
-  // Matched on the region name carried by the mandate: no structured region key exists on
-  // PRESIDENT_REGION rows, and a department code would be wrong for a multi-department region.
-  const presidence = await readPresidence({ type: "PRESIDENT_REGION", constituency: region.name });
+  // No structured region key exists on PRESIDENT_REGION rows (MandateLocal.regionCode is empty).
+  // The department code identifies the region only when the region has a single department
+  // (the five DROM); otherwise the region name carried by `constituency` is the only key.
+  const presidence = await readPresidence({
+    type: "PRESIDENT_REGION",
+    OR: [
+      { constituency: region.name },
+      ...(region.departmentCodes.length === 1
+        ? [{ departmentCode: region.departmentCodes[0]! }]
+        : []),
+    ],
+  });
   const conseillers = await db.mandate.count({
     where: {
       type: "CONSEILLER_REGIONAL",
@@ -772,7 +856,8 @@ async function readRegionTerritoire(regionCode: string): Promise<RegionTerritoir
 
   const communeCount = departements.reduce((n, d) => n + d.communeCount, 0);
   const importedAt = await getCommunesImportDate();
-  const conseilState: BlockState = conseillers > 0 ? "NON_ETABLI" : "ABSENT";
+  // Councillors are not synced either: zero recorded says nothing about the council.
+  const conseilState: BlockState = "NON_ETABLI";
 
   return {
     region: {
@@ -827,7 +912,7 @@ export interface DepartementTerritoire {
     rows: DepartementCommuneRow[];
   };
   presidence: PresidenceBlock;
-  /** Departmental councillors recorded in the base: partial at best, never a composition. */
+  /** Departmental councillors are not synced: partial at best, always NON_ETABLI. */
   conseil: { state: BlockState; recordedCount: number };
   parlement: { deputeCount: number; senateurCount: number };
   coverage: CoverageEntry[];
@@ -936,7 +1021,8 @@ async function readDepartementTerritoire(
   const deputes = await countParlementairesByDepartment("DEPUTE", [departmentCode]);
   const senateurs = await countParlementairesByDepartment("SENATEUR", [departmentCode]);
   const importedAt = await getCommunesImportDate();
-  const conseilState: BlockState = conseillers > 0 ? "NON_ETABLI" : "ABSENT";
+  // Councillors are not synced either: zero recorded says nothing about the council.
+  const conseilState: BlockState = "NON_ETABLI";
 
   return {
     department: departmentRef(departmentCode),

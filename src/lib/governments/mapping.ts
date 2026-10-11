@@ -42,7 +42,16 @@ export const GOVERNMENT_SELECT = {
   slug: true,
   name: true,
   sequence: true,
-  primeMinister: { select: { slug: true, fullName: true, civility: true } },
+  primeMinister: {
+    select: {
+      slug: true,
+      fullName: true,
+      civility: true,
+      publicationStatus: true,
+      photoUrl: true,
+      blobPhotoUrl: true,
+    },
+  },
   primeMinisterAppointedAt: true,
   primeMinisterAppointedEvidence: true,
   primeMinisterAppointedDetermination: true,
@@ -131,7 +140,14 @@ export type ActRef = {
 export type PublishedGovernment = GovernmentDates & {
   name: string;
   sequence: number;
-  primeMinister: { slug: string; fullName: string; gender: Gender };
+  // Photo seulement si la fiche est publiée (même règle que `personVisibility`), sinon `null`.
+  primeMinister: {
+    slug: string;
+    fullName: string;
+    gender: Gender;
+    photoUrl: string | null;
+    blobPhotoUrl: string | null;
+  };
   completeness: "COMPLETE" | "PARTIAL";
   pendingChanges: number | null;
   coverageNote: string | null;
@@ -357,6 +373,7 @@ export function toPublishedGovernment(
   row: GovernmentRow,
   counts: ParticipantCounts = { participantCount: 0, hiddenCount: 0 }
 ): PublishedGovernment {
+  const pmPublished = row.primeMinister.publicationStatus === "PUBLISHED";
   return {
     ...toGovernmentDates(row),
     name: row.name,
@@ -365,6 +382,8 @@ export function toPublishedGovernment(
       slug: row.primeMinister.slug,
       fullName: row.primeMinister.fullName,
       gender: genderOf(row.primeMinister.civility),
+      photoUrl: pmPublished ? row.primeMinister.photoUrl : null,
+      blobPhotoUrl: pmPublished ? row.primeMinister.blobPhotoUrl : null,
     },
     completeness: row.completeness,
     pendingChanges: row.pendingChanges,

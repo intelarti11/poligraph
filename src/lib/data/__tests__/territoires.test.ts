@@ -39,6 +39,7 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
+import { PUBLIC_POLITICIAN_WHERE } from "@/lib/api/public-contract";
 import {
   getCommuneDossier,
   getDepartementTerritoire,
@@ -46,6 +47,7 @@ import {
   matchDepartements,
   matchRegions,
   parseConstituencyNumber,
+  resolvePremierTour,
   resolveTitulaire,
   searchTerritoires,
 } from "../territoires";
@@ -133,6 +135,42 @@ beforeEach(() => {
 });
 
 describe("fonctions pures", () => {
+  it("applique l'article L. 262 : majorité absolue et quart des inscrits", () => {
+    const base = { round2Pct: null, importIsElected: false };
+    expect(
+      resolvePremierTour({ ...base, round1Pct: 60, round1Votes: 250, registeredVoters: 1000 })
+    ).toBe("ELUE");
+    expect(
+      resolvePremierTour({ ...base, round1Pct: 60, round1Votes: 249, registeredVoters: 1000 })
+    ).toBe("NON_ELUE");
+    expect(
+      resolvePremierTour({ ...base, round1Pct: 50, round1Votes: 900, registeredVoters: 1000 })
+    ).toBe("NON_ELUE");
+    // Inscrits inconnus : seul l'import peut l'affirmer, sinon rien n'est établi.
+    expect(
+      resolvePremierTour({ ...base, round1Pct: 60, round1Votes: 600, registeredVoters: null })
+    ).toBe("NON_ETABLI");
+    expect(
+      resolvePremierTour({
+        round1Pct: 60,
+        round1Votes: 600,
+        registeredVoters: null,
+        round2Pct: null,
+        importIsElected: true,
+      })
+    ).toBe("ELUE");
+    // Une liste présente au second tour n'a pas été élue au premier.
+    expect(
+      resolvePremierTour({
+        round1Pct: 55,
+        round1Votes: 600,
+        registeredVoters: null,
+        round2Pct: 58,
+        importIsElected: true,
+      })
+    ).toBe("NON_ELUE");
+  });
+
   it("lit le numéro de circonscription d'un libellé de mandat", () => {
     expect(parseConstituencyNumber("Vendée (3)")).toBe(3);
     expect(parseConstituencyNumber("Rhône (13)")).toBe(13);
@@ -183,11 +221,61 @@ describe("getCommuneDossier", () => {
     expect(dossier?.maire.person?.slug).toBe("maire");
     expect(dossier?.maire.functionStart).toBe("2026-03-22T00:00:00.000Z");
     expect(dossier?.maire.source?.label).toBe("Répertoire National des Élus");
-    expect(dossier?.parlement.deputes.state).toBe("DISPONIBLE");
-    expect(dossier?.parlement.deputes.deputes.map((d) => d.slug)).toEqual(["dep1"]);
-    expect(dossier?.parlement.deputes.couvertureCirconscriptions).toBe("NON_VERIFIEE");
+    // 230 890 habitants : le député de la circonscription enregistrée est nommé avec réserve,
+    // jamais présenté comme établi.
+    expect(dossier?.parlement.deputes.state).toBe("NON_ETABLI");
+    expect(dossier?.parlement.deputes.deputes).toEqual([]);
+    expect(dossier?.parlement.deputes.deputesCirconscriptionEnregistree.map((d) => d.slug)).toEqual(
+      ["dep1"]
+    );
+    expect(dossier?.parlement.deputes.reserve).toBe("CIRCONSCRIPTION_NON_VERIFIEE");
+    expect(dossier?.coverage.find((c) => c.bloc === "deputes")).toMatchObject({
+      state: "NON_ETABLI",
+      reserve: "CIRCONSCRIPTION_NON_VERIFIEE",
+    });
     expect(dossier?.parlement.senateurs.senateurs).toHaveLength(1);
     expect(dossier?.identity.region?.name).toBe("Bretagne");
+  });
+
+  it("présente le député d'une commune de moins de 20 000 habitants, avec la réserve", async () => {
+    mocks.communeFindUnique.mockResolvedValue({ ...RENNES, population: 19_999 });
+    serveMandates([{ id: "dep1", type: "DEPUTE", constituency: "Ille-et-Vilaine (1)" }]);
+
+    const deputes = (await getCommuneDossier("35238"))?.parlement.deputes;
+
+    expect(deputes?.state).toBe("DISPONIBLE");
+    expect(deputes?.deputes.map((d) => d.slug)).toEqual(["dep1"]);
+    expect(deputes?.reserve).toBe("CIRCONSCRIPTION_NON_VERIFIEE");
+  });
+
+  it("ne présume rien d'une population inconnue pour le député", async () => {
+    mocks.communeFindUnique.mockResolvedValue({ ...RENNES, population: null });
+    serveMandates([{ id: "dep1", type: "DEPUTE", constituency: "Ille-et-Vilaine (1)" }]);
+    expect((await getCommuneDossier("35238"))?.parlement.deputes.state).toBe("NON_ETABLI");
+  });
+
+  it("filtre les fiches publiques dans la requête des maires de secteur et des parlementaires", async () => {
+    await getCommuneDossier("35238");
+
+    const whereByType = new Map(
+      mocks.mandateFindMany.mock.calls.map(([args]) => [args.where.type, args.where])
+    );
+    for (const type of ["MAIRE_ARRONDISSEMENT", "DEPUTE", "SENATEUR"]) {
+      expect(whereByType.get(type)?.politician, type).toEqual(PUBLIC_POLITICIAN_WHERE);
+      expect(whereByType.get(type)?.isCurrent, type).toBe(true);
+    }
+  });
+
+  it("n'interroge que les listes publiées et lit le statut de publication des têtes de liste", async () => {
+    await getCommuneDossier("35238");
+
+    const args = mocks.candidacyFindMany.mock.calls[0]![0];
+    expect(args.where).toMatchObject({
+      communeId: "35238",
+      listPosition: 1,
+      OR: [{ electoralListId: null }, { electoralList: { publicationStatus: "PUBLISHED" } }],
+    });
+    expect(args.select.politician.select.publicationStatus).toBe(true);
   });
 
   it("ne nomme aucun maire quand deux sont courants, dont un non public", async () => {
@@ -251,6 +339,15 @@ describe("getCommuneDossier", () => {
   });
 
   it("déclare élue au premier tour la seule liste au-delà de 50 %, jamais à 50 %", async () => {
+    mocks.roundFindMany.mockResolvedValue([
+      {
+        round: 1,
+        registeredVoters: 1200,
+        actualVoters: 950,
+        validVotes: 900,
+        participationRate: 79.17,
+      },
+    ]);
     mocks.candidacyFindMany.mockResolvedValue([
       {
         listName: "Liste A",
@@ -278,9 +375,40 @@ describe("getCommuneDossier", () => {
 
     expect(block?.state).toBe("DISPONIBLE");
     expect(block?.listes.map((l) => l.elueAuPremierTour)).toEqual([false, true]);
+    expect(block?.listes.map((l) => l.electionAuPremierTour)).toEqual(["NON_ELUE", "ELUE"]);
     // Un candidat lié à une fiche non publique reste un nom de bulletin, sans lien.
     expect(block?.listes[1]?.teteDeListe).toEqual({ name: "B", person: null });
     expect(mocks.candidacyFindMany.mock.calls[0]![0].take).toBeLessThanOrEqual(50);
+  });
+
+  it("ne déclare pas élue au premier tour une liste majoritaire sous le quart des inscrits", async () => {
+    // Forte abstention : 60 % des exprimés, mais 200 voix pour 1 000 inscrits.
+    mocks.roundFindMany.mockResolvedValue([
+      {
+        round: 1,
+        registeredVoters: 1000,
+        actualVoters: 340,
+        validVotes: 333,
+        participationRate: 34,
+      },
+    ]);
+    mocks.candidacyFindMany.mockResolvedValue([
+      {
+        listName: "Liste A",
+        candidateName: "A",
+        round1Votes: 200,
+        round1Pct: 60,
+        round2Votes: null,
+        round2Pct: null,
+        isElected: true,
+        politician: null,
+      },
+    ]);
+
+    const liste = (await getCommuneDossier("35238"))?.elections.municipales2026?.listes[0];
+
+    expect(liste?.electionAuPremierTour).toBe("NON_ELUE");
+    expect(liste?.elueAuPremierTour).toBe(false);
   });
 
   it("distingue l'absence de résultats d'une commune sans candidature", async () => {
@@ -333,8 +461,9 @@ describe("getDepartementTerritoire", () => {
       ["Allauch", "NON_ETABLI"],
     ]);
     expect(JSON.stringify(result)).not.toContain('"m1"');
-    expect(result?.presidence.state).toBe("ABSENT");
-    expect(result?.conseil.state).toBe("ABSENT");
+    // Mandats exécutifs saisis à la main : rien d'enregistré ne veut pas dire « pas de président ».
+    expect(result?.presidence.state).toBe("NON_ETABLI");
+    expect(result?.conseil.state).toBe("NON_ETABLI");
   });
 });
 
@@ -344,7 +473,7 @@ describe("getRegionTerritoire", () => {
     expect(mocks.communeGroupBy).not.toHaveBeenCalled();
   });
 
-  it("liste les départements avec leurs comptes et déclare absent ce qui manque", async () => {
+  it("liste les départements avec leurs comptes, sans présumer l'absence d'exécutif", async () => {
     mocks.communeGroupBy.mockResolvedValue([
       { departmentCode: "22", _count: { _all: 344 } },
       { departmentCode: "35", _count: { _all: 332 } },
@@ -357,8 +486,33 @@ describe("getRegionTerritoire", () => {
     expect(region?.departements.map((d) => d.code)).toEqual(["22", "29", "35", "56"]);
     expect(region?.departements.find((d) => d.code === "29")?.communeCount).toBe(0);
     expect(region?.communeCount).toBe(676);
-    expect(region?.presidence.state).toBe("ABSENT");
-    expect(region?.conseil).toEqual({ state: "ABSENT", recordedCount: 0 });
+    expect(region?.presidence.state).toBe("NON_ETABLI");
+    expect(region?.conseil).toEqual({ state: "NON_ETABLI", recordedCount: 0 });
+    const presidenceWhere = mocks.mandateFindMany.mock.calls.find(
+      ([args]) => args.where.type === "PRESIDENT_REGION"
+    )?.[0].where;
+    expect(presidenceWhere).toMatchObject({ OR: [{ constituency: "Bretagne" }] });
+  });
+
+  it("résout la présidence d'une région d'outre-mer par son département unique", async () => {
+    mocks.communeGroupBy.mockResolvedValue([]);
+    mocks.mandateGroupBy.mockResolvedValue([]);
+    mocks.mandateCount.mockResolvedValue(0);
+    mocks.mandateFindMany.mockImplementation(async (args: { where: { type: string } }) =>
+      args.where.type === "PRESIDENT_REGION"
+        ? [{ title: "Président", lastConfirmedAt: null, source: "MANUAL", politician: person("p") }]
+        : []
+    );
+
+    const region = await getRegionTerritoire("martinique");
+
+    expect(region?.presidence.state).toBe("ETABLI");
+    const where = mocks.mandateFindMany.mock.calls.find(
+      ([args]) => args.where.type === "PRESIDENT_REGION"
+    )?.[0].where;
+    expect(where).toMatchObject({
+      OR: [{ constituency: "Martinique" }, { departmentCode: "972" }],
+    });
   });
 });
 
