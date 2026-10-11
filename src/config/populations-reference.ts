@@ -23,6 +23,9 @@
  */
 export const DEPUTE_UNIQUE_MAX_POPULATION = 20_000;
 
+/** SyncMetadata key: date of the last import that checked every row against its source. */
+export const POPULATION_SYNC_KEY = "communes-populations";
+
 export interface PopulationSource {
   /** Key used in reports. */
   key: string;

@@ -623,7 +623,7 @@ async function readCommuneDossier(inseeCode: string): Promise<CommuneDossier | n
   const populationSource: SourceRef = populationEnVigueur
     ? { label: populationEnVigueur.vintage.sourceLabel, url: populationEnVigueur.vintage.sourceUrl }
     : POPULATION_SOURCE;
-  const populationImportedAt = populationEnVigueur?.vintage.importedAt ?? importedAt;
+  const populationImportedAt = populationEnVigueur?.verifiedAt ?? importedAt;
 
   const plusieursCirconscriptions = PLM_COMMUNES.has(inseeCode);
   const circo = commune.constituencyNumber;

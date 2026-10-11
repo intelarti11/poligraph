@@ -322,7 +322,11 @@ describe("getCommuneDossier", () => {
       sourceUrl: "https://www.insee.fr/fr/statistiques/8680726",
       importedAt: "2026-10-11T08:00:00.000Z",
     };
-    mocks.populationEnVigueur.mockResolvedValue({ value: 230000, vintage });
+    mocks.populationEnVigueur.mockResolvedValue({
+      value: 230000,
+      vintage,
+      verifiedAt: "2026-12-01T06:00:00.000Z",
+    });
 
     const dossier = await getCommuneDossier("35238");
 
@@ -330,13 +334,13 @@ describe("getCommuneDossier", () => {
     expect(dossier?.population).toEqual({
       value: 230000,
       vintage,
-      importedAt: "2026-10-11T08:00:00.000Z",
+      importedAt: "2026-12-01T06:00:00.000Z",
       source: { label: vintage.sourceLabel, url: vintage.sourceUrl },
     });
     expect(dossier?.coverage.find((c) => c.bloc === "population")).toMatchObject({
       state: "DISPONIBLE",
       source: { url: vintage.sourceUrl },
-      date: "2026-10-11T08:00:00.000Z",
+      date: "2026-12-01T06:00:00.000Z",
     });
   });
 

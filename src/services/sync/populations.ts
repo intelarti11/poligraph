@@ -11,7 +11,11 @@ import { Prisma } from "@/generated/prisma";
 import { db } from "@/lib/db";
 import { USER_AGENT } from "@/config/site";
 import { PUBLIC_POLITICIAN_PUBLICATION_STATUS } from "@/lib/api/public-contract";
-import { INSEE_COG_MOUVEMENTS_URL, INSEE_NATIONAL_SOURCES } from "@/config/populations-reference";
+import {
+  INSEE_COG_MOUVEMENTS_URL,
+  INSEE_NATIONAL_SOURCES,
+  POPULATION_SYNC_KEY,
+} from "@/config/populations-reference";
 import {
   dropChangedTerritories,
   overseasRecords,
@@ -115,7 +119,26 @@ function rowData(r: PopulationRecord) {
   };
 }
 
-async function write(plan: PopulationPlan): Promise<NonNullable<PopulationSyncResult["written"]>> {
+/** Rows per set-based statement: well under PostgreSQL's parameter and memory limits. */
+export const WRITE_BATCH_SIZE = 5000;
+
+function chunks<T>(items: T[]): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += WRITE_BATCH_SIZE) {
+    out.push(items.slice(i, i + WRITE_BATCH_SIZE));
+  }
+  return out;
+}
+
+/**
+ * Writes only what changed, in set-based statements: new rows by createMany, changed rows by
+ * one UPDATE ... FROM unnest per batch, and `Commune.population` the same way. A row confirmed
+ * unchanged is not rewritten (no dead tuples on every run): the date of the check lives in
+ * SyncMetadata under POPULATION_SYNC_KEY.
+ */
+export async function writePopulationPlan(
+  plan: PopulationPlan
+): Promise<NonNullable<PopulationSyncResult["written"]>> {
   const now = new Date();
   const existing = await db.communePopulation.findMany({
     select: {
@@ -134,7 +157,7 @@ async function write(plan: PopulationPlan): Promise<NonNullable<PopulationSyncRe
   const byKey = new Map(existing.map((e) => [`${e.communeId}|${e.millesime}`, e]));
 
   const toCreate: Prisma.CommunePopulationCreateManyInput[] = [];
-  let updated = 0;
+  const toUpdate: { id: string; record: PopulationRecord }[] = [];
   for (const r of plan.matchedRecords) {
     const e = byKey.get(`${r.communeId}|${r.millesime}`);
     if (!e) {
@@ -145,29 +168,64 @@ async function write(plan: PopulationPlan): Promise<NonNullable<PopulationSyncRe
         ...rowData(r),
       });
     } else if (!sameFigures(e, r)) {
-      await db.communePopulation.update({
-        where: { id: e.id },
-        data: { ...rowData(r), importedAt: now },
-      });
-      updated++;
+      toUpdate.push({ id: e.id, record: r });
     }
   }
-  for (let i = 0; i < toCreate.length; i += 1000) {
-    await db.communePopulation.createMany({
-      data: toCreate.slice(i, i + 1000),
-      skipDuplicates: true,
-    });
+
+  for (const batch of chunks(toCreate)) {
+    await db.communePopulation.createMany({ data: batch, skipDuplicates: true });
   }
-  // Every row confirmed against its source on this run carries the date of the check.
-  for (const sourceUrl of new Set(plan.matchedRecords.map((r) => r.sourceUrl))) {
-    await db.communePopulation.updateMany({ where: { sourceUrl }, data: { importedAt: now } });
+
+  let updated = 0;
+  for (const batch of chunks(toUpdate)) {
+    updated += await db.$executeRaw(Prisma.sql`
+      UPDATE "CommunePopulation" p SET
+        "populationMunicipale" = v.pmun,
+        "populationCompteeAPart" = v.pcap,
+        "populationTotale" = v.ptot,
+        "effectiveFrom" = v.eff,
+        "producer" = v.producer,
+        "sourceLabel" = v.label,
+        "sourceUrl" = v.url,
+        "importedAt" = ${now}
+      FROM unnest(
+        ${batch.map((u) => u.id)}::text[],
+        ${batch.map((u) => u.record.populationMunicipale)}::int[],
+        ${batch.map((u) => u.record.populationCompteeAPart)}::int[],
+        ${batch.map((u) => u.record.populationTotale)}::int[],
+        ${batch.map((u) => u.record.effectiveFrom)}::date[],
+        ${batch.map((u) => u.record.producer)}::text[],
+        ${batch.map((u) => u.record.sourceLabel)}::text[],
+        ${batch.map((u) => u.record.sourceUrl)}::text[]
+      ) AS v(id, pmun, pcap, ptot, eff, producer, label, url)
+      WHERE p."id" = v.id
+    `);
   }
 
   let aligned = 0;
-  for (const d of plan.differing) {
-    await db.commune.update({ where: { id: d.communeId }, data: { population: d.after } });
-    aligned++;
+  for (const batch of chunks(plan.differing)) {
+    aligned += await db.$executeRaw(Prisma.sql`
+      UPDATE "Commune" c SET "population" = v.pop
+      FROM unnest(
+        ${batch.map((d) => d.communeId)}::text[],
+        ${batch.map((d) => d.after)}::int[]
+      ) AS v(id, pop)
+      WHERE c."id" = v.id AND c."population" IS DISTINCT FROM v.pop
+    `);
   }
+
+  const sources = [...new Set(plan.matchedRecords.map((r) => r.sourceUrl))];
+  await db.syncMetadata.upsert({
+    where: { sourceKey: POPULATION_SYNC_KEY },
+    create: {
+      sourceKey: POPULATION_SYNC_KEY,
+      lastSyncAt: now,
+      itemCount: plan.matchedRecords.length,
+      extra: { sources },
+    },
+    update: { lastSyncAt: now, itemCount: plan.matchedRecords.length, extra: { sources } },
+  });
+
   return { created: toCreate.length, updated, communePopulationAligned: aligned };
 }
 
@@ -215,7 +273,7 @@ export async function syncPopulations(options: {
 
   const communes = await loadCommunes();
   const plan = planPopulationImport(records, communes, onDate);
-  const written = options.dryRun ? null : await write(plan);
+  const written = options.dryRun ? null : await writePopulationPlan(plan);
 
   return {
     dryRun: options.dryRun,

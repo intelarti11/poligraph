@@ -7,6 +7,7 @@
  */
 import { Prisma } from "@/generated/prisma";
 import { db } from "@/lib/db";
+import { POPULATION_SYNC_KEY } from "@/config/populations-reference";
 
 export interface PopulationVintage {
   millesime: number;
@@ -16,7 +17,7 @@ export interface PopulationVintage {
   producer: string;
   sourceLabel: string;
   sourceUrl: string;
-  /** ISO timestamp of the last import that confirmed the row against its source. */
+  /** ISO timestamp of the import that last wrote the figures of this row. */
   importedAt: string;
 }
 
@@ -59,9 +60,13 @@ function toVintage(r: VintageRow): PopulationVintage {
   };
 }
 
+/**
+ * Population in force, with `verifiedAt`: the last import that checked every row against its
+ * source (SyncMetadata), falling back on the row's own import date.
+ */
 export async function readPopulationEnVigueur(
   communeId: string
-): Promise<{ value: number; vintage: PopulationVintage } | null> {
+): Promise<{ value: number; vintage: PopulationVintage; verifiedAt: string } | null> {
   const rows = await tolerateMissingTable(
     db.$queryRaw<(VintageRow & { populationMunicipale: number })[]>(Prisma.sql`
     SELECT p."populationMunicipale", p."millesime", p."effectiveFrom", p."producer",
@@ -74,7 +79,17 @@ export async function readPopulationEnVigueur(
     []
   );
   const row = rows[0];
-  return row ? { value: row.populationMunicipale, vintage: toVintage(row) } : null;
+  if (!row) return null;
+  const meta = await db.syncMetadata.findUnique({
+    where: { sourceKey: POPULATION_SYNC_KEY },
+    select: { lastSyncAt: true },
+  });
+  const vintage = toVintage(row);
+  return {
+    value: row.populationMunicipale,
+    vintage,
+    verifiedAt: meta?.lastSyncAt?.toISOString() ?? vintage.importedAt,
+  };
 }
 
 /**

@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ queryRaw: vi.fn() }));
-vi.mock("@/lib/db", () => ({ db: { $queryRaw: mocks.queryRaw } }));
+const mocks = vi.hoisted(() => ({ queryRaw: vi.fn(), syncFindUnique: vi.fn() }));
+vi.mock("@/lib/db", () => ({
+  db: { $queryRaw: mocks.queryRaw, syncMetadata: { findUnique: mocks.syncFindUnique } },
+}));
 
 import {
   isMissingTableError,
@@ -24,7 +26,10 @@ const ROW = {
   importedAt: new Date("2026-10-11T08:00:00Z"),
 };
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.syncFindUnique.mockResolvedValue({ lastSyncAt: new Date("2026-12-01T06:00:00Z") });
+});
 
 describe("readPopulationEnVigueur", () => {
   it("renvoie la population et son millésime, dates en ISO", async () => {
@@ -39,7 +44,15 @@ describe("readPopulationEnVigueur", () => {
         sourceUrl: ROW.sourceUrl,
         importedAt: "2026-10-11T08:00:00.000Z",
       },
+      verifiedAt: "2026-12-01T06:00:00.000Z",
     });
+  });
+
+  it("retombe sur la date d'import de la ligne sans date de vérification", async () => {
+    mocks.queryRaw.mockResolvedValue([ROW]);
+    mocks.syncFindUnique.mockResolvedValue(null);
+    const result = await readPopulationEnVigueur("35238");
+    expect(result?.verifiedAt).toBe("2026-10-11T08:00:00.000Z");
   });
 
   it("filtre sur la date du jour côté base, jamais un millésime pas encore en vigueur", async () => {
