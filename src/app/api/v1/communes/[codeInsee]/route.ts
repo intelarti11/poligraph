@@ -10,8 +10,12 @@ import { withPublicRoute } from "@/lib/api/with-public-route";
  *     summary: Informations d'une commune et ses élus
  *     description: >
  *       Retourne les informations de la commune (nom, département, population,
- *       coordonnées) ainsi que la liste de ses élus en exercice (maire, adjoints,
- *       conseillers municipaux).
+ *       coordonnées) ainsi que ses élus en exercice dont la fiche est publique.
+ *       `maireStatus` vaut ETABLI (un seul maire courant, fiche publique),
+ *       NON_ETABLI (les données ne désignent pas un titulaire public unique :
+ *       aucun nom n'est alors donné) ou ABSENT (aucun maire courant enregistré).
+ *       Chaque élu porte `lastConfirmedAt`, la dernière date à laquelle la source
+ *       a confirmé le mandat (null si jamais enregistrée).
  *     tags: [Communes]
  *     parameters:
  *       - in: path
