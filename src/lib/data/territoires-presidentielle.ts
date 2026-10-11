@@ -1,5 +1,6 @@
 import "server-only";
 
+import { Prisma } from "@/generated/prisma";
 import { db } from "@/lib/db";
 import {
   PRESIDENTIELLE_COMMUNES_SOURCE_LABEL,
@@ -86,92 +87,105 @@ function sourcesOf(slug: string): PresidentielleSource[] {
   });
 }
 
+interface PresidentielleRow {
+  electionId: string;
+  slug: string;
+  title: string;
+  shortTitle: string | null;
+  round1Date: Date | null;
+  round2Date: Date | null;
+  round: number;
+  registeredVoters: number | null;
+  actualVoters: number | null;
+  participationRate: Prisma.Decimal | number | string | null;
+  blankVotes: number | null;
+  nullVotes: number | null;
+  validVotes: number | null;
+  lastSyncAt: Date | null;
+  candidats: Array<{ name: string; votes: number }> | null;
+}
+
+/** PostgreSQL "undefined_table": the manual SQL creating CommuneCandidacyResult not yet applied. */
+function isMissingResultTable(error: unknown): boolean {
+  const text = error instanceof Error ? `${error.message} ${JSON.stringify(error)}` : "";
+  return text.includes("42P01") && text.includes("CommuneCandidacyResult");
+}
+
+/**
+ * One round trip: participation rows of the commune's presidential elections, with each round's
+ * candidate votes aggregated in a lateral subquery and the import date joined from SyncMetadata.
+ */
+async function queryRows(inseeCode: string): Promise<PresidentielleRow[]> {
+  return db.$queryRaw<PresidentielleRow[]>(Prisma.sql`
+    SELECT e.id AS "electionId", e.slug, e.title, e."shortTitle", e."round1Date", e."round2Date",
+           r.round, r."registeredVoters", r."actualVoters", r."participationRate",
+           r."blankVotes", r."nullVotes", r."validVotes",
+           s."lastSyncAt", x.candidats
+    FROM "CommuneElectionRound" r
+    JOIN "Election" e ON e.id = r."electionId" AND e.type = 'PRESIDENTIELLE'
+    LEFT JOIN "SyncMetadata" s ON s."sourceKey" = ${SYNC_KEY_PREFIX} || e.slug
+    LEFT JOIN LATERAL (
+      SELECT json_agg(json_build_object('name', k."candidateName", 'votes', v.votes)) AS candidats
+      FROM "CommuneCandidacyResult" v
+      JOIN "Candidacy" k ON k.id = v."candidacyId"
+      WHERE v."communeId" = r."communeId" AND v.round = r.round AND k."electionId" = e.id
+    ) x ON true
+    WHERE r."communeId" = ${inseeCode}
+    ORDER BY e."round1Date" DESC NULLS LAST, r.round ASC
+    LIMIT ${MAX_ELECTIONS * 2}
+  `);
+}
+
+const SYNC_KEY_PREFIX = presidentielleCommunesSyncKey("");
+
 export async function readCommunePresidentielles(
   inseeCode: string,
   departmentCode: string
 ): Promise<CommunePresidentielles> {
-  const rounds = await db.communeElectionRound.findMany({
-    where: { communeId: inseeCode, election: { type: "PRESIDENTIELLE" } },
-    select: {
-      round: true,
-      registeredVoters: true,
-      actualVoters: true,
-      participationRate: true,
-      blankVotes: true,
-      nullVotes: true,
-      validVotes: true,
-      election: {
-        select: {
-          id: true,
-          slug: true,
-          title: true,
-          shortTitle: true,
-          round1Date: true,
-          round2Date: true,
-        },
-      },
-    },
-    orderBy: [{ election: { round1Date: "desc" } }, { round: "asc" }],
-    take: MAX_ELECTIONS * 2,
-  });
+  let rows: PresidentielleRow[];
+  try {
+    rows = await queryRows(inseeCode);
+  } catch (error) {
+    // Before the manual SQL is applied no presidential participation exists either: the page
+    // shows nothing rather than failing.
+    if (!isMissingResultTable(error)) throw error;
+    rows = [];
+  }
 
-  if (rounds.length === 0) {
+  if (rows.length === 0) {
     return { blocks: [], agregatTerritoire: await readAgregat(departmentCode) };
   }
 
-  const elections = [...new Map(rounds.map((r) => [r.election.id, r.election])).values()];
-  const results = await db.communeCandidacyResult.findMany({
-    where: {
-      communeId: inseeCode,
-      candidacy: { electionId: { in: elections.map((e) => e.id) } },
-    },
-    select: {
-      round: true,
-      votes: true,
-      candidacy: { select: { electionId: true, candidateName: true } },
-    },
-    // 12 candidates and 2 rounds in 2022: the bound leaves room without being open-ended.
-    take: 200,
-  });
-  const syncs = await db.syncMetadata.findMany({
-    where: { sourceKey: { in: elections.map((e) => presidentielleCommunesSyncKey(e.slug)) } },
-    select: { sourceKey: true, lastSyncAt: true },
-    take: MAX_ELECTIONS,
-  });
-
-  const blocks = elections.map((election): PresidentielleCommuneBlock => {
-    const tours = rounds
-      .filter((r) => r.election.id === election.id && (r.round === 1 || r.round === 2))
-      .map((r): PresidentielleTourCommune => {
-        const round = r.round as 1 | 2;
-        const date = round === 1 ? election.round1Date : election.round2Date;
-        return {
-          round,
-          date: date ? date.toISOString() : null,
-          registeredVoters: r.registeredVoters,
-          actualVoters: r.actualVoters,
-          participationRate: r.participationRate != null ? Number(r.participationRate) : null,
-          blankVotes: r.blankVotes,
-          nullVotes: r.nullVotes,
-          validVotes: r.validVotes,
-          candidats: results
-            .filter((x) => x.candidacy.electionId === election.id && x.round === round)
-            .map((x) => ({
-              name: x.candidacy.candidateName,
-              votes: x.votes,
-              pct: pct(x.votes, r.validVotes),
-            }))
-            .sort((a, b) => b.votes - a.votes || a.name.localeCompare(b.name, "fr")),
-        };
-      });
-    const sync = syncs.find((s) => s.sourceKey === presidentielleCommunesSyncKey(election.slug));
+  const electionIds = [...new Set(rows.map((r) => r.electionId))];
+  const blocks = electionIds.map((electionId): PresidentielleCommuneBlock => {
+    const electionRows = rows.filter(
+      (r) => r.electionId === electionId && (r.round === 1 || r.round === 2)
+    );
+    const election = electionRows[0] ?? rows.find((r) => r.electionId === electionId)!;
+    const tours = electionRows.map((r): PresidentielleTourCommune => {
+      const round = r.round as 1 | 2;
+      const date = round === 1 ? r.round1Date : r.round2Date;
+      return {
+        round,
+        date: date ? date.toISOString() : null,
+        registeredVoters: r.registeredVoters,
+        actualVoters: r.actualVoters,
+        participationRate: r.participationRate != null ? Number(r.participationRate) : null,
+        blankVotes: r.blankVotes,
+        nullVotes: r.nullVotes,
+        validVotes: r.validVotes,
+        candidats: (r.candidats ?? [])
+          .map((c) => ({ name: c.name, votes: c.votes, pct: pct(c.votes, r.validVotes) }))
+          .sort((a, b) => b.votes - a.votes || a.name.localeCompare(b.name, "fr")),
+      };
+    });
     return {
       electionSlug: election.slug,
       title: election.shortTitle ?? election.title,
       round1Date: election.round1Date ? election.round1Date.toISOString() : null,
       tours,
       sources: sourcesOf(election.slug).filter((s) => tours.some((t) => t.round === s.round)),
-      importedAt: sync?.lastSyncAt ? sync.lastSyncAt.toISOString() : null,
+      importedAt: election.lastSyncAt ? election.lastSyncAt.toISOString() : null,
     };
   });
 
