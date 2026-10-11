@@ -142,7 +142,7 @@ function ChangeSource({ change, acts }: { change: Change; acts: Map<string, ActR
       </>
     );
   }
-  if (evidence === "DERIVED") return <>Date estimée à partir des fonctions connues</>;
+  if (evidence === "DERIVED") return <>Date estimée : aucun acte publié ne la fixe</>;
   if (evidence === "ACT" && safeExternalUrl(change.sourceUrl)) {
     const act = acts.get(change.sourceUrl!);
     if (act) {
@@ -974,8 +974,8 @@ export default async function GovernmentPage({ params, searchParams }: PageProps
                   comme en cours.
                 </p>
                 <p>
-                  Une date déduite des fonctions connues, sans acte, est signalée « Dates estimées
-                  ».
+                  Une date déduite sans acte (des fonctions connues, d&apos;un décès ou d&apos;un
+                  remplacement) est signalée comme estimée.
                 </p>
               </div>
             </details>
