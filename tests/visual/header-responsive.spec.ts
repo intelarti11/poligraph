@@ -15,27 +15,38 @@ import { horizontalScroll } from "./helpers/viewport";
  *   npm run dev
  *   npx playwright test header-responsive --project=chromium
  *
- * Precondition: the three flags that widen the header (`STATISTIQUES_SECTION`, `PROGRAMMES_ENABLED`,
- * `BOUSSOLE_ENABLED`) must be enabled on the database behind that server. They add two labelled links
- * and one icon, so they produce the widest header — the only configuration where this guard means
- * anything. The destinations assertion below fails loudly rather than passing on a narrower header.
+ * Precondition: the flags that widen the header (`STATISTIQUES_SECTION`, `PROGRAMMES_ENABLED`,
+ * `BOUSSOLE_ENABLED`, `ELECTION_SPOTLIGHT` on an existing election) must be enabled on the database
+ * behind that server. They add a labelled link, the election pill and one icon, so they produce the
+ * widest header, the only configuration where this guard means anything. The destinations and
+ * pill assertions below fail loudly rather than passing on a narrower header.
  *
  * On a disposable database, `tests/visual/fixtures/header-flags.sql` sets them. That is what the
  * `header-responsive` CI job runs, so a local reproduction and the pipeline read the same header.
  */
 
-/** Tailwind `lg` is 1024 and `xl` is 1280. Each is tested one pixel below and at the boundary. */
-const BREAKPOINT_WIDTHS = [1023, 1024, 1279, 1280] as const;
+/**
+ * Tailwind `lg` is 1024, `xl` 1280 (the wordmark and wider spacing come back) and `2xl` 1536,
+ * where the link icons and the labelled search trigger appear. Each is tested one pixel below and at the boundary,
+ * plus 1440: the container stays capped at 1280px there, so it has no more room than `xl`.
+ */
+const BREAKPOINT_WIDTHS = [1023, 1024, 1279, 1280, 1440, 1535, 1536] as const;
 
 const THEMES = ["light", "dark"] as const;
 
 const PRIMARY_DESTINATIONS = [
   { href: "/statistiques", label: "Statistiques" },
   { href: "/politiques", label: "Politiques" },
+  { href: "/territoires", label: "Territoires" },
   { href: "/affaires", label: "Affaires" },
-  { href: "/programmes", label: "Programmes" },
+  { href: "/factchecks", label: "Fact-checks" },
   { href: "/parlement", label: "Parlement" },
 ];
+
+/** On desktop Programmes lives in the election panel; the mobile menu keeps it as a section. */
+const MOBILE_ONLY_DESTINATIONS = [{ href: "/programmes", label: "Programmes" }];
+
+const SPOTLIGHT_LABEL = "Présidentielle 2027";
 
 const MOBILE_MENU = '[role="dialog"][aria-label="Menu de navigation"]';
 
@@ -43,7 +54,7 @@ type Regime = "mobile" | "desktop-compact" | "desktop-full";
 
 function regimeFor(width: number): Regime {
   if (width < 1024) return "mobile";
-  return width < 1280 ? "desktop-compact" : "desktop-full";
+  return width < 1536 ? "desktop-compact" : "desktop-full";
 }
 
 /**
@@ -120,7 +131,7 @@ for (const theme of THEMES) {
         expect(await headerElementsOutsideViewport(page)).toEqual([]);
       });
 
-      test("garde les cinq destinations principales atteignables, libellés compris", async ({
+      test("garde les destinations principales atteignables, libellés compris", async ({
         page,
       }) => {
         if (regime === "mobile") {
@@ -131,12 +142,54 @@ for (const theme of THEMES) {
         // The mobile menu is portalled out of the header, so the scope follows the regime.
         const scope = regime === "mobile" ? page.locator(MOBILE_MENU) : page.locator("header");
 
-        for (const { href, label } of PRIMARY_DESTINATIONS) {
+        const destinations =
+          regime === "mobile"
+            ? [...PRIMARY_DESTINATIONS, ...MOBILE_ONLY_DESTINATIONS]
+            : PRIMARY_DESTINATIONS;
+        for (const { href, label } of destinations) {
           const link = scope.locator(`a[href="${href}"]`).first();
           await expect(link, `destination ${href} absente à ${width}px`).toBeVisible();
           await expect(link, `destination ${href} sans libellé à ${width}px`).toContainText(label);
         }
       });
+
+      if (regime !== "mobile") {
+        test("garde chaque libellé du menu sur une seule ligne", async ({ page }) => {
+          // A wrapped label doubles the link height; 40px leaves room for one line only.
+          const nav = page.locator('header nav[aria-label="Navigation principale"]');
+          const heights = await nav.evaluate((el) =>
+            [...el.querySelectorAll<HTMLElement>(":scope > a, :scope > div > div > button")].map(
+              (a) => ({
+                name: a.textContent?.trim() ?? "",
+                height: Math.round(a.getBoundingClientRect().height),
+                clipped: a.scrollWidth > a.clientWidth,
+              })
+            )
+          );
+          expect(heights.length).toBeGreaterThanOrEqual(PRIMARY_DESTINATIONS.length + 1);
+          expect(heights.filter((h) => h.height > 40 || h.clipped)).toEqual([]);
+        });
+
+        test("ouvre et ferme la pastille de l'élection au clavier", async ({ page }) => {
+          const pill = page.locator("header").getByRole("button", { name: SPOTLIGHT_LABEL });
+          await expect(pill).toBeVisible();
+          await expect(pill).toHaveAttribute("aria-expanded", "false");
+
+          await pill.focus();
+          await page.keyboard.press("Enter");
+          await expect(pill).toHaveAttribute("aria-expanded", "true");
+          const panel = page.locator(`#${await pill.getAttribute("aria-controls")}`);
+          await expect(panel).toBeVisible();
+          await expect(panel.locator("a").first()).toBeFocused();
+          await expect(panel.locator('a[href="/programmes"]')).toBeVisible();
+          await expect(panel.locator('a[href="/elections"]')).toBeVisible();
+
+          await page.keyboard.press("Escape");
+          await expect(pill).toHaveAttribute("aria-expanded", "false");
+          await expect(panel).toBeHidden();
+          await expect(pill).toBeFocused();
+        });
+      }
 
       test("garde recherche, thème et Boussole atteignables", async ({ page }) => {
         if (regime === "mobile") {
@@ -177,6 +230,32 @@ for (const theme of THEMES) {
               })
           );
           expect(tooSmall).toEqual([]);
+        });
+      }
+
+      if (regime === "mobile") {
+        test("ouvre l'écran de recherche depuis le menu et y revient", async ({ page }) => {
+          await page.getByRole("button", { name: "Ouvrir le menu" }).click();
+          const menu = page.locator(MOBILE_MENU);
+          const field = menu.getByRole("button", {
+            name: "Rechercher un élu, une commune, un vote",
+          });
+          await field.click();
+
+          const input = page.getByRole("combobox", {
+            name: "Rechercher un élu, une commune, un vote",
+          });
+          await expect(input).toBeFocused();
+          await expect(menu).toBeHidden();
+
+          await page.getByRole("button", { name: "Revenir au menu" }).click();
+          await expect(menu).toBeVisible();
+          await expect(field).toBeFocused();
+
+          await field.click();
+          await expect(input).toBeFocused();
+          await page.keyboard.press("Escape");
+          await expect(menu).toBeVisible();
         });
       }
 

@@ -58,25 +58,51 @@ interface MobileMenuProps {
   enabledFlags: string[];
   /** Slugs of the NAV_ELECTIONS whose ballot has been held, resolved server-side */
   pastElectionSlugs: string[];
+  /** Slug of the election put forward (ELECTION_SPOTLIGHT), already validated server-side */
+  spotlightSlug?: string | null;
 }
 
-export function MobileMenu({ enabledFlags, pastElectionSlugs }: MobileMenuProps) {
+export function MobileMenu({
+  enabledFlags,
+  pastElectionSlugs,
+  spotlightSlug = null,
+}: MobileMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
+  const searchFieldRef = useRef<HTMLButtonElement>(null);
+  // Set when the search screen hands back to the menu, so focus lands where the reader left.
+  const returnToSearchFieldRef = useRef(false);
   const pathname = usePathname();
-  const { open: openPalette } = useCommandPalette();
+  const { open: openPalette, openWithBack: openPaletteWithBack } = useCommandPalette();
   const flagSet = new Set(enabledFlags);
 
   const filteredPrimary = filterNavItems(NAV_PRIMARY, flagSet);
   const filteredSecondary = NAV_SECONDARY.filter(
     (item) => !item.featureFlag || flagSet.has(item.featureFlag)
   );
-  // Upcoming first, held ones after, each group keeping its NAV_ELECTIONS order
+  // The election put forward first, then upcoming, then held ones, each keeping its NAV_ELECTIONS
+  // order. The spotlight slug only reorders: an election hidden by its own flag stays hidden.
   const pastSlugs = new Set(pastElectionSlugs);
   const filteredElections = NAV_ELECTIONS.filter(
     (item) => !item.featureFlag || flagSet.has(item.featureFlag)
-  ).sort((a, b) => Number(pastSlugs.has(a.slug)) - Number(pastSlugs.has(b.slug)));
+  ).sort(
+    (a, b) =>
+      Number(b.slug === spotlightSlug) - Number(a.slug === spotlightSlug) ||
+      Number(pastSlugs.has(a.slug)) - Number(pastSlugs.has(b.slug))
+  );
+
+  const openSearchScreen = () => {
+    // The menu steps aside rather than stacking under the search screen; leaving that screen
+    // without choosing a result brings it back.
+    setIsOpen(false);
+    openPaletteWithBack(() => {
+      returnToSearchFieldRef.current = true;
+      // Deferred: when Escape closes the search screen, reopening synchronously would attach the
+      // menu's own Escape listener while that same key event is still dispatching, and close it.
+      setTimeout(() => setIsOpen(true), 0);
+    });
+  };
 
   const close = useCallback(() => {
     setIsOpen(false);
@@ -115,9 +141,14 @@ export function MobileMenu({ enabledFlags, pastElectionSlugs }: MobileMenuProps)
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, close]);
 
-  // Focus first element on open
+  // Focus first element on open, or the search field when returning from the search screen
   useEffect(() => {
     if (isOpen && menuRef.current) {
+      if (returnToSearchFieldRef.current && searchFieldRef.current) {
+        returnToSearchFieldRef.current = false;
+        searchFieldRef.current.focus();
+        return;
+      }
       const focusable = getFocusableElements(menuRef.current);
       focusable[0]?.focus();
     }
@@ -202,6 +233,19 @@ export function MobileMenu({ enabledFlags, pastElectionSlugs }: MobileMenuProps)
 
             {/* Primary links */}
             <nav className="flex-1 overflow-y-auto px-4 py-6" aria-label="Navigation principale">
+              {/* Looks like a field, opens the full-screen search: typing inside the menu would
+                  share the screen between keyboard, menu and results. */}
+              <button
+                ref={searchFieldRef}
+                type="button"
+                onClick={openSearchScreen}
+                aria-label="Rechercher un élu, une commune, un vote"
+                className="mb-6 flex min-h-12 w-full items-center gap-3 rounded-xl border border-input bg-background px-4 text-left text-base text-muted-foreground transition-colors hover:border-primary/60 hover:text-foreground"
+              >
+                <Search className="h-5 w-5 shrink-0" aria-hidden="true" />
+                <span className="truncate">Élu, commune, vote...</span>
+              </button>
+
               {/* Elections surfaced above the rest: upcoming first, past last */}
               {filteredElections.length > 0 && (
                 <section aria-labelledby="mobile-menu-elections" className="mb-6">
@@ -217,6 +261,7 @@ export function MobileMenu({ enabledFlags, pastElectionSlugs }: MobileMenuProps)
                       const isActive =
                         pathname === item.href || pathname.startsWith(item.href + "/");
                       const isPast = pastSlugs.has(item.slug);
+                      const isSpotlight = item.slug === spotlightSlug;
                       return (
                         <li key={item.href}>
                           <Link
@@ -224,9 +269,11 @@ export function MobileMenu({ enabledFlags, pastElectionSlugs }: MobileMenuProps)
                             onClick={close}
                             aria-current={isActive ? "page" : undefined}
                             className={`flex items-center justify-between gap-2 px-4 py-3.5 rounded-xl text-lg font-display font-semibold transition-colors ${
-                              isPast
-                                ? "text-foreground hover:bg-muted"
-                                : "border border-primary/40 text-primary hover:bg-primary/5"
+                              isSpotlight
+                                ? "border-2 border-primary bg-primary/5 text-primary hover:bg-primary/10"
+                                : isPast
+                                  ? "text-foreground hover:bg-muted"
+                                  : "border border-primary/40 text-primary hover:bg-primary/5"
                             }`}
                           >
                             <span className="flex items-center gap-3 min-w-0">

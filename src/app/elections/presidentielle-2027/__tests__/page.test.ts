@@ -7,6 +7,7 @@ vi.mock("@/lib/data/hub", () => ({
   getHubCandidacyField: vi.fn(),
   getHubMeasureContext: vi.fn(),
 }));
+vi.mock("@/lib/feature-flags", () => ({ isFeatureEnabled: vi.fn() }));
 
 import { getHubMeasureContext } from "@/lib/data/hub";
 import { generateMetadata } from "../page";
