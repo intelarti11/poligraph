@@ -2,6 +2,7 @@ import { BRAND_NAVY, BRAND_PAGE, BRAND_RED } from "@/config/brand";
 import { DEPARTMENTS } from "@/config/departments";
 import {
   DEPARTMENT_OUTLINES,
+  FRANCE_DROM_INSETS,
   FRANCE_MINI_OUTLINE,
   FRANCE_OUTLINE,
   REGION_OUTLINES,
@@ -14,8 +15,8 @@ import { cn } from "@/lib/utils";
  * Decorative outline of a territory. Always `aria-hidden`: every fact it suggests (which
  * department, which region, where the commune sits) must also be in the page text.
  *
- * Renders nothing when the outline is missing (overseas departments today, COM, unknown
- * code): a banner without a silhouette is correct, the outline of another territory never is.
+ * Renders nothing when the outline is missing (TAAF, Clipperton, unknown code): a banner
+ * without a silhouette is correct, the outline of another territory never is.
  */
 
 type Tone = "marine" | "clair";
@@ -41,7 +42,10 @@ interface RegionProps extends CommonProps {
 
 interface FranceProps extends CommonProps {
   kind: "france";
-  /** `mini` is the lighter drawing meant for a ~100 px inset. */
+  /**
+   * `mini` is the lighter drawing meant for a ~100 px inset, metropolitan France only. `full`
+   * adds the five DROM in boxes under metropolitan France.
+   */
   size?: "full" | "mini";
   highlightDepartment?: string;
   highlightRegion?: string;
@@ -171,16 +175,28 @@ function FranceShape({
   colors,
 }: FranceProps & { colors: (typeof PALETTE)[Tone] }) {
   const outline: TerritoryGroupOutline = size === "mini" ? FRANCE_MINI_OUTLINE : FRANCE_OUTLINE;
+  const insets = size === "full" ? FRANCE_DROM_INSETS.boxes : [];
   const halo =
     size === "mini" && highlightDepartment !== undefined
       ? FRANCE_MINI_OUTLINE.smallAnchors[highlightDepartment]
       : undefined;
   // Asked to point at a territory the map cannot show: draw nothing rather than a France
   // that suggests the territory is elsewhere or absent.
-  if (highlightDepartment !== undefined && !has(outline.departments, highlightDepartment)) {
+  if (
+    highlightDepartment !== undefined &&
+    !has(outline.departments, highlightDepartment) &&
+    !insets.some((inset) => inset.code === highlightDepartment)
+  ) {
     return null;
   }
-  if (highlightRegion !== undefined && !has(REGION_OUTLINES, highlightRegion)) return null;
+  if (
+    highlightRegion !== undefined &&
+    (!has(REGION_OUTLINES, highlightRegion) ||
+      (FRANCE_DROM_INSETS.boxes.some((inset) => inset.region === highlightRegion) &&
+        !insets.some((inset) => inset.region === highlightRegion)))
+  ) {
+    return null;
+  }
 
   const strokeWidth = size === "mini" ? 0.6 : 0.8;
   const byRegion = new Map<string, [string, string][]>();
@@ -192,7 +208,10 @@ function FranceShape({
   }
 
   return (
-    <Svg viewBox={outline.viewBox} className={className}>
+    <Svg
+      viewBox={insets.length ? FRANCE_DROM_INSETS.viewBox : outline.viewBox}
+      className={className}
+    >
       {[...byRegion].map(([region, departments]) => {
         const regionHighlighted = region === highlightRegion;
         const paths = departments.map(([code, d]) => {
@@ -220,6 +239,44 @@ function FranceShape({
         );
       })}
       {halo && <circle cx={halo[0]} cy={halo[1]} r={6} fill={BRAND_RED} fillOpacity={0.9} />}
+      {insets.map(({ code, region, box, d }) => {
+        const highlighted = region === highlightRegion || code === highlightDepartment;
+        const fill = code === highlightDepartment ? BRAND_RED : colors.highlight;
+        const content = (
+          <>
+            <rect
+              x={box[0]}
+              y={box[1]}
+              width={box[2]}
+              height={box[3]}
+              rx={4}
+              fill={colors.fill}
+              fillOpacity={0}
+              stroke={colors.stroke}
+              strokeOpacity={0.35}
+              strokeWidth={strokeWidth}
+            />
+            <path
+              d={d}
+              fill={highlighted ? fill : colors.fill}
+              fillOpacity={highlighted ? 0.9 : colors.fillOpacity}
+              stroke={colors.stroke}
+              strokeOpacity={0.35}
+              strokeWidth={strokeWidth}
+            />
+          </>
+        );
+        const href = regionHref?.(region);
+        return href ? (
+          <a key={code} href={href} tabIndex={-1} data-drom={code}>
+            {content}
+          </a>
+        ) : (
+          <g key={code} data-drom={code}>
+            {content}
+          </g>
+        );
+      })}
     </Svg>
   );
 }

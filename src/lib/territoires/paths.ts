@@ -13,3 +13,6 @@ export function territoireCommunePath(inseeCode: string): string {
 export function territoireRegionPath(slug: string): string {
   return `/territoires/regions/${encodeURIComponent(slug)}`;
 }
+
+/** Exports, releases and licences of the section. */
+export const TERRITOIRES_DONNEES_PATH = "/territoires/donnees";

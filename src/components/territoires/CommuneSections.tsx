@@ -23,6 +23,7 @@ import {
 } from "@/lib/territoires/commune-display";
 import { PRESIDENTIELLE_2027_SLUG } from "@/lib/presidentielle/themes";
 import { formatDate } from "@/lib/utils";
+import { TERRITOIRES_DONNEES_PATH } from "@/lib/territoires/paths";
 
 /**
  * Sections of the Territoires commune page (#1052). Server components only: no map, no client
@@ -540,6 +541,11 @@ function ReutiliserContent({ code }: { code: string }) {
       <p className="text-sm">
         <Link href="/docs/api" prefetch={false} className={`${TAP} ${LINK}`}>
           Documentation de l{"'"}API
+        </Link>
+      </p>
+      <p className="text-sm">
+        <Link href={TERRITOIRES_DONNEES_PATH} prefetch={false} className={`${TAP} ${LINK}`}>
+          Fichiers CSV et licences
         </Link>
       </p>
       <p className="mt-1 text-xs text-muted-foreground">Identifiant : code INSEE {code}</p>

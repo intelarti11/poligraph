@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CommuneDossier } from "@/lib/data/territoires";
+import { DEPARTMENT_OUTLINES } from "@/config/territoires-shapes";
 import { dossier, grandeCommune, papeete, paris, reunion, withMaire } from "./fixtures";
 
 const mocks = vi.hoisted(() => ({
@@ -226,10 +227,27 @@ describe("/territoires/communes/[code]", () => {
     expect(document.querySelector("[data-territory-marker]")).not.toBeNull();
   });
 
-  it("garde le bandeau d'une commune d'outre-mer sans silhouette", async () => {
+  it.each([
+    ["La Réunion", reunion, "974"],
+    ["Polynésie française", papeete, "987"],
+  ] as const)(
+    "dessine en %s le contour du territoire et le repère de la commune",
+    async (_, make, code) => {
+      const { document } = await render(make());
+
+      const svgs = [...document.querySelectorAll("header svg:not(.lucide)")];
+      // Its own territory, never metropolitan France: no mini inset overseas.
+      expect(svgs).toHaveLength(1);
+      expect(svgs[0]!.getAttribute("aria-hidden")).toBe("true");
+      expect(svgs[0]!.getAttribute("viewBox")).toBe(DEPARTMENT_OUTLINES[code]!.viewBox);
+      expect(svgs[0]!.querySelector("path")!.getAttribute("d")).toBe(DEPARTMENT_OUTLINES[code]!.d);
+      expect(document.querySelector("[data-territory-marker]")).not.toBeNull();
+    }
+  );
+
+  it("relie la commune d'un DROM à sa région", async () => {
     const { document, text } = await render(reunion());
 
-    expect(document.querySelector("header svg:not(.lucide)")).toBeNull();
     expect(text).toContain("Commune · La Réunion (974)");
     expect(document.querySelector('a[href="/territoires/regions/la-reunion"]')).not.toBeNull();
   });
@@ -243,7 +261,6 @@ describe("/territoires/communes/[code]", () => {
     expect(crumbs).toEqual(["Territoires", "Outre-mer", "Polynésie française (987)", "Papeete"]);
     expect(text).toContain("Collectivité d'outre-mer hors région");
     expect(text).toContain("Circonscription non renseignée");
-    expect(document.querySelector("header svg:not(.lucide)")).toBeNull();
     expect(document.querySelector('a[href^="/territoires/regions/"]')).toBeNull();
   });
 
