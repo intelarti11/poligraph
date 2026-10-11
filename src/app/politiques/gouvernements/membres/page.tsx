@@ -447,7 +447,7 @@ export default async function MembresPage({ searchParams }: PageProps) {
                   defaultValue={query.mode}
                   className={fieldClass}
                 >
-                  <option value="periode">Fonctions exercées pendant la période</option>
+                  <option value="periode">Sur une période</option>
                   <option value="present">Présents à une date</option>
                 </select>
               </div>
@@ -542,14 +542,14 @@ export default async function MembresPage({ searchParams }: PageProps) {
         </form>
 
         {presidencyShortcuts.length > 1 && (
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-muted-foreground">Présidences :</span>
+          <div className="-mx-4 flex items-center gap-2 overflow-x-auto whitespace-nowrap px-4 text-sm sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
+            <span className="shrink-0 text-muted-foreground">Présidences :</span>
             {presidencyShortcuts.map((p) => (
               <Link
                 key={p.slug}
                 href={p.href}
                 className={cn(
-                  "inline-flex min-h-11 items-center rounded-full border px-3 hover:bg-muted",
+                  "inline-flex min-h-11 shrink-0 items-center rounded-full border px-3 hover:bg-muted",
                   p.active ? "border-primary bg-primary/10 font-bold text-primary" : "bg-card"
                 )}
               >
