@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { getTerritoiresEntry } from "@/lib/data/territoires";
 import { isFeatureEnabled } from "@/lib/feature-flags";
-import { TERRITOIRES_PATH } from "@/lib/territoires/paths";
+import Link from "next/link";
+import { TERRITOIRES_DONNEES_PATH, TERRITOIRES_PATH } from "@/lib/territoires/paths";
 import { SITE_URL } from "@/config/site";
 import { BreadcrumbJsonLd } from "@/components/seo/JsonLd";
 import { EntreeHero } from "@/components/territoires/EntreeHero";
@@ -46,6 +47,15 @@ export default async function TerritoiresPage() {
         <EntreeAccesRapides monDepute={monDepute} />
         <EntreeRegions entry={entry} />
         <CouvertureEntree national={entry.national} />
+        <p className="text-sm">
+          <Link
+            href={TERRITOIRES_DONNEES_PATH}
+            prefetch={false}
+            className="inline-flex min-h-11 items-center underline underline-offset-4"
+          >
+            Télécharger les données (CSV) et leurs licences
+          </Link>
+        </p>
       </div>
     </>
   );

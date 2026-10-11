@@ -106,7 +106,7 @@ synchronisation RNE et l'import des résultats. Aucune liste non bornée ; liens
 
 ## 7. État de livraison (11 octobre 2026)
 
-Livré : lot 0 complet, lot 1 sauf 1.7, 1.8 et 1.9, lot 3.1. La recette actualisée vit dans [`territoires-recette.md`](territoires-recette.md) et remplace `03-recette-auditable.md`.
+Livré : lot 0 complet, lot 1 sauf 1.7, 1.8 et 1.9, lot 3.1, lot 3.2. La recette actualisée vit dans [`territoires-recette.md`](territoires-recette.md) et remplace `03-recette-auditable.md`.
 
 Décisions prises pendant l'implémentation, après la revue du 10 octobre :
 
@@ -119,6 +119,7 @@ Décisions prises pendant l'implémentation, après la revue du 10 octobre :
 - **Badges.** « Socle officiel » et « Dossier curé » restent internes ; le lecteur voit « Informations disponibles : ... ».
 - **Décisions.** Pas d'onglet tant qu'aucune décision n'est documentée.
 - **`/mon-depute`.** Conservé, sous-entrée de Territoires.
+- **Exports et licence (lot 3.2).** Registre des licences dans `src/config/territoires-sources.ts`, rendu sur `/territoires/donnees` (indexable, au sitemap). Chaque licence a été lue sur la page du producteur le 11 octobre 2026 ; une licence introuvable reste « non établie » avec ce qui a été trouvé. La compilation Poligraph est publiée sous ODbL 1.0 (décision du 31 août 2026) ; la page dit seulement que chaque source garde sa licence, sans parler de cumul. Exports CSV sous `/api/export/territoires/` (palier `export`, 5 par minute ; cache CDN 24 h, tag `export:territories`) : communes par département (liste fermée, TAAF et Clipperton exclus), départements, régions. Le fichier national des communes pèse 10,3 Mo (34 963 lignes, mesuré le 11 octobre 2026), au-dessus des 4,5 Mo d'une réponse de fonction : il est publié en version datée par `npm run territoires:release` (Vercel Blob, nom daté jamais réécrit, ligne `SyncMetadata` avec lignes, taille et SHA-256). Maire nommé selon la règle des pages.
 - **`ELECTION_SPOTLIGHT`.** Créé en base désactivé, `value.slug = "presidentielle-2027"`. La pastille n'apparaît que si le drapeau est actif, dans sa fenêtre de dates, que le slug figure dans `NAV_ELECTIONS`, que le drapeau propre de l'élection est actif et que l'élection existe.
 
-Restent ouverts : 1.7 population millésimée, 1.8 BANATIC, 1.9 présidentielle par commune (après publication officielle), lot 2 (décisions curées), exports et licence (lot 3.2), test du libellé à cinq lecteurs.
+Restent ouverts : 1.7 population millésimée, 1.8 BANATIC, 1.9 présidentielle par commune (après publication officielle), lot 2 (décisions curées), test du libellé à cinq lecteurs.
