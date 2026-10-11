@@ -512,7 +512,7 @@ export default async function GovernmentPage({ params, searchParams }: PageProps
                 targetSlug={gov.primeMinister.slug}
                 returnUrl={returnUrl}
                 label={returnLabel}
-                className="font-bold text-primary underline-offset-4 hover:underline"
+                className="-my-3 inline-block py-3 font-bold text-primary underline-offset-4 hover:underline"
               >
                 {gov.primeMinister.fullName}
               </RememberReturn>
@@ -1042,7 +1042,7 @@ function ParticipantList({
                 targetSlug={person.slug}
                 returnUrl={returnUrl}
                 label={returnLabel}
-                className="font-bold text-primary underline-offset-4 hover:underline"
+                className="-my-3 inline-block py-3 font-bold text-primary underline-offset-4 hover:underline"
               >
                 {person.fullName}
               </RememberReturn>

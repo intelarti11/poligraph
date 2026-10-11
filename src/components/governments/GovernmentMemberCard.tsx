@@ -69,7 +69,7 @@ export function GovernmentMemberCard({
               targetSlug={person.slug}
               returnUrl={returnUrl}
               label={returnLabel}
-              className="text-primary underline-offset-4 hover:underline"
+              className="-my-3 inline-block py-3 text-primary underline-offset-4 hover:underline"
             >
               {person.fullName}
             </RememberReturn>
