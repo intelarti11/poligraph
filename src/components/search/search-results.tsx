@@ -7,6 +7,7 @@ import {
   MANDATE_TYPE_LABELS,
 } from "@/config/labels";
 import { isAccusedInvolvement } from "@/config/certainty";
+import { territoireCommunePath } from "@/lib/territoires/paths";
 import type { AffairStatus, Involvement } from "@/generated/prisma";
 
 export interface SearchResultCategory {
@@ -70,10 +71,17 @@ export interface GlobalSearchResponse {
     filingDate: string | null;
   }>;
   communes: Array<{
+    /** INSEE code */
     id: string;
     name: string;
     departmentName: string;
     population: number | null;
+  }>;
+  /** Matched from the static department list. Optional: older responses did not carry it. */
+  departements?: Array<{
+    code: string;
+    name: string;
+    slug: string;
   }>;
 }
 
@@ -97,7 +105,41 @@ function formatDate(dateStr: string): string {
   });
 }
 
-export function categorizeResults(data: GlobalSearchResponse): SearchResultCategory[] {
+/** Lower case, accents and punctuation folded, so "Saint-Étienne" and "saint etienne" compare equal. */
+function fold(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+const POSTAL_CODE = /^\d{5}$/;
+
+/**
+ * Whether the query reads as a place rather than a person, which puts Territoires first.
+ *
+ * A postal code, or the exact name of a commune or department returned, is a place. A prefix of a
+ * commune name is one too, unless a returned person's name also contains the query: "Paris" is a
+ * commune, "Bayrou" is a person, and "Saint-Ex" with no person behind it is a commune being typed.
+ */
+export function isTerritoireQuery(query: string, data: GlobalSearchResponse): boolean {
+  const q = fold(query);
+  if (!q) return false;
+  if (POSTAL_CODE.test(query.trim())) return true;
+
+  const placeNames = [
+    ...data.communes.map((c) => fold(c.name)),
+    ...(data.departements ?? []).map((d) => fold(d.name)),
+  ];
+  if (placeNames.some((name) => name === q)) return true;
+
+  const personMatches = data.politicians.some((p) => fold(p.fullName).includes(q));
+  return !personMatches && placeNames.some((name) => name.startsWith(q));
+}
+
+export function categorizeResults(data: GlobalSearchResponse, query = ""): SearchResultCategory[] {
   const categories: SearchResultCategory[] = [
     {
       key: "politicians",
@@ -164,15 +206,27 @@ export function categorizeResults(data: GlobalSearchResponse): SearchResultCateg
       })),
     },
     {
-      key: "communes",
-      label: "Communes",
-      results: data.communes.map((c) => ({
-        href: `/elections/municipales-2026/communes/${c.id}`,
-        primary: c.name,
-        secondary: c.departmentName,
-      })),
+      key: "territoires",
+      label: "Territoires",
+      results: [
+        ...(data.departements ?? []).map((d) => ({
+          href: `/departements/${d.slug}`,
+          primary: d.name,
+          secondary: `Département (${d.code})`,
+        })),
+        ...data.communes.map((c) => ({
+          href: territoireCommunePath(c.id),
+          primary: c.name,
+          secondary: `Commune, ${c.departmentName}`,
+        })),
+      ],
     },
   ];
+
+  if (isTerritoireQuery(query, data)) {
+    const index = categories.findIndex((cat) => cat.key === "territoires");
+    categories.unshift(...categories.splice(index, 1));
+  }
 
   return categories.filter((cat) => cat.results.length > 0);
 }

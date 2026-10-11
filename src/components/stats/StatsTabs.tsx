@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { BarChart3, FileText, Scale, ShieldCheck } from "lucide-react";
+import { BarChart3, FileText, MapPin, Scale, ShieldCheck } from "lucide-react";
 import { STATS_SECTIONS, statsHref, type StatsTab } from "@/config/routes";
 
 const ITEMS: Array<{
@@ -11,6 +11,7 @@ const ITEMS: Array<{
   { tab: "factchecks", icon: ShieldCheck },
   { tab: "legislatif", icon: FileText },
   { tab: "participation", icon: BarChart3 },
+  { tab: "territoires", icon: MapPin },
 ];
 
 /** Server-rendered navigation avoids mounting and prefetching hidden datasets. */

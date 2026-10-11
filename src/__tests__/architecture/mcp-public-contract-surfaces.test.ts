@@ -111,6 +111,9 @@ const PARTY_SURFACES = [
   "src/app/comparer/page.tsx",
   "src/app/comparer/votes/page.tsx",
   "src/app/declarations-et-patrimoine/page.tsx",
+  // Commune-list variants of the department page: same body and same deputies and senators
+  // block (party badges included) as the page itself, through departement-page.tsx.
+  "src/app/departements/[slug]/communes/[lettre]/[page]/page.tsx",
   "src/app/departements/[slug]/page.tsx",
   "src/app/elections/[slug]/page.tsx",
   "src/app/elections/municipales-2026/carte/page.tsx",
@@ -166,6 +169,16 @@ const PARTY_SURFACES = [
   "src/app/statistiques/legislatif/page.tsx",
   "src/app/statistiques/page.tsx",
   "src/app/statistiques/participation/page.tsx",
+  // Territoires commune page and its image: same reason as the Territoires API above, they read
+  // `getCommuneDossier` only and render no party data.
+  "src/app/territoires/communes/[code]/opengraph-image.tsx",
+  "src/app/territoires/communes/[code]/page.tsx",
+  // Territoires entry, search and region pages: flagged through the same territoires readers
+  // (and `getElections` on the region page, which selects election rows only). No party data.
+  "src/app/territoires/page.tsx",
+  "src/app/territoires/recherche/page.tsx",
+  "src/app/territoires/regions/[slug]/opengraph-image.tsx",
+  "src/app/territoires/regions/[slug]/page.tsx",
 ] as const;
 
 const FACTCHECK_SURFACES = [

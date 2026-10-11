@@ -20,6 +20,7 @@ import { PoliticianAvatar } from "@/components/politicians/PoliticianAvatar";
 import { MANDATE_TYPE_LABELS, CHAMBER_SHORT_LABELS, DOSSIER_STATUS_LABELS } from "@/config/labels";
 import { affairResultBadge } from "@/components/search/search-results";
 import { formatDateShort } from "@/lib/utils";
+import { territoireCommunePath } from "@/lib/territoires/paths";
 import type {
   MandateType,
   Chamber,
@@ -644,7 +645,7 @@ function DossierRow({ result }: { result: DossierResult }) {
 function CommuneRow({ result }: { result: CommuneResult }) {
   return (
     <Link
-      href={`/elections/municipales-2026/communes/${result.id}`}
+      href={territoireCommunePath(result.id)}
       className="flex items-center gap-3 py-3 hover:bg-accent/40 rounded-lg transition-colors px-3 -mx-3"
       prefetch={false}
     >

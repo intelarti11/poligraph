@@ -590,6 +590,37 @@ export function GovernmentOrganizationJsonLd({
   );
 }
 
+interface AdministrativeAreaJsonLdProps {
+  name: string;
+  url: string;
+  /** Official code, e.g. the INSEE code of a commune. */
+  identifier?: { propertyID: string; value: string };
+  containedInPlace?: { name: string; url?: string };
+}
+
+/** A territory (commune, department, region). Only facts the page itself displays. */
+export function AdministrativeAreaJsonLd({
+  name,
+  url,
+  identifier,
+  containedInPlace,
+}: AdministrativeAreaJsonLdProps) {
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "AdministrativeArea",
+    name,
+    url,
+    ...(identifier && { identifier: { "@type": "PropertyValue", ...identifier } }),
+    ...(containedInPlace && {
+      containedInPlace: { "@type": "AdministrativeArea", ...containedInPlace },
+    }),
+  };
+
+  return (
+    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: safeJsonLd(jsonLd) }} />
+  );
+}
+
 interface CollectionPageJsonLdProps {
   name: string;
   description: string;

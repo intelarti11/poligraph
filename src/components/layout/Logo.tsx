@@ -3,12 +3,20 @@ import Image from "next/image";
 type LogoProps = {
   size?: number;
   withWordmark?: boolean;
+  /** Extra classes on the wordmark, e.g. to hide it where the header runs out of room */
+  wordmarkClassName?: string;
   className?: string;
   /** Preload the mark. Use only for above-the-fold instances (e.g. the header). */
   priority?: boolean;
 };
 
-export function Logo({ size = 40, withWordmark = false, className, priority = false }: LogoProps) {
+export function Logo({
+  size = 40,
+  withWordmark = false,
+  wordmarkClassName,
+  className,
+  priority = false,
+}: LogoProps) {
   return (
     <span className={["flex items-center gap-3", className].filter(Boolean).join(" ")}>
       <span className="shrink-0" style={{ width: size, height: size }}>
@@ -34,7 +42,12 @@ export function Logo({ size = 40, withWordmark = false, className, priority = fa
       {withWordmark && (
         <span
           aria-hidden="true"
-          className="font-display font-extrabold tracking-[-0.02em] text-primary text-xl"
+          className={[
+            "font-display font-extrabold tracking-[-0.02em] text-primary text-xl",
+            wordmarkClassName,
+          ]
+            .filter(Boolean)
+            .join(" ")}
         >
           Poligraph
         </span>

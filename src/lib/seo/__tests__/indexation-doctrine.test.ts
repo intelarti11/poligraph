@@ -375,6 +375,52 @@ describe("doctrine — sitemap shares the indexability thresholds (no drift)", (
   });
 });
 
+describe("doctrine — the Territoires shard mirrors isIndexableTerritoireCommune()", () => {
+  const src = readFileSync(join(process.cwd(), "src/app/sitemap.ts"), "utf8");
+
+  it("imports the population floor from the shared helper", () => {
+    expect(src).toContain('from "@/lib/seo/territoire-robots"');
+    expect(src).toContain("TERRITOIRE_COMMUNE_MIN_POPULATION");
+  });
+
+  // Scoped to the shard, comments stripped, like the scrutin guard above.
+  const territoiresShard = (() => {
+    const start = src.indexOf("async function buildTerritoiresSitemap");
+    expect(start).toBeGreaterThan(-1);
+    const end = src.indexOf("\n}", start);
+    return src
+      .slice(start, end)
+      .split("\n")
+      .filter((line) => !/^\s*(\/\/|\*|\/\*|--)/.test(line))
+      .join("\n");
+  })();
+
+  it("keeps an unknown population out (not presumed rich)", () => {
+    expect(territoiresShard).toContain('c."population" IS NOT NULL');
+    expect(territoiresShard).toContain('c."population" >= ${TERRITOIRE_COMMUNE_MIN_POPULATION}');
+  });
+
+  // getMaireStatus(): exactly one current MAIRE outside any PLM sector, on a public profile,
+  // counted before the public filter.
+  it.each([
+    `m."type" = 'MAIRE'`,
+    'm."isCurrent" = true',
+    'ml."sectorLabel" IS NULL',
+    "HAVING COUNT(*) = 1",
+    'bool_and(p."publicationStatus" = ${PUBLIC_POLITICIAN_PUBLICATION_STATUS})',
+  ])("filters the established mayor on %s", (signal) => {
+    expect(territoiresShard).toContain(signal);
+  });
+
+  it("never filters the mayors on publication before counting them", () => {
+    const where = territoiresShard.slice(
+      territoiresShard.indexOf("WHERE m."),
+      territoiresShard.indexOf("GROUP BY")
+    );
+    expect(where).not.toContain("publicationStatus");
+  });
+});
+
 describe("doctrine — presidential measure methodology stays indexable and discoverable", () => {
   const sitemapSource = readFileSync(join(process.cwd(), "src/app/sitemap.ts"), "utf8");
 
@@ -585,5 +631,53 @@ describe("doctrine — politician sub-tabs inherit the profile's indexability", 
   it("noindexes the sub-tabs of a bare mayor and leaves a député's indexable", () => {
     expect(politicianRobotsMetadata(BARE_SMALL_MAYOR)).toEqual(NOINDEX_FOLLOW);
     expect(politicianRobotsMetadata(RICH_DEPUTE)).toEqual(INDEXABLE);
+  });
+});
+
+describe("doctrine, /departements/[slug] : les vues de la liste des communes restent hors index", () => {
+  it("?lettre= et ?page>1 sont des variantes utilitaires, la page nue reste indexable", async () => {
+    const { DEPARTEMENT_COMMUNES_FILTER_KEYS } = await import("../listing-filters");
+    expect(DEPARTEMENT_COMMUNES_FILTER_KEYS).toContain("lettre");
+    expect(listingRobots({ lettre: "M" }, DEPARTEMENT_COMMUNES_FILTER_KEYS)).toEqual(
+      NOINDEX_FOLLOW
+    );
+    expect(listingRobots({ page: "2" }, DEPARTEMENT_COMMUNES_FILTER_KEYS)).toEqual(NOINDEX_FOLLOW);
+    expect(listingRobots({}, DEPARTEMENT_COMMUNES_FILTER_KEYS)).toEqual(INDEXABLE);
+  });
+
+  it("la route des variantes est noindex,follow avec un canonical vers la page nue", async () => {
+    const { generateMetadata } =
+      await import("@/app/departements/[slug]/communes/[lettre]/[page]/page");
+    for (const [lettre, page] of [
+      ["M", "2"],
+      ["E", "1"],
+      ["toutes", "3"],
+    ]) {
+      const m = await generateMetadata({
+        params: Promise.resolve({ slug: "aisne", lettre: lettre!, page: page! }),
+      });
+      expect(m.robots, `${lettre}/${page}`).toEqual(NOINDEX_FOLLOW.robots);
+      expect(m.alternates?.canonical).toBe("/departements/aisne");
+    }
+  });
+
+  it("la page nue du département garde son canonical et reste indexable", async () => {
+    const { generateMetadata } = await import("@/app/departements/[slug]/page");
+    const m = await generateMetadata({ params: Promise.resolve({ slug: "aisne" }) });
+    expect(m.robots).toBeUndefined();
+    expect(m.alternates?.canonical).toBe("/departements/aisne");
+  });
+
+  it("aucune des deux routes ne lit searchParams (ISR, AGENTS.md §8)", () => {
+    for (const file of [
+      "src/app/departements/[slug]/page.tsx",
+      "src/app/departements/[slug]/communes/[lettre]/[page]/page.tsx",
+      "src/app/departements/[slug]/departement-page.tsx",
+    ]) {
+      const code = readFileSync(join(process.cwd(), file), "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/\/\/[^\n]*/g, "");
+      expect(code, file).not.toMatch(/searchParams/);
+    }
   });
 });

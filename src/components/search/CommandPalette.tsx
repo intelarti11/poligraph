@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { ArrowRight, Loader2, Search } from "lucide-react";
+import { ArrowLeft, ArrowRight, Loader2, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { useCommandPalette } from "@/components/search/CommandPaletteProvider";
@@ -37,6 +37,14 @@ function getRecentSearches(): RecentSearch[] {
     return JSON.parse(raw) as RecentSearch[];
   } catch {
     return [];
+  }
+}
+
+function clearRecentSearches() {
+  try {
+    localStorage.removeItem(RECENT_SEARCHES_KEY);
+  } catch {
+    // localStorage unavailable
   }
 }
 
@@ -93,7 +101,7 @@ function CategoryIcon({ categoryKey }: { categoryKey: string }) {
     parties: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
     dossiers: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300",
     factchecks: "bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300",
-    communes: "bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300",
+    territoires: "bg-primary/10 text-primary",
   };
 
   const iconLabels: Record<string, string> = {
@@ -103,7 +111,7 @@ function CategoryIcon({ categoryKey }: { categoryKey: string }) {
     parties: "G",
     dossiers: "D",
     factchecks: "F",
-    communes: "C",
+    territoires: "T",
   };
 
   return (
@@ -119,7 +127,7 @@ function CategoryIcon({ categoryKey }: { categoryKey: string }) {
 }
 
 export function CommandPalette() {
-  const { isOpen, close } = useCommandPalette();
+  const { isOpen, hasBack, close, dismiss } = useCommandPalette();
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -173,7 +181,7 @@ export function CommandPalette() {
           return;
         }
         const data = (await res.json()) as GlobalSearchResponse;
-        setResults(categorizeResults(data));
+        setResults(categorizeResults(data, query));
       } catch (err) {
         if ((err as Error).name !== "AbortError") {
           setResults([]);
@@ -240,7 +248,8 @@ export function CommandPalette() {
     <Dialog.Root
       open={isOpen}
       onOpenChange={(open) => {
-        if (!open) close();
+        // Escape or a click outside: no result was chosen, so return to where search was opened.
+        if (!open) dismiss();
       }}
     >
       <Dialog.Portal>
@@ -268,15 +277,35 @@ export function CommandPalette() {
           <Dialog.Title className="sr-only">Recherche globale</Dialog.Title>
 
           {/* Search input */}
-          <div className="flex items-center gap-2 border-b px-4 py-3">
-            <Search className="h-5 w-5 text-muted-foreground" />
+          <div
+            className={cn(
+              "flex items-center gap-2 border-b px-4 py-3 max-sm:pl-1",
+              hasBack && "pl-1"
+            )}
+          >
+            {/* Full screen on mobile, so the screen needs its own way out. Opened from the menu,
+                it leads back there at every width the menu exists. */}
+            <button
+              type="button"
+              onClick={dismiss}
+              className={cn(
+                "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-foreground/80 hover:bg-muted",
+                !hasBack && "sm:hidden"
+              )}
+              aria-label={hasBack ? "Revenir au menu" : "Fermer la recherche"}
+              title={hasBack ? "Revenir au menu" : "Fermer la recherche"}
+            >
+              <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+            </button>
+            <Search className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
             <input
               ref={inputRef}
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Rechercher un politique, un vote, une affaire..."
-              className="flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground"
+              placeholder="Élu, commune, vote..."
+              aria-label="Rechercher un élu, une commune, un vote"
+              className="min-h-11 min-w-0 flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground"
               role="combobox"
               aria-expanded={hasResults}
               aria-activedescendant={selectedIndex >= 0 ? `result-${selectedIndex}` : undefined}
@@ -306,7 +335,7 @@ export function CommandPalette() {
                   <button
                     key={link.href}
                     type="button"
-                    className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-accent/50"
+                    className="flex min-h-11 w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-accent/50"
                     onClick={() => navigateToResult(link.href)}
                     role="option"
                     aria-selected={false}
@@ -319,14 +348,28 @@ export function CommandPalette() {
                 {/* Recent searches */}
                 {recentSearches.length > 0 && (
                   <>
-                    <div className="px-4 pb-1 pt-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      Recherches récentes
+                    <div className="flex items-center justify-between px-4 pt-1">
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        Recherches récentes
+                      </span>
+                      {/* Kept on this device only (localStorage), never sent to the server. */}
+                      <button
+                        type="button"
+                        className="min-h-11 px-2 text-xs font-medium text-primary hover:underline"
+                        onClick={() => {
+                          clearRecentSearches();
+                          setRecentSearches([]);
+                          inputRef.current?.focus();
+                        }}
+                      >
+                        Effacer
+                      </button>
                     </div>
                     {recentSearches.map((recent) => (
                       <button
                         key={recent.timestamp}
                         type="button"
-                        className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-accent/50"
+                        className="flex min-h-11 w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-accent/50"
                         onClick={() => setQuery(recent.query)}
                         role="option"
                         aria-selected={false}
@@ -427,7 +470,7 @@ export function CommandPalette() {
             {query.length >= MIN_QUERY_LENGTH && (
               <button
                 type="button"
-                className="ml-auto flex items-center gap-1 text-primary hover:underline"
+                className="ml-auto flex min-h-11 items-center gap-1 text-primary hover:underline sm:min-h-0"
                 onClick={() => {
                   saveRecentSearch(query);
                   router.push(`/recherche?q=${encodeURIComponent(query)}`);

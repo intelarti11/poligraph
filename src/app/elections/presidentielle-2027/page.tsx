@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Mail } from "lucide-react";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
@@ -8,6 +9,7 @@ import { getHubCandidacyField, getHubMeasureContext } from "@/lib/data/hub";
 import { PRESIDENTIELLE_2027_SLUG, THEMES_IN_ORDER } from "@/lib/presidentielle/themes";
 import { formatDate } from "@/lib/utils";
 import { SITE_URL } from "@/config/site";
+import { isFeatureEnabled } from "@/lib/feature-flags";
 import { HubPrimaryPaths } from "./_components/HubPrimaryPaths";
 import { HubClosedState } from "./_components/HubClosedState";
 import { HubCorpusState } from "./_components/HubCorpusState";
@@ -37,9 +39,10 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function PresidentialHubPage() {
-  const [field, context] = await Promise.all([
+  const [field, context, programmesEnabled] = await Promise.all([
     getHubCandidacyField(PRESIDENTIELLE_2027_SLUG),
     getHubMeasureContext(PRESIDENTIELLE_2027_SLUG),
+    isFeatureEnabled("PROGRAMMES_ENABLED"),
   ]);
   if (context === null) notFound();
 
@@ -128,6 +131,19 @@ export default async function PresidentialHubPage() {
         <HubReaderGuides guides={context.featuredReaderGuides} />
 
         <HubComparisonLauncher candidacies={field} themes={context.themes} />
+
+        {programmesEnabled && (
+          <p className="text-sm text-muted-foreground">
+            Les programmes des partis, classés par thème, sont sur la page{" "}
+            <Link
+              href="/programmes"
+              className="font-semibold text-primary underline underline-offset-4 hover:no-underline"
+            >
+              Programmes
+            </Link>
+            .
+          </p>
+        )}
 
         <section
           aria-labelledby="campaign-contact-title"

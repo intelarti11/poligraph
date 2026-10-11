@@ -7,9 +7,32 @@ import { parsePagination } from "@/lib/api/pagination";
 import { getPublicFactCheckSqlWhere, getPublicPartySqlWhere } from "@/lib/api/public-contract";
 import { getPublishedAffairSqlWhere } from "@/lib/affairs/public-filters";
 import { normalizeDossierAlias } from "@/lib/legislation/alias";
-import { getDepartmentName } from "@/config/departments";
+import { DEPARTMENTS, getDepartmentName, getDepartmentSlug } from "@/config/departments";
 
 const MAX_LIMIT = 8;
+/** Department matches are few and come first in Territoires: two leave room for the communes. */
+const MAX_DEPARTEMENTS = 2;
+const POSTAL_CODE = /^\d{5}$/;
+
+function foldName(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+/** Departments whose code equals the query ("2A", "75") or whose name starts with it. No DB. */
+function matchDepartements(query: string, limit: number) {
+  const code = query.trim().toUpperCase();
+  const folded = foldName(query);
+  if (!folded) return [];
+  return Object.entries(DEPARTMENTS)
+    .filter(([c, d]) => c === code || foldName(d.name).startsWith(folded))
+    .slice(0, Math.min(limit, MAX_DEPARTEMENTS))
+    .map(([c, d]) => ({ code: c, name: d.name, slug: getDepartmentSlug(d.name) }));
+}
 
 // Raw result types from $queryRaw
 interface RawPolitician {
@@ -89,12 +112,17 @@ export const GET = withPublicRoute(async (request) => {
       factchecks: [],
       dossiers: [],
       communes: [],
+      departements: [],
     });
   }
 
   const pattern = `%${query}%`;
   const startsWithPattern = `${query}%`;
   const normalizedQuery = normalizeDossierAlias(query);
+  // A postal code also finds the communes it serves, several of them in rural areas.
+  const postalCodeClause = POSTAL_CODE.test(query.trim())
+    ? Prisma.sql`OR ${query.trim()} = ANY(c."postalCodes")`
+    : Prisma.empty;
 
   const [politicians, parties, affairs, scrutins, factchecks, dossiers, communes] =
     await Promise.all([
@@ -193,6 +221,7 @@ export const GET = withPublicRoute(async (request) => {
         SELECT c."id", c."name", c."departmentCode", c."population"
         FROM "Commune" c
         WHERE unaccent(c."name") ILIKE unaccent(${startsWithPattern})
+          ${postalCodeClause}
         ORDER BY c."population" DESC NULLS LAST
         LIMIT ${limit}
       `,
@@ -254,6 +283,7 @@ export const GET = withPublicRoute(async (request) => {
         departmentName: getDepartmentName(c.departmentCode) ?? c.departmentCode,
         population: c.population,
       })),
+      departements: matchDepartements(query, limit),
     }),
     // Free-text results must reflect editorial publication changes immediately. A cached empty
     // response otherwise keeps a newly published person invisible until the CDN entry expires.

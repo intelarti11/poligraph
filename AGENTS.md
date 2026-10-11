@@ -415,7 +415,7 @@ These are scar-tissue lessons. Reading them costs thirty seconds; rediscovering 
 
 - **500k+ candidacies.** Never load unbounded.
 - **`generateStaticParams` with heavy queries = Vercel OOM.** Return `[]` for ISR-only on heavy detail pages.
-- **A _list_ is elected at T1, not a commune.** Only lists with >50% round-1 percentage win. `seatsWon > 0` is wrong (proportional seats go to losing lists too).
+- **A _list_ is elected at T1, not a commune.** A list wins at T1 only with >50% of votes cast AND votes at least equal to a quarter of registered voters (Code électoral art. L. 262, see `resolvePremierTour` in `src/lib/data/territoires.ts`). `seatsWon > 0` is wrong (proportional seats go to losing lists too).
 - **`municipales-2026-resultats` StatsSnapshot is not refreshed by `sync:compute-stats`.** Refresh via `scripts/tmp-update-stats.ts`.
 
 ### Programmes (politician platforms)
@@ -427,7 +427,7 @@ These are scar-tissue lessons. Reading them costs thirty seconds; rediscovering 
 - **Always match on ID or code fields, not fuzzy names.** `departmentCode: "42"` not `constituency: { startsWith: "Loire" }` (which matches Loiret and Loir-et-Cher too).
 - **French administrative names mismatch.** RNE uses full legal names ("Libert Albanel"); ballot CSVs use short ballot names ("LIBERT"). Handle both variants.
 - **Never fallback `affair.partyAtTime || politician.currentParty`.** Use `getAffairPartyDisplay()` which refuses the fallback when the current party was founded after the affair's facts date.
-- **The `Elu` column in data.gouv.fr 2026 CSVs is always empty.** Derive `isElected` from `pctExpressed > 50` at T1.
+- **The `Elu` column in data.gouv.fr 2026 CSVs is always empty.** Derive `isElected` at T1 from the L. 262 rule above (`pctExpressed > 50` alone ignores the quarter of registered voters; the 2026 importers still use it, 83 lists are affected).
 
 ---
 

@@ -49,10 +49,10 @@ describe("nav élections", () => {
     expect(duplicated).toEqual([]);
   });
 
-  it("ne répète pas la Boussole, déjà en bas du menu mobile, et y met les fact-checks", () => {
+  it("ne répète ni la Boussole, déjà en bas du menu mobile, ni les fact-checks, devenus rubrique", () => {
     const hrefs = NAV_SECONDARY.map((i) => i.href);
     expect(hrefs).not.toContain("https://boussole.poligraph.fr");
-    expect(hrefs).toContain("/factchecks");
+    expect(hrefs).not.toContain("/factchecks");
     expect(new Set(hrefs).size).toBe(hrefs.length);
   });
 });

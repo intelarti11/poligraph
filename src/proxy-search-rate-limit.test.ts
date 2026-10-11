@@ -34,3 +34,19 @@ describe("quota de la recherche présidentielle", () => {
     expect(getRateLimitTier("/api/elections/presidentielle-2027/candidats")).toBe("general");
   });
 });
+
+describe("quota de la recherche de territoires", () => {
+  it("applique le quota de recherche à la page de résultats rendue côté serveur", () => {
+    expect(getRateLimitTier("/territoires/recherche")).toBe("search");
+    expect(getRateLimitTier("/territoires")).toBeNull();
+  });
+
+  it("réécrit la page limitée vers un état HTML", () => {
+    const request = new NextRequest("https://poligraph.fr/territoires/recherche?q=01300");
+    const response = buildRateLimitExceededResponse(request, 30, Date.now() + 30_000);
+    expect(response.status).toBe(429);
+    expect(response.headers.get("x-middleware-rewrite")).toBe(
+      "https://poligraph.fr/territoires/recherche?q=01300&limite=1"
+    );
+  });
+});
