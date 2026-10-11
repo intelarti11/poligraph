@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { presidencyOfGovernment } from "@/config/presidencies";
 import Link from "next/link";
+import { cn } from "@/lib/utils";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowRight, ChevronRight, Download, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -84,7 +85,9 @@ export async function generateMetadata({ params, searchParams }: PageProps): Pro
   // A historical composition is not a duplicate of the latest one (spec §8): a valid `date`
   // stays in the canonical. An invalid one is ignored by the page, so is the canonical.
   const date = parseCompositionDate(first(sp.date));
-  const title = `${gov.name} : composition et ministres`;
+  // « | Poligraph » est ajouté par le gabarit : le titre complet reste sous 70 caractères.
+  const title =
+    gov.name.length <= 31 ? `${gov.name} : composition et ministres` : `${gov.name} : ministres`;
   const description =
     gov.completeness === "COMPLETE"
       ? `Composition du ${gov.name} à chaque date, avec l'acte officiel de chaque nomination, les changements documentés et la liste des participants.`
@@ -123,7 +126,7 @@ function actDetails(act: ActRef): string {
   return text;
 }
 
-function ActLink({ act }: { act: ActRef }) {
+function ActLink({ act, className }: { act: ActRef; className?: string }) {
   const href = safeExternalUrl(act.url);
   if (!href) return <>{act.label}</>;
   return (
@@ -131,7 +134,7 @@ function ActLink({ act }: { act: ActRef }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-primary underline-offset-4 hover:underline"
+      className={cn("text-primary underline-offset-4 hover:underline", className)}
     >
       {act.label}
     </a>
@@ -958,7 +961,8 @@ export default async function GovernmentPage({ params, searchParams }: PageProps
             <ul className="mt-2 list-disc space-y-2 pl-5">
               {sourceActs.map((act) => (
                 <li key={act.url}>
-                  <ActLink act={act} /> : {actDetails(act)}.
+                  <ActLink act={act} className="inline-flex min-h-11 items-center" /> :{" "}
+                  {actDetails(act)}.
                 </li>
               ))}
               {gov.compositionVerifiedAt && (

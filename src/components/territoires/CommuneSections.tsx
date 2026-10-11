@@ -3,6 +3,11 @@ import { ChevronDown } from "lucide-react";
 import { DATA_SOURCE_URLS } from "@/config/labels";
 import { TERRITOIRES_SANS_COMMUNE } from "@/config/regions";
 import { PoliticianAvatar } from "@/components/politicians/PoliticianAvatar";
+import { IntercommunaliteCard } from "@/components/territoires/IntercommunaliteCard";
+import {
+  PresidentielleAgregatNote,
+  PresidentielleCommuneResults,
+} from "@/components/territoires/CommunePresidentielle";
 import type {
   CommuneDossier,
   MunicipalesBlock,
@@ -17,6 +22,7 @@ import {
   formatPopulation,
   maireSince,
 } from "@/lib/territoires/commune-display";
+import { PRESIDENTIELLE_2027_SLUG } from "@/lib/presidentielle/themes";
 import { formatDate } from "@/lib/utils";
 import { TERRITOIRES_DONNEES_PATH } from "@/lib/territoires/paths";
 
@@ -214,6 +220,12 @@ export function QuiDecideSection({ dossier }: { dossier: CommuneDossier }) {
             Poligraph ne dispose pas de la liste à jour des conseillers municipaux. Les résultats de
             mars 2026 ne la remplacent pas : des élus ont pu démissionner ou être remplacés depuis.
           </p>
+        </div>
+      )}
+
+      {dossier.intercommunalite && (
+        <div className="mt-4">
+          <IntercommunaliteCard dossier={dossier} />
         </div>
       )}
 
@@ -443,9 +455,19 @@ export function ElectionsSection({ dossier }: { dossier: CommuneDossier }) {
   const code = dossier.identity.inseeCode;
   const detailHref = `/elections/municipales-2026/communes/${code}`;
   const hasRound2 = block?.listes.some((l) => l.round2Pct != null) ?? false;
+  // Most recent first: a presidential election held after the municipales goes above them.
+  const { blocks: presidentielles, agregatTerritoire } = dossier.elections.presidentielles;
+  const after = (p: { round1Date: string | null }) =>
+    p.round1Date != null && block?.round1Date != null && p.round1Date > block.round1Date;
+  const renderPresidentielle = (p: (typeof presidentielles)[number]) => (
+    <div key={p.electionSlug} className={after(p) ? "mb-4 border-b pb-4" : "mt-4 border-t pt-4"}>
+      <PresidentielleCommuneResults block={p} communeName={dossier.identity.name} />
+    </div>
+  );
 
   return (
     <SectionCard id="elections" title="Élections dans la commune">
+      {presidentielles.filter(after).map(renderPresidentielle)}
       {!block || block.state === "ABSENT" ? (
         <p className="text-sm">
           Aucun résultat des municipales 2026 n{"'"}est enregistré pour cette commune.
@@ -483,12 +505,22 @@ export function ElectionsSection({ dossier }: { dossier: CommuneDossier }) {
         </>
       )}
 
-      {!TERRITOIRES_SANS_COMMUNE.has(dossier.identity.territoireHorsRegion?.code ?? "") && (
-        <div className="mt-4 rounded-xl bg-muted/60 p-4 text-sm">
-          <strong>Présidentielle 2027 :</strong> les résultats de la commune apparaîtront ici après
-          leur publication officielle.
+      {presidentielles.filter((p) => !after(p)).map(renderPresidentielle)}
+      {agregatTerritoire && (
+        <div className="mt-4">
+          <PresidentielleAgregatNote agregat={agregatTerritoire} />
         </div>
       )}
+
+      {/* A territory published as one aggregate gets no promise of commune results. */}
+      {!agregatTerritoire &&
+        !presidentielles.some((p) => p.electionSlug === PRESIDENTIELLE_2027_SLUG) &&
+        !TERRITOIRES_SANS_COMMUNE.has(dossier.identity.territoireHorsRegion?.code ?? "") && (
+          <div className="mt-4 rounded-xl bg-muted/60 p-4 text-sm">
+            <strong>Présidentielle 2027 :</strong> les résultats de la commune apparaîtront ici
+            après leur publication officielle.
+          </div>
+        )}
     </SectionCard>
   );
 }

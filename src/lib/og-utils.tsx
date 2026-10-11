@@ -185,6 +185,15 @@ const OG_PORTRAIT_MAX_BYTES = 5_000_000;
  * checks what came back, and turns every failure into "no photo" rather than into
  * a broken preview card.
  */
+/** Image type from its magic bytes, restricted to the types the OG renderer decodes. */
+export function sniffImageType(bytes: Uint8Array): string | null {
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47)
+    return "image/png";
+  if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return "image/gif";
+  return null;
+}
+
 export async function loadOgPortrait(url: string | null | undefined): Promise<string | null> {
   if (!url) return null;
   const httpsUrl = url.startsWith("http://") ? `https://${url.slice("http://".length)}` : url;
@@ -194,14 +203,18 @@ export async function loadOgPortrait(url: string | null | undefined): Promise<st
     const response = await fetch(httpsUrl, { signal: AbortSignal.timeout(5000) });
     if (!response.ok) return null;
 
-    const contentType = (response.headers.get("content-type") ?? "")
+    const declared = (response.headers.get("content-type") ?? "")
       .split(";")[0]
       ?.trim()
       .toLowerCase();
-    if (!contentType || !OG_PORTRAIT_TYPES.has(contentType)) return null;
+    if (!declared || !OG_PORTRAIT_TYPES.has(declared)) return null;
 
     const bytes = Buffer.from(await response.arrayBuffer());
     if (bytes.byteLength === 0 || bytes.byteLength > OG_PORTRAIT_MAX_BYTES) return null;
+    // Some stored copies are served with a wrong type (a PNG labelled image/jpeg): the image
+    // renderer then fails to decode it and the whole OG image errors. Trust the bytes.
+    const contentType = sniffImageType(bytes);
+    if (!contentType) return null;
 
     return `data:${contentType};base64,${bytes.toString("base64")}`;
   } catch {
