@@ -14,7 +14,11 @@ import { getCommuneDossier } from "@/lib/data/territoires";
 import { missingEntityMetadata } from "@/lib/seo/not-found-metadata";
 import { territoireCommuneRobotsMetadata } from "@/lib/seo/territoire-robots";
 import { communeDescription, communeTitle } from "@/lib/territoires/commune-display";
-import { territoireCommuneDecisionsPath, territoireCommunePath } from "@/lib/territoires/paths";
+import {
+  territoireCommuneDecisionsPath,
+  territoireCommunePath,
+  territoireDepartementPath,
+} from "@/lib/territoires/paths";
 
 // ISR: 24 h backstop; freshness comes from the reader's cache tags.
 export const revalidate = 86400;
@@ -50,7 +54,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 }
 
 const ANCHORS = [
-  { href: "#qui-decide", label: "Qui décide ici" },
+  { href: "#qui-decide", label: "Élus et institutions" },
   { href: "#elections", label: "Élections" },
   { href: "#sources", label: "Sources et réutilisation" },
 ];
@@ -82,7 +86,7 @@ export default async function TerritoireCommunePage({ params }: PageProps) {
             ? {
                 name: departmentName,
                 ...(identity.department.slug && {
-                  url: `${SITE_URL}/departements/${identity.department.slug}`,
+                  url: `${SITE_URL}${territoireDepartementPath(identity.department.slug)}`,
                 }),
               }
             : undefined
@@ -97,7 +101,7 @@ export default async function TerritoireCommunePage({ params }: PageProps) {
               <li key={a.href}>
                 <a
                   href={a.href}
-                  className="inline-flex min-h-11 items-center rounded-full border bg-card px-4 text-sm font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  className="inline-flex min-h-11 items-center rounded-full border border-primary/30 bg-card px-4 text-sm font-medium text-primary hover:bg-primary/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 >
                   {a.label}
                 </a>

@@ -103,7 +103,8 @@ describe("/territoires/communes/[code]", () => {
     expect(text).toContain("Selon votre adresse, une autre circonscription peut s'appliquer");
     expect(document.querySelector('a[href="/mon-depute"]')).not.toBeNull();
     expect(
-      document.querySelector('#parlement a[href="/departements/ille-et-vilaine"]')?.textContent
+      document.querySelector('#parlement a[href="/territoires/departements/ille-et-vilaine"]')
+        ?.textContent
     ).toBe("Ille-et-Vilaine (35) : sénateurs et députés");
     expect(text).not.toMatch(/partie (nord|sud)/);
   });
@@ -159,7 +160,7 @@ describe("/territoires/communes/[code]", () => {
     expect(details?.textContent).toContain("Alex Secteur");
   });
 
-  it("présente les résultats en gris neutre, sans couleur ni étiquette de parti", async () => {
+  it("présente les résultats dans la teinte de marque, sans couleur ni étiquette de parti", async () => {
     const { document, text } = await render(dossier());
 
     expect(text).toContain("Municipales 2026, 1er tour (15 mars 2026)");
@@ -169,7 +170,9 @@ describe("/territoires/communes/[code]", () => {
     const bars = [...document.querySelectorAll("#elections li [style]")];
     expect(bars).toHaveLength(2);
     for (const bar of bars) {
-      expect(bar.className).toContain("bg-muted-foreground");
+      // One brand hue for every list: never a party colour. The elected list is the solid one.
+      expect(bar.className).toMatch(/bg-primary/);
+      expect(bar.className).not.toMatch(/bg-(red|blue|green|orange|yellow|pink|purple)/);
       expect(bar.getAttribute("style")).toMatch(/^width:\s*[\d.]+%;?$/);
     }
     expect(
@@ -215,6 +218,9 @@ describe("/territoires/communes/[code]", () => {
     for (const id of ["qui-decide", "elections", "sources"]) {
       expect(document.getElementById(id), id).not.toBeNull();
     }
+    expect(anchors[0]?.textContent).toBe("Élus et institutions");
+    expect(document.getElementById("qui-decide-titre")?.textContent).toBe("Élus et institutions");
+    expect(text).not.toContain("Qui décide");
     expect(text).not.toMatch(/Décisions|Socle officiel|Dossier curé|intercommunalit|superficie/i);
     expect(text).toContain(
       "Informations disponibles : maire, population, circonscription législative, sénateurs du département, résultats des municipales 2026."
