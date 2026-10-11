@@ -65,7 +65,7 @@ describe("/politiques/gouvernements/[slug]", () => {
     const m = await detail({});
     expect(m.robots).toBeUndefined();
     expect(m.alternates?.canonical).toBe("/politiques/gouvernements/lecornu-2");
-    expect(m.title).toBe("Gouvernement Sébastien Lecornu II : composition et ministres");
+    expect(m.title).toBe("Gouvernement Sébastien Lecornu II : ministres");
   });
 
   it("avec une date valide : noindex, follow, canonical avec la date", async () => {
