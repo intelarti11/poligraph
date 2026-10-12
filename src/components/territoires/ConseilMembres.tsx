@@ -1,12 +1,5 @@
 import type { ConseilBlock, ConseilMembreRef } from "@/lib/data/territoires";
-import { functionRank } from "@/lib/data/territoires";
 import { formatDate } from "@/lib/utils";
-
-/** The president named by the register, when the council lists one (never linked to a profile). */
-export function presidentFromRegister(conseil: ConseilBlock): ConseilMembreRef | null {
-  const first = conseil.membres[0];
-  return first && functionRank(first.functionLabel) === 0 ? first : null;
-}
 
 function groupBySubdivision(membres: ConseilMembreRef[]) {
   const groups = new Map<string, ConseilMembreRef[]>();
@@ -47,7 +40,8 @@ export function ConseilMembres({
   return (
     <div className="flex flex-col gap-2">
       <p className="text-sm">
-        <strong>{conseil.recordedCount}</strong> élus en fonction selon le registre
+        <strong>{conseil.recordedCount}</strong> {conseil.recordedCount > 1 ? "élus" : "élu"} en
+        fonction selon le registre
         {conseil.registerDate ? ` du ${formatDate(conseil.registerDate)}` : ""}. Les sièges vacants
         n{"'"}y figurent pas.
       </p>

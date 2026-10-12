@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   electionFindUnique: vi.fn(),
   syncFindUnique: vi.fn(),
   decisionCount: vi.fn(async () => 0),
-  conseilFindMany: vi.fn(async () => [] as unknown[]),
+  conseilFindMany: vi.fn(async (_args: { where: Record<string, unknown> }) => [] as unknown[]),
   queryRaw: vi.fn(),
   populationEnVigueur: vi.fn(),
   departementVintages: vi.fn(),
@@ -638,6 +638,51 @@ describe("getRegionTerritoire, conseil régional", () => {
       niveau: "REGIONAL",
       territoryCode: "53",
     });
+    // Aucun mandat saisi : la présidence vient du registre, sans fiche associée.
+    expect(region?.presidence.person).toBeNull();
+    expect(region?.presidence.registre).toEqual({
+      fullName: "A Chef",
+      title: "Présidente du conseil régional",
+    });
+    expect(region?.coverage.find((c) => c.bloc === "presidence")?.state).toBe("DISPONIBLE");
+  });
+
+  it("garde une présidence établie par un mandat, sans la remplacer par le registre", async () => {
+    mocks.communeGroupBy.mockResolvedValue([]);
+    mocks.mandateGroupBy.mockResolvedValue([]);
+    mocks.mandateCount.mockResolvedValue(0);
+    mocks.mandateFindMany.mockImplementation(async (args: { where: { type?: string } }) =>
+      args.where.type === "PRESIDENT_REGION"
+        ? [
+            {
+              title: "Président du conseil régional",
+              lastConfirmedAt: null,
+              source: "RNE",
+              politician: {
+                slug: "titulaire",
+                fullName: "Titulaire Saisi",
+                photoUrl: null,
+                civility: null,
+                publicationStatus: "PUBLISHED",
+              },
+            },
+          ]
+        : []
+    );
+    mocks.conseilFindMany.mockResolvedValue([
+      {
+        lastName: "Autre",
+        firstName: "Nom",
+        subdivisionLabel: null,
+        functionLabel: "Président du conseil régional",
+        registerDate: new Date("2026-08-11T12:00:00Z"),
+      },
+    ]);
+
+    const region = await getRegionTerritoire("bretagne");
+
+    expect(region?.presidence.state).toBe("ETABLI");
+    expect(region?.presidence.registre).toBeNull();
   });
 });
 

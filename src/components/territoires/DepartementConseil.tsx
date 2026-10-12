@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { CollectiviteParticuliere } from "@/config/collectivites-particulieres";
 import type { DepartementTerritoire } from "@/lib/data/territoires";
 import { DepartementSection } from "@/components/territoires/DepartementSection";
-import { ConseilMembres, presidentFromRegister } from "@/components/territoires/ConseilMembres";
+import { ConseilMembres } from "@/components/territoires/ConseilMembres";
 
 /**
  * Collectivités that exercise the departmental competences in place of a departmental council:
@@ -77,7 +77,6 @@ interface DepartementConseilProps {
 
 export function DepartementConseil({ territoire }: DepartementConseilProps) {
   const { territoireHorsRegion, collectivitesParticulieres, presidence, conseil } = territoire;
-  const presidentRne = presidentFromRegister(conseil);
 
   if (territoireHorsRegion) {
     return (
@@ -127,11 +126,9 @@ export function DepartementConseil({ territoire }: DepartementConseilProps) {
               <p className="text-xs text-muted-foreground">Source non précisée dans nos données.</p>
             )}
           </>
-        ) : presidentRne ? (
+        ) : presidence.registre ? (
           <>
-            <p className="font-display text-lg font-bold">
-              {presidentRne.firstName} {presidentRne.lastName}
-            </p>
+            <p className="font-display text-lg font-bold">{presidence.registre.fullName}</p>
             <p className="text-xs text-muted-foreground">
               D{"'"}après le registre national des élus, sans fiche Poligraph associée.
             </p>

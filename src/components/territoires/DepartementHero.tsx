@@ -144,6 +144,8 @@ export function DepartementHero({
                     >
                       {presidence.person.fullName}
                     </Link>
+                  ) : presidence.registre ? (
+                    presidence.registre.fullName
                   ) : (
                     "Non établie"
                   )}
@@ -153,7 +155,9 @@ export function DepartementHero({
                     ? presidence.source
                       ? `Source : ${presidence.source.label}`
                       : "Source non précisée dans nos données"
-                    : "dans nos données"}
+                    : presidence.registre
+                      ? "d'après le registre national des élus"
+                      : "dans nos données"}
                 </dd>
               </div>
             )}

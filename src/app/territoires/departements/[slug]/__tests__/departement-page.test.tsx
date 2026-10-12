@@ -52,6 +52,7 @@ const NO_PRESIDENCE: PresidenceBlock = {
   title: null,
   lastConfirmedAt: null,
   source: null,
+  registre: null,
 };
 
 function territoire(
@@ -190,6 +191,7 @@ describe("page département : département ordinaire", () => {
           title: null,
           lastConfirmedAt: null,
           source: null,
+          registre: null,
         },
       })
     );

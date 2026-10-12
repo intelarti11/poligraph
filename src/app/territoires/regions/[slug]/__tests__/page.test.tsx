@@ -63,6 +63,7 @@ function region(slug: string, overrides: Partial<RegionTerritoire> = {}): Region
       title: null,
       lastConfirmedAt: null,
       source: null,
+      registre: null,
     },
     conseil: { state: "ABSENT", recordedCount: 0, membres: [], registerDate: null, source: null },
     coverage: [
@@ -163,6 +164,33 @@ describe("page région", () => {
     );
     expect(mocks.getElections).not.toHaveBeenCalled();
     expect(screen.queryByRole("region", { name: "Élections" })).toBeNull();
+    // Pas de « conseil régional » : une seule collectivité exerce les compétences.
+    expect(screen.queryByRole("region", { name: "Conseil régional" })).toBeNull();
+  });
+
+  it("montre le conseil régional d'une région ordinaire avec ses membres", async () => {
+    mocks.getRegionTerritoire.mockResolvedValue(
+      region("bretagne", {
+        conseil: {
+          state: "DISPONIBLE",
+          recordedCount: 1,
+          membres: [
+            {
+              lastName: "Chef",
+              firstName: "A",
+              subdivisionLabel: "Finistère",
+              functionLabel: null,
+            },
+          ],
+          registerDate: "2026-08-11T12:00:00.000Z",
+          source: { label: "Répertoire national des élus", url: null },
+        },
+      })
+    );
+    render(await RegionPage(params("bretagne")));
+    const section = screen.getByRole("region", { name: "Conseil régional" });
+    expect(section).toHaveTextContent("1 élu en fonction selon le registre");
+    expect(section).toHaveTextContent("A Chef");
   });
 
   it("nomme la présidence quand elle est établie, avec sa source", async () => {
@@ -179,6 +207,7 @@ describe("page région", () => {
           title: "Président du Conseil exécutif",
           lastConfirmedAt: "2026-09-01T00:00:00.000Z",
           source: { label: "Répertoire national des élus", url: null },
+          registre: null,
         },
       })
     );

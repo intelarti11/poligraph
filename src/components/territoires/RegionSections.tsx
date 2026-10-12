@@ -25,6 +25,9 @@ function SourceLink({ source }: { source: SourceRef }) {
 
 /** Members of the regional council, as listed by the RNE. */
 export function RegionConseil({ data }: { data: RegionTerritoire }) {
+  // Corse, Guyane, Martinique and Mayotte: a single collectivity holds the regional powers, there
+  // is no body named "conseil régional". Its note is shown by RegionCollectivites.
+  if (data.collectivitesParticulieres.length > 0) return null;
   return (
     <section aria-labelledby="conseil-regional-titre" className={CARD}>
       <h2 id="conseil-regional-titre" className="font-display text-xl font-extrabold text-primary">

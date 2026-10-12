@@ -89,6 +89,14 @@ export function RegionHero({ data }: { data: RegionTerritoire }) {
                 </span>
               )}
             </>
+          ) : presidence.registre ? (
+            <>
+              <span className="font-display text-lg font-bold">{presidence.registre.fullName}</span>
+              <span className="mt-1 block text-xs text-white/80">
+                D{"'"}après le registre national des élus
+                {presidenceDate ? `, publié le ${presidenceDate}` : ""}
+              </span>
+            </>
           ) : (
             <span className="font-medium">Présidence non établie dans nos données</span>
           )}

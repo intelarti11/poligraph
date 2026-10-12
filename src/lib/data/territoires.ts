@@ -795,6 +795,11 @@ export interface PresidenceBlock {
   title: string | null;
   lastConfirmedAt: string | null;
   source: SourceRef | null;
+  /**
+   * President named by the RNE council file when no executive mandate is recorded: a name only,
+   * never linked to a profile. Null when a mandate establishes the presidency.
+   */
+  registre: { fullName: string; title: string | null } | null;
 }
 
 /**
@@ -822,6 +827,7 @@ async function readPresidence(where: Prisma.MandateWhereInput): Promise<Presiden
     title: holder?.title ?? null,
     lastConfirmedAt: iso(holder?.lastConfirmedAt),
     source: holder ? sourceOf(holder.source) : null,
+    registre: null,
   };
 }
 
@@ -911,6 +917,22 @@ async function readConseil(
   };
 }
 
+/** Falls back on the president the register lists, keeping an established presidency as is. */
+function withRegisterPresident(
+  presidence: PresidenceBlock,
+  conseil: ConseilBlock
+): PresidenceBlock {
+  if (presidence.state === "ETABLI") return presidence;
+  const first = conseil.membres[0];
+  if (!first || functionRank(first.functionLabel) !== 0) return presidence;
+  return {
+    ...presidence,
+    registre: { fullName: `${first.firstName} ${first.lastName}`, title: first.functionLabel },
+    source: conseil.source,
+    lastConfirmedAt: conseil.registerDate,
+  };
+}
+
 // ═══ Region ═════════════════════════════════════════════════════
 
 export interface RegionDepartement extends DepartmentRef {
@@ -986,7 +1008,7 @@ async function readRegionTerritoire(regionCode: string): Promise<RegionTerritoir
   // No structured region key exists on PRESIDENT_REGION rows (MandateLocal.regionCode is empty).
   // The department code identifies the region only when the region has a single department
   // (the five DROM); otherwise the region name carried by `constituency` is the only key.
-  const presidence = await readPresidence({
+  const mandatePresidence = await readPresidence({
     type: "PRESIDENT_REGION",
     OR: [
       { constituency: region.name },
@@ -996,6 +1018,7 @@ async function readRegionTerritoire(regionCode: string): Promise<RegionTerritoir
     ],
   });
   const conseil = await readConseil("REGIONAL", region.code);
+  const presidence = withRegisterPresident(mandatePresidence, conseil);
 
   const departements = region.departmentCodes
     .map((code) => ({
@@ -1026,7 +1049,8 @@ async function readRegionTerritoire(regionCode: string): Promise<RegionTerritoir
       { bloc: "communes", state: "DISPONIBLE", source: COG_SOURCE, date: importedAt },
       {
         bloc: "presidence",
-        state: presidence.state === "ETABLI" ? "DISPONIBLE" : presidence.state,
+        state:
+          presidence.state === "ETABLI" || presidence.registre ? "DISPONIBLE" : presidence.state,
         source: presidence.source,
         date: presidence.lastConfirmedAt,
       },
@@ -1166,8 +1190,9 @@ async function readDepartementTerritoire(
     };
   });
 
-  const presidence = await readPresidence({ type: "PRESIDENT_DEPARTEMENT", departmentCode });
+  const mandatePresidence = await readPresidence({ type: "PRESIDENT_DEPARTEMENT", departmentCode });
   const conseil = await readConseil("DEPARTEMENTAL", departmentCode);
+  const presidence = withRegisterPresident(mandatePresidence, conseil);
   const deputes = await countParlementairesByDepartment("DEPUTE", [departmentCode]);
   const senateurs = await countParlementairesByDepartment("SENATEUR", [departmentCode]);
   const importedAt = await getCommunesImportDate();
@@ -1191,7 +1216,8 @@ async function readDepartementTerritoire(
       { bloc: "communes", state: "DISPONIBLE", source: COG_SOURCE, date: importedAt },
       {
         bloc: "presidence",
-        state: presidence.state === "ETABLI" ? "DISPONIBLE" : presidence.state,
+        state:
+          presidence.state === "ETABLI" || presidence.registre ? "DISPONIBLE" : presidence.state,
         source: presidence.source,
         date: presidence.lastConfirmedAt,
       },
