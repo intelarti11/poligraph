@@ -95,4 +95,13 @@ describe("redirection des départements sous /territoires (#1052)", () => {
     expect(await resolveRedirect("/territoires/departements/ille-et-vilaine")).toBeNull();
     expect(await resolveRedirect("/elections/municipales-2020/departements")).toBeNull();
   });
+
+  it("redirige la liste en un seul saut, avant la règle générique", async () => {
+    const redirects = await nextConfig.redirects!();
+    const exact = redirects.findIndex((r) => r.source === "/departements");
+    const wildcard = redirects.findIndex((r) => r.source === "/departements/:path*");
+    expect(exact).toBeGreaterThanOrEqual(0);
+    expect(exact).toBeLessThan(wildcard);
+    expect(redirects[exact]!.destination).toBe("/territoires/departements");
+  });
 });

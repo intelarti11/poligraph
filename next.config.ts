@@ -166,6 +166,13 @@ const nextConfig: NextConfig = {
       },
       // Departments moved under the Territoires section (#1052). Next appends the query string
       // (?lettre=, ?page=) to the destination; an unknown slug 404s at the new address.
+      // The bare list has its own rule: with an empty `:path*` the wildcard leaves a trailing
+      // slash, which costs a second hop.
+      {
+        source: "/departements",
+        destination: "/territoires/departements",
+        permanent: true,
+      },
       {
         source: "/departements/:path*",
         destination: "/territoires/departements/:path*",
