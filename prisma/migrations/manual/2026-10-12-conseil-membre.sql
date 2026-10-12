@@ -32,3 +32,7 @@ CREATE UNIQUE INDEX "ConseilMembre_niveau_rowKey_key" ON "ConseilMembre"("niveau
 
 -- CreateIndex
 CREATE INDEX "ConseilMembre_niveau_territoryCode_idx" ON "ConseilMembre"("niveau", "territoryCode");
+
+-- Row Level Security : idempotent, au cas où l'event trigger de création de table serait absent.
+-- Aucune politique : la table reste fermée à anon, l'application lit en rôle postgres.
+ALTER TABLE "ConseilMembre" ENABLE ROW LEVEL SECURITY;
