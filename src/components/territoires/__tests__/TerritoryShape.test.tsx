@@ -282,3 +282,25 @@ describe("TerritoryShape", () => {
     expect(html).toMatch(/^<svg[^>]*aria-hidden="true"/);
   });
 });
+
+describe("nom au survol des formes cliquables", () => {
+  it("titre chaque région de la carte de France", () => {
+    const html = renderToStaticMarkup(
+      <TerritoryShape kind="france" regionHref={(name) => `/r/${name}`} />
+    );
+    expect(html).toContain("<title>Bretagne</title>");
+    expect(html).toContain("<title>Guyane</title>");
+  });
+
+  it("titre chaque département d'une région, et seulement ceux liés", () => {
+    const html = renderToStaticMarkup(
+      <TerritoryShape
+        kind="region"
+        region="Bretagne"
+        departementHref={(code) => (code === "35" ? "/d/ille-et-vilaine" : undefined)}
+      />
+    );
+    expect(html).toContain("<title>Ille-et-Vilaine</title>");
+    expect(html.match(/<title>/g)).toHaveLength(1);
+  });
+});

@@ -38,6 +38,11 @@ interface RegionProps extends CommonProps {
   kind: "region";
   /** Region name as written in DEPARTMENTS (src/config/departments.ts). */
   region: string;
+  /**
+   * Optional mouse shortcut per department, with its name on hover. Same contract as
+   * `regionHref`: out of the tab order, the page carries the real list of links.
+   */
+  departementHref?: (code: string) => string | undefined;
 }
 
 interface FranceProps extends CommonProps {
@@ -77,6 +82,9 @@ const PALETTE: Record<
     markerCore: BRAND_NAVY,
   },
 };
+
+/** Hover feedback for the linked shapes; the SVG attribute is overridden by this CSS property. */
+const HOVER_FILL = "transition-[fill-opacity] hover:[fill-opacity:0.4]";
 
 function has<T>(record: Readonly<Record<string, T>>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(record, key);
@@ -148,17 +156,28 @@ export function TerritoryShape(props: TerritoryShapeProps) {
     const outline = REGION_OUTLINES[props.region]!;
     return (
       <Svg viewBox={outline.viewBox} className={props.className}>
-        {Object.entries(outline.departments).map(([code, d]) => (
-          <path
-            key={code}
-            d={d}
-            fill={colors.fill}
-            fillOpacity={colors.fillOpacity}
-            stroke={colors.stroke}
-            strokeOpacity={0.6}
-            strokeWidth={1.2}
-          />
-        ))}
+        {Object.entries(outline.departments).map(([code, d]) => {
+          const href = props.departementHref?.(code);
+          const path = (
+            <path
+              d={d}
+              fill={colors.fill}
+              fillOpacity={colors.fillOpacity}
+              stroke={colors.stroke}
+              strokeOpacity={0.6}
+              strokeWidth={1.2}
+              className={href ? HOVER_FILL : undefined}
+            />
+          );
+          return href ? (
+            <a key={code} href={href} tabIndex={-1} className="cursor-pointer">
+              <title>{DEPARTMENTS[code]?.name ?? code}</title>
+              {path}
+            </a>
+          ) : (
+            <g key={code}>{path}</g>
+          );
+        })}
       </Svg>
     );
   }
@@ -226,12 +245,14 @@ function FranceShape({
               stroke={colors.stroke}
               strokeOpacity={0.35}
               strokeWidth={strokeWidth}
+              className={regionHref?.(region) ? HOVER_FILL : undefined}
             />
           );
         });
         const href = regionHref?.(region);
         return href ? (
-          <a key={region} href={href} tabIndex={-1}>
+          <a key={region} href={href} tabIndex={-1} className="cursor-pointer">
+            <title>{region}</title>
             {paths}
           </a>
         ) : (
@@ -263,12 +284,14 @@ function FranceShape({
               stroke={colors.stroke}
               strokeOpacity={0.35}
               strokeWidth={strokeWidth}
+              className={regionHref?.(region) ? HOVER_FILL : undefined}
             />
           </>
         );
         const href = regionHref?.(region);
         return href ? (
-          <a key={code} href={href} tabIndex={-1} data-drom={code}>
+          <a key={code} href={href} tabIndex={-1} data-drom={code} className="cursor-pointer">
+            <title>{region}</title>
             {content}
           </a>
         ) : (

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { RegionTerritoire } from "@/lib/data/territoires";
-import { TERRITOIRES_PATH } from "@/lib/territoires/paths";
+import { TERRITOIRES_PATH, territoireDepartementPath } from "@/lib/territoires/paths";
 import { cn, formatDate } from "@/lib/utils";
 import { BandeauFilAriane, BandeauSurtitre, EntreeRegionBandeau } from "./EntreeRegionBandeau";
 import { TerritoryShape } from "./TerritoryShape";
@@ -25,6 +25,11 @@ function Fait({
 
 export function RegionHero({ data }: { data: RegionTerritoire }) {
   const { region, presidence, communeCount, departements } = data;
+  const departementPathByCode = new Map(
+    departements.flatMap((d) =>
+      d.slug ? [[d.code, territoireDepartementPath(d.slug)] as const] : []
+    )
+  );
   const presidenceDate = presidence.lastConfirmedAt ? formatDate(presidence.lastConfirmedAt) : null;
 
   return (
@@ -46,7 +51,13 @@ export function RegionHero({ data }: { data: RegionTerritoire }) {
           <p className="mt-2 text-white/85">Chef-lieu : {region.chefLieu.name}</p>
         </div>
         <div className="w-24 shrink-0 sm:w-40 lg:w-56">
-          <TerritoryShape kind="region" region={region.name} tone="marine" />
+          {/* Decorative mouse shortcut with the department name on hover; the list is below. */}
+          <TerritoryShape
+            kind="region"
+            region={region.name}
+            tone="marine"
+            departementHref={(code) => departementPathByCode.get(code)}
+          />
         </div>
       </div>
 
