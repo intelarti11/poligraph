@@ -137,9 +137,13 @@ export function parseCommuneResultsHtml(
       round1Votes,
       round1Pct,
       round1Qualified: round1Pct >= 10, // T2 qualification threshold
-      // seatsWon > 0 means the list got council seats (proportional),
-      // but only the absolute majority list (>50%) actually wins the commune in T1
-      isElected: seatsWon > 0 && round1Pct > 50,
+      // seatsWon > 0 means the list got council seats (proportional), but a list wins at T1
+      // only with >50% of votes cast AND a quarter of registered voters (art. L. 262).
+      // Without a registered-voters count, the quarter cannot be checked and is skipped.
+      isElected:
+        seatsWon > 0 &&
+        round1Pct > 50 &&
+        (registeredVoters <= 0 || round1Votes * 4 >= registeredVoters),
     });
   });
 

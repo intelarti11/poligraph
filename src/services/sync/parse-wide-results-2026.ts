@@ -158,8 +158,13 @@ export function parseWideResultRow2026(cols: string[]): CommuneResult2026 {
     const seatsCM = seatsCMStr ? parseIntSafe(seatsCMStr) : null;
 
     // The "Elu" column is empty in the 2026 CSV (never populated by the Ministry).
-    // Infer elected status: a list wins at T1 with absolute majority (>50% expressed).
-    const isElected = eluField !== "" && eluField !== "non" ? true : pctExpressed > 50;
+    // Infer elected status: a list wins at T1 with an absolute majority of votes cast AND votes
+    // at least equal to a quarter of registered voters (art. L. 262). Without a registered
+    // count, the quarter cannot be checked and is skipped.
+    const votes = parseIntSafe(col(cols, offset + 7));
+    const hasQuarter = registeredVoters > 0 ? votes * 4 >= registeredVoters : true;
+    const isElected =
+      eluField !== "" && eluField !== "non" ? true : pctExpressed > 50 && hasQuarter;
 
     lists.push({
       panelNumber: parseIntSafe(panelNum),
@@ -169,7 +174,7 @@ export function parseWideResultRow2026(cols: string[]): CommuneResult2026 {
       nuanceCode: col(cols, offset + 4),
       listShortName: col(cols, offset + 5),
       listName: col(cols, offset + 6),
-      votes: parseIntSafe(col(cols, offset + 7)),
+      votes,
       pctRegistered: parseFrenchPct(col(cols, offset + 8)),
       pctExpressed,
       isElected,

@@ -99,3 +99,34 @@ describe("parseCommuneResultsHtml", () => {
     expect(parseCommuneResultsHtml(html, "00000")).toBeNull();
   });
 });
+
+describe("parseCommuneResultsHtml : quart des inscrits (art. L. 262)", () => {
+  const page = (votesA: string, pctA: string, votesB: string, pctB: string) => `
+<html><body>
+<table><caption>Mentions 1er tour</caption>
+<tbody>
+  <tr><td>Inscrits</td><td>5 000</td></tr>
+  <tr><td>Votants</td><td>1 600</td></tr>
+  <tr><td>Blancs</td><td>50</td></tr>
+  <tr><td>Nuls</td><td>30</td></tr>
+  <tr><td>Exprimés</td><td>1 520</td></tr>
+</tbody></table>
+<table><caption>Résultats au 1er tour</caption>
+<thead><tr><th>Liste</th><th>Conduite par</th><th>Nuance</th><th>Voix</th><th>% Inscrits</th><th>% Exprimés</th><th>Sièges</th></tr></thead>
+<tbody>
+  <tr><td>LISTE A</td><td>Jean DUPONT</td><td>DVG</td><td>${votesA}</td><td>x</td><td>${pctA}</td><td>25</td></tr>
+  <tr><td>LISTE B</td><td>Marie MARTIN</td><td>DVD</td><td>${votesB}</td><td>x</td><td>${pctB}</td><td>8</td></tr>
+</tbody></table>
+<h5 class="fr-h2">Ville (31)</h5>
+</body></html>`;
+
+  it("n'élit pas une liste à plus de 50 % des exprimés sous le quart des inscrits", () => {
+    const r = parseCommuneResultsHtml(page("1 000", "65,79", "520", "34,21"), "31000");
+    expect(r?.lists[0]?.isElected).toBe(false);
+  });
+
+  it("élit une liste qui atteint exactement le quart des inscrits", () => {
+    const r = parseCommuneResultsHtml(page("1 250", "82,24", "270", "17,76"), "31000");
+    expect(r?.lists[0]?.isElected).toBe(true);
+  });
+});
