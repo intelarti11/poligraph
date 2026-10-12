@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/navigation", () => ({
@@ -35,5 +35,25 @@ describe("recherche globale, résultats de communes", () => {
     render(<SearchClient />);
     const link = await screen.findByRole("link", { name: /Belley/ }, { timeout: 3000 });
     expect(link.getAttribute("href")).toBe("/territoires/communes/01034");
+  });
+});
+
+describe("recherche globale, réponse d'erreur", () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ error: "rate_limited" }), { status: 429 }))
+    );
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("ne plante pas et rend la main à la saisie", async () => {
+    render(<SearchClient />);
+    await waitFor(() => expect(fetch).toHaveBeenCalled(), { timeout: 3000 });
+    await waitFor(() => expect(screen.getByRole("searchbox")).toBeTruthy());
+    expect(screen.queryByRole("link", { name: /Belley/ })).toBeNull();
   });
 });
