@@ -4055,3 +4055,41 @@ model Decision {
   @@index([status, updatedAt])
   @@index([sourceId])
 }
+
+/// Level of a deliberative council whose members the RNE lists.
+enum ConseilNiveau {
+  MUNICIPAL
+  DEPARTEMENTAL
+  REGIONAL
+}
+
+/// One member of a municipal, departmental or regional council, as listed by the RNE
+/// (#1052). Deliberately not linked to `Politician`: no identity resolution is claimed, the
+/// row is a line of an official register. Birth date and profession are used to build
+/// `rowKey` (stable identity of a line across imports) and are not stored.
+model ConseilMembre {
+  id               String        @id @default(cuid())
+  niveau           ConseilNiveau
+  /// INSEE commune code (MUNICIPAL), department code (DEPARTEMENTAL), region code (REGIONAL).
+  territoryCode    String
+  /// Canton (DEPARTEMENTAL) or departmental section (REGIONAL); null for MUNICIPAL.
+  subdivisionCode  String?
+  subdivisionLabel String?
+  lastName         String
+  firstName        String
+  /// "M" or "F" as coded by the RNE.
+  gender           String?
+  mandateStart     DateTime?     @db.Date
+  /// RNE function label ("Président du conseil départemental"...); null for a plain member.
+  functionLabel    String?
+  functionStart    DateTime?     @db.Date
+  /// sha256 of niveau, territory, name and birth date. Unique per niveau.
+  rowKey           String
+  /// Publication date of the RNE file that listed this line.
+  registerDate     DateTime?     @db.Date
+  sourceUrl        String
+  importedAt       DateTime      @default(now())
+
+  @@unique([niveau, rowKey])
+  @@index([niveau, territoryCode])
+}
