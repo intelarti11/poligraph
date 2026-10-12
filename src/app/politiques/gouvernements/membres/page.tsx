@@ -343,7 +343,7 @@ export default async function MembresPage({ searchParams }: PageProps) {
               <>
                 <Link
                   href={`/politiques/gouvernements/${gov.slug}`}
-                  className="text-primary underline-offset-4 hover:underline"
+                  className="text-primary underline decoration-primary/40 underline-offset-4 hover:decoration-primary"
                 >
                   {gov.name}
                 </Link>{" "}
