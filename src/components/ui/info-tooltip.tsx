@@ -101,7 +101,9 @@ export function InfoTooltip({
           className={cn(
             "inline-flex items-center justify-center rounded-full text-muted-foreground/60 hover:text-muted-foreground transition-colors",
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-            size === "sm" ? "p-0.5" : "p-1",
+            // 44 px touch target with the same layout footprint as before (padding offset by a negative
+            // margin): 14 + 30 - 26 = 18 px for sm, 16 + 28 - 20 = 24 px otherwise.
+            size === "sm" ? "-m-[13px] p-[15px]" : "-m-[10px] p-[14px]",
             className
           )}
           aria-label={`Aide : ${label ?? (term || "information")}`}
