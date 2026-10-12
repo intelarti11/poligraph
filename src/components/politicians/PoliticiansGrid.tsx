@@ -113,7 +113,7 @@ export function PoliticiansGrid({
             <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrer par parti">
               <Badge
                 variant={partyFilter === "" ? "default" : "outline"}
-                className="cursor-pointer hover:bg-primary/10 transition-colors"
+                className="relative cursor-pointer transition-colors after:absolute after:inset-x-0 after:-inset-y-[11px] after:content-[''] hover:bg-primary/10"
                 onClick={() => navigateTo(buildUrl({ party: undefined }))}
                 role="button"
                 tabIndex={0}
@@ -125,7 +125,7 @@ export function PoliticiansGrid({
                 <Badge
                   key={party.id}
                   variant={partyFilter === party.id ? "default" : "outline"}
-                  className="cursor-pointer hover:opacity-80 transition-opacity"
+                  className="relative cursor-pointer transition-opacity after:absolute after:inset-x-0 after:-inset-y-[11px] after:content-[''] hover:opacity-80"
                   onClick={() => navigateTo(buildUrl({ party: party.id }))}
                   role="button"
                   tabIndex={0}
@@ -211,7 +211,7 @@ export function PoliticiansGrid({
             <nav className="mt-8 flex justify-center items-center gap-2" aria-label="Pagination">
               <button
                 onClick={() => navigateTo(buildUrl({ page: String(page - 1) }))}
-                className="inline-flex items-center gap-1 px-4 py-2 border rounded-md hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="inline-flex min-h-11 items-center gap-1 px-4 py-2 border rounded-md hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 disabled={isPending || page <= 1}
                 aria-label="Page précédente"
               >
@@ -235,7 +235,7 @@ export function PoliticiansGrid({
               </span>
               <button
                 onClick={() => navigateTo(buildUrl({ page: String(page + 1) }))}
-                className="inline-flex items-center gap-1 px-4 py-2 border rounded-md hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="inline-flex min-h-11 items-center gap-1 px-4 py-2 border rounded-md hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 disabled={isPending || page >= totalPages}
                 aria-label="Page suivante"
               >

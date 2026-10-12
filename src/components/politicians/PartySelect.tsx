@@ -28,7 +28,7 @@ export function PartySelect({ parties, currentValue }: PartySelectProps) {
 
   return (
     <select
-      className="text-xs border rounded px-2 py-1"
+      className="min-h-11 text-xs border rounded px-2 py-1"
       value={currentValue}
       onChange={(e) => {
         if (e.target.value) {
