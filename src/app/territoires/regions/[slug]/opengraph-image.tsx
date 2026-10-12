@@ -38,7 +38,9 @@ export default async function Image({ params }: { params: Promise<{ slug: string
   const presidenceLine =
     presidence.state === "ETABLI" && presidence.person
       ? `Présidence : ${presidence.person.fullName}`
-      : null;
+      : presidence.registre
+        ? `Présidence : ${presidence.registre.fullName}`
+        : null;
 
   return new ImageResponse(
     <OgLayout>

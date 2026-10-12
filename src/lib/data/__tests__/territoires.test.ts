@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   electionFindUnique: vi.fn(),
   syncFindUnique: vi.fn(),
   decisionCount: vi.fn(async () => 0),
+  conseilFindMany: vi.fn(async (_args: { where: Record<string, unknown> }) => [] as unknown[]),
   queryRaw: vi.fn(),
   populationEnVigueur: vi.fn(),
   departementVintages: vi.fn(),
@@ -51,6 +52,7 @@ vi.mock("@/lib/db", () => ({
     election: { findUnique: mocks.electionFindUnique },
     syncMetadata: { findUnique: mocks.syncFindUnique },
     decision: { count: mocks.decisionCount },
+    conseilMembre: { findMany: mocks.conseilFindMany },
     $queryRaw: mocks.queryRaw,
   },
 }));
@@ -151,6 +153,7 @@ beforeEach(() => {
   mocks.roundFindMany.mockResolvedValue([]);
   mocks.populationEnVigueur.mockResolvedValue(null);
   mocks.departementVintages.mockResolvedValue([]);
+  mocks.conseilFindMany.mockResolvedValue([]);
   mocks.readIntercommunalites.mockResolvedValue(null);
   serveMandates([]);
 });
@@ -599,6 +602,90 @@ describe("getDepartementTerritoire", () => {
   });
 });
 
+describe("getRegionTerritoire, conseil régional", () => {
+  it("range la présidence puis les vice-présidences par rang, puis l'ordre alphabétique", async () => {
+    mocks.communeGroupBy.mockResolvedValue([]);
+    mocks.mandateGroupBy.mockResolvedValue([]);
+    mocks.mandateCount.mockResolvedValue(0);
+    const row = (lastName: string, functionLabel: string | null) => ({
+      lastName,
+      firstName: "A",
+      subdivisionLabel: "Finistère",
+      functionLabel,
+      registerDate: new Date("2026-08-11T12:00:00Z"),
+    });
+    mocks.conseilFindMany.mockResolvedValue([
+      row("Zed", null),
+      row("Bon", "10ème Vice-président du conseil régional"),
+      row("Alp", null),
+      row("Chef", "Présidente du conseil régional"),
+      row("Deux", "2ème Vice-président du conseil régional"),
+    ]);
+
+    const region = await getRegionTerritoire("bretagne");
+
+    expect(region?.conseil.state).toBe("DISPONIBLE");
+    expect(region?.conseil.recordedCount).toBe(5);
+    expect(region?.conseil.membres.map((m) => m.lastName)).toEqual([
+      "Chef",
+      "Deux",
+      "Bon",
+      "Alp",
+      "Zed",
+    ]);
+    expect(region?.conseil.registerDate).toBe("2026-08-11T12:00:00.000Z");
+    expect(mocks.conseilFindMany.mock.calls[0]?.[0].where).toEqual({
+      niveau: "REGIONAL",
+      territoryCode: "53",
+    });
+    // Aucun mandat saisi : la présidence vient du registre, sans fiche associée.
+    expect(region?.presidence.person).toBeNull();
+    expect(region?.presidence.registre).toEqual({
+      fullName: "A Chef",
+      title: "Présidente du conseil régional",
+    });
+    expect(region?.coverage.find((c) => c.bloc === "presidence")?.state).toBe("DISPONIBLE");
+  });
+
+  it("garde une présidence établie par un mandat, sans la remplacer par le registre", async () => {
+    mocks.communeGroupBy.mockResolvedValue([]);
+    mocks.mandateGroupBy.mockResolvedValue([]);
+    mocks.mandateCount.mockResolvedValue(0);
+    mocks.mandateFindMany.mockImplementation(async (args: { where: { type?: string } }) =>
+      args.where.type === "PRESIDENT_REGION"
+        ? [
+            {
+              title: "Président du conseil régional",
+              lastConfirmedAt: null,
+              source: "RNE",
+              politician: {
+                slug: "titulaire",
+                fullName: "Titulaire Saisi",
+                photoUrl: null,
+                civility: null,
+                publicationStatus: "PUBLISHED",
+              },
+            },
+          ]
+        : []
+    );
+    mocks.conseilFindMany.mockResolvedValue([
+      {
+        lastName: "Autre",
+        firstName: "Nom",
+        subdivisionLabel: null,
+        functionLabel: "Président du conseil régional",
+        registerDate: new Date("2026-08-11T12:00:00Z"),
+      },
+    ]);
+
+    const region = await getRegionTerritoire("bretagne");
+
+    expect(region?.presidence.state).toBe("ETABLI");
+    expect(region?.presidence.registre).toBeNull();
+  });
+});
+
 describe("getRegionTerritoire", () => {
   it("renvoie null pour un slug inconnu, sans requête", async () => {
     expect(await getRegionTerritoire("atlantide")).toBeNull();
@@ -619,7 +706,13 @@ describe("getRegionTerritoire", () => {
     expect(region?.departements.find((d) => d.code === "29")?.communeCount).toBe(0);
     expect(region?.communeCount).toBe(676);
     expect(region?.presidence.state).toBe("NON_ETABLI");
-    expect(region?.conseil).toEqual({ state: "NON_ETABLI", recordedCount: 0 });
+    expect(region?.conseil).toEqual({
+      state: "NON_ETABLI",
+      recordedCount: 0,
+      membres: [],
+      registerDate: null,
+      source: null,
+    });
     const presidenceWhere = mocks.mandateFindMany.mock.calls.find(
       ([args]) => args.where.type === "PRESIDENT_REGION"
     )?.[0].where;

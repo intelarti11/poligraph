@@ -9,6 +9,7 @@ import { missingEntityMetadata } from "@/lib/seo/not-found-metadata";
 import { RegionHero } from "@/components/territoires/RegionHero";
 import {
   RegionCollectivites,
+  RegionConseil,
   RegionCouverture,
   RegionDepartements,
   RegionElections,
@@ -81,6 +82,7 @@ export default async function RegionPage({ params }: PageProps) {
         <div className="space-y-6">
           <RegionDepartements data={data} />
           <RegionCollectivites data={data} />
+          <RegionConseil data={data} />
           <RegionElections elections={elections} />
         </div>
         <aside className="space-y-6" aria-label="Compléments">

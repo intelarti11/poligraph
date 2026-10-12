@@ -52,6 +52,7 @@ const NO_PRESIDENCE: PresidenceBlock = {
   title: null,
   lastConfirmedAt: null,
   source: null,
+  registre: null,
 };
 
 function territoire(
@@ -86,7 +87,13 @@ function territoire(
     letterCounts,
     communes: { letter, page, pageSize: PAGE_SIZE, total, totalPages, rows },
     presidence: opts.presidence ?? NO_PRESIDENCE,
-    conseil: { state: "NON_ETABLI", recordedCount: 0 },
+    conseil: {
+      state: "NON_ETABLI",
+      recordedCount: 0,
+      membres: [],
+      registerDate: null,
+      source: null,
+    },
     parlement: { deputeCount: 0, senateurCount: 0 },
     coverage: [
       {
@@ -184,6 +191,7 @@ describe("page département : département ordinaire", () => {
           title: null,
           lastConfirmedAt: null,
           source: null,
+          registre: null,
         },
       })
     );
