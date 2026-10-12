@@ -134,7 +134,10 @@ function ActLink({ act, className }: { act: ActRef; className?: string }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className={cn("text-primary underline-offset-4 hover:underline", className)}
+      className={cn(
+        "text-primary underline decoration-primary/40 underline-offset-4 hover:decoration-primary",
+        className
+      )}
     >
       {act.label}
     </a>
