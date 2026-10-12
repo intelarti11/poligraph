@@ -598,7 +598,7 @@ export default async function GovernmentPage({ params, searchParams }: PageProps
             {prev ? (
               <Link
                 href={`${BASE}/${prev.slug}`}
-                aria-label={`Précédent : ${prev.name}`}
+                aria-label={`Précédent ${prev.name}`}
                 className="inline-flex min-h-11 items-center gap-1.5 py-1 underline-offset-4 hover:underline"
               >
                 <ArrowLeft className="size-4 shrink-0" aria-hidden="true" />
@@ -613,7 +613,7 @@ export default async function GovernmentPage({ params, searchParams }: PageProps
             {next && (
               <Link
                 href={`${BASE}/${next.slug}`}
-                aria-label={`Suivant : ${next.name}`}
+                aria-label={`Suivant ${next.name}`}
                 className="ml-auto inline-flex min-h-11 items-center gap-1.5 py-1 text-right underline-offset-4 hover:underline"
               >
                 <span className="flex flex-col">
