@@ -40,7 +40,7 @@ export function TerritoireSearch({
           maxLength={80}
           autoComplete="off"
           defaultValue={defaultValue}
-          placeholder="Commune ou code postal"
+          placeholder="Commune, département, région ou code postal"
           aria-describedby={hintId}
           className={cn(
             "min-h-11 min-w-0 flex-1 rounded-lg bg-transparent px-3 text-base focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
