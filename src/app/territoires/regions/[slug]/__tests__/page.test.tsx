@@ -64,7 +64,7 @@ function region(slug: string, overrides: Partial<RegionTerritoire> = {}): Region
       lastConfirmedAt: null,
       source: null,
     },
-    conseil: { state: "ABSENT", recordedCount: 0 },
+    conseil: { state: "ABSENT", recordedCount: 0, membres: [], registerDate: null, source: null },
     coverage: [
       { bloc: "departements", state: "DISPONIBLE", source: COG, date: null },
       { bloc: "presidence", state: "ABSENT", source: null, date: null },

@@ -825,6 +825,92 @@ async function readPresidence(where: Prisma.MandateWhereInput): Promise<Presiden
   };
 }
 
+// ═══ Council members (RNE) ══════════════════════════════════════
+
+export interface ConseilMembreRef {
+  lastName: string;
+  firstName: string;
+  /** Section départementale (regional) or canton (departmental) label. */
+  subdivisionLabel: string | null;
+  functionLabel: string | null;
+}
+
+export interface ConseilBlock {
+  state: BlockState;
+  /** Lines of the register for this council: serving members, vacancies are not listed. */
+  recordedCount: number;
+  /** Holders of a function first (president, then vice-presidents by rank), then alphabetical. */
+  membres: ConseilMembreRef[];
+  /** Publication date of the RNE file the lines come from. */
+  registerDate: string | null;
+  source: SourceRef | null;
+}
+
+const RNE_CONSEILS_SOURCE: SourceRef = {
+  label: "Répertoire national des élus, ministère de l'Intérieur",
+  url: "https://www.data.gouv.fr/datasets/repertoire-national-des-elus-1",
+};
+
+/** "Président" first, then "1er", "2ème"... Vice-présidents, then any other function. */
+export function functionRank(label: string | null): number {
+  if (!label) return 1000;
+  if (/^présidente?\b/i.test(label)) return 0;
+  const m = label.match(/^(\d+)(?:er|ère|ème|e)\b/i);
+  if (m) return Number(m[1]);
+  return 500;
+}
+
+async function readConseil(
+  niveau: "DEPARTEMENTAL" | "REGIONAL",
+  territoryCode: string
+): Promise<ConseilBlock> {
+  const empty: ConseilBlock = {
+    state: "NON_ETABLI",
+    recordedCount: 0,
+    membres: [],
+    registerDate: null,
+    source: null,
+  };
+  let rows;
+  try {
+    rows = await db.conseilMembre.findMany({
+      where: { niveau, territoryCode },
+      select: {
+        lastName: true,
+        firstName: true,
+        subdivisionLabel: true,
+        functionLabel: true,
+        registerDate: true,
+      },
+      // The largest regional council has 209 seats.
+      take: 300,
+    });
+  } catch (error) {
+    // Table not created yet (manual SQL applied after the code ships): not established.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2021") {
+      return empty;
+    }
+    throw error;
+  }
+  if (rows.length === 0) return empty;
+
+  const membres = rows
+    .map(({ registerDate: _registerDate, ...m }) => m)
+    .sort(
+      (a, b) =>
+        functionRank(a.functionLabel) - functionRank(b.functionLabel) ||
+        a.lastName.localeCompare(b.lastName, "fr") ||
+        a.firstName.localeCompare(b.firstName, "fr")
+    );
+  return {
+    state: "DISPONIBLE",
+    recordedCount: rows.length,
+    membres,
+    registerDate: iso(rows[0]?.registerDate),
+    source: RNE_CONSEILS_SOURCE,
+  };
+}
+
 // ═══ Region ═════════════════════════════════════════════════════
 
 export interface RegionDepartement extends DepartmentRef {
@@ -843,8 +929,7 @@ export interface RegionTerritoire {
   departements: RegionDepartement[];
   communeCount: number;
   presidence: PresidenceBlock;
-  /** Regional councillors are not synced: the composition is never established (NON_ETABLI). */
-  conseil: { state: BlockState; recordedCount: number };
+  conseil: ConseilBlock;
   coverage: CoverageEntry[];
 }
 
@@ -910,13 +995,7 @@ async function readRegionTerritoire(regionCode: string): Promise<RegionTerritoir
         : []),
     ],
   });
-  const conseillers = await db.mandate.count({
-    where: {
-      type: "CONSEILLER_REGIONAL",
-      isCurrent: true,
-      localData: { regionCode: region.code },
-    },
-  });
+  const conseil = await readConseil("REGIONAL", region.code);
 
   const departements = region.departmentCodes
     .map((code) => ({
@@ -929,8 +1008,6 @@ async function readRegionTerritoire(regionCode: string): Promise<RegionTerritoir
 
   const communeCount = departements.reduce((n, d) => n + d.communeCount, 0);
   const importedAt = await getCommunesImportDate();
-  // Councillors are not synced either: zero recorded says nothing about the council.
-  const conseilState: BlockState = "NON_ETABLI";
 
   return {
     region: {
@@ -943,7 +1020,7 @@ async function readRegionTerritoire(regionCode: string): Promise<RegionTerritoir
     departements,
     communeCount,
     presidence,
-    conseil: { state: conseilState, recordedCount: conseillers },
+    conseil,
     coverage: [
       { bloc: "departements", state: "DISPONIBLE", source: REGION_SOURCE, date: null },
       { bloc: "communes", state: "DISPONIBLE", source: COG_SOURCE, date: importedAt },
@@ -953,7 +1030,7 @@ async function readRegionTerritoire(regionCode: string): Promise<RegionTerritoir
         source: presidence.source,
         date: presidence.lastConfirmedAt,
       },
-      { bloc: "conseil", state: conseilState, source: null, date: null },
+      { bloc: "conseil", state: conseil.state, source: conseil.source, date: conseil.registerDate },
     ],
   };
 }
@@ -988,7 +1065,7 @@ export interface DepartementTerritoire {
   };
   presidence: PresidenceBlock;
   /** Departmental councillors are not synced: partial at best, always NON_ETABLI. */
-  conseil: { state: BlockState; recordedCount: number };
+  conseil: ConseilBlock;
   parlement: { deputeCount: number; senateurCount: number };
   coverage: CoverageEntry[];
 }
@@ -1090,14 +1167,10 @@ async function readDepartementTerritoire(
   });
 
   const presidence = await readPresidence({ type: "PRESIDENT_DEPARTEMENT", departmentCode });
-  const conseillers = await db.mandate.count({
-    where: { type: "CONSEILLER_DEPARTEMENTAL", isCurrent: true, departmentCode },
-  });
+  const conseil = await readConseil("DEPARTEMENTAL", departmentCode);
   const deputes = await countParlementairesByDepartment("DEPUTE", [departmentCode]);
   const senateurs = await countParlementairesByDepartment("SENATEUR", [departmentCode]);
   const importedAt = await getCommunesImportDate();
-  // Councillors are not synced either: zero recorded says nothing about the council.
-  const conseilState: BlockState = "NON_ETABLI";
 
   return {
     department: departmentRef(departmentCode),
@@ -1109,7 +1182,7 @@ async function readDepartementTerritoire(
     letterCounts,
     communes: { letter, page, pageSize: DEPARTEMENT_PAGE_SIZE, total, totalPages, rows },
     presidence,
-    conseil: { state: conseilState, recordedCount: conseillers },
+    conseil,
     parlement: {
       deputeCount: deputes.get(departmentCode) ?? 0,
       senateurCount: senateurs.get(departmentCode) ?? 0,
@@ -1122,7 +1195,7 @@ async function readDepartementTerritoire(
         source: presidence.source,
         date: presidence.lastConfirmedAt,
       },
-      { bloc: "conseil", state: conseilState, source: null, date: null },
+      { bloc: "conseil", state: conseil.state, source: conseil.source, date: conseil.registerDate },
     ],
   };
 }

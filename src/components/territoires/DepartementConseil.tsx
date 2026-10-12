@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { CollectiviteParticuliere } from "@/config/collectivites-particulieres";
 import type { DepartementTerritoire } from "@/lib/data/territoires";
 import { DepartementSection } from "@/components/territoires/DepartementSection";
+import { ConseilMembres, presidentFromRegister } from "@/components/territoires/ConseilMembres";
 
 /**
  * Collectivités that exercise the departmental competences in place of a departmental council:
@@ -75,7 +76,8 @@ interface DepartementConseilProps {
 }
 
 export function DepartementConseil({ territoire }: DepartementConseilProps) {
-  const { territoireHorsRegion, collectivitesParticulieres, presidence } = territoire;
+  const { territoireHorsRegion, collectivitesParticulieres, presidence, conseil } = territoire;
+  const presidentRne = presidentFromRegister(conseil);
 
   if (territoireHorsRegion) {
     return (
@@ -125,14 +127,27 @@ export function DepartementConseil({ territoire }: DepartementConseilProps) {
               <p className="text-xs text-muted-foreground">Source non précisée dans nos données.</p>
             )}
           </>
+        ) : presidentRne ? (
+          <>
+            <p className="font-display text-lg font-bold">
+              {presidentRne.firstName} {presidentRne.lastName}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              D{"'"}après le registre national des élus, sans fiche Poligraph associée.
+            </p>
+          </>
         ) : (
           <p className="font-bold">Non établie dans nos données.</p>
         )}
       </div>
 
-      <p className="text-sm">
-        La composition du conseil départemental n{"'"}est pas établie dans nos données.
-      </p>
+      {conseil.state === "DISPONIBLE" ? (
+        <ConseilMembres conseil={conseil} groupLabel="canton" />
+      ) : (
+        <p className="text-sm">
+          La composition du conseil départemental n{"'"}est pas établie dans nos données.
+        </p>
+      )}
 
       <div className="flex flex-col gap-1.5 border-t pt-4">
         <h3 className="font-bold">Compétences fixées par la loi</h3>

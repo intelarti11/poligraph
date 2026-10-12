@@ -4,6 +4,7 @@ import type { CoverageEntry, RegionTerritoire, SourceRef } from "@/lib/data/terr
 import { formatDate } from "@/lib/utils";
 import { formatCompte } from "@/lib/territoires/format";
 import { TERRITOIRES_DONNEES_PATH, territoireDepartementPath } from "@/lib/territoires/paths";
+import { ConseilMembres } from "@/components/territoires/ConseilMembres";
 
 const CARD = "rounded-xl border border-border bg-card p-4 sm:p-6";
 
@@ -19,6 +20,26 @@ function SourceLink({ source }: { source: SourceRef }) {
       {source.label}
       <span className="sr-only"> (site externe)</span>
     </a>
+  );
+}
+
+/** Members of the regional council, as listed by the RNE. */
+export function RegionConseil({ data }: { data: RegionTerritoire }) {
+  return (
+    <section aria-labelledby="conseil-regional-titre" className={CARD}>
+      <h2 id="conseil-regional-titre" className="font-display text-xl font-extrabold text-primary">
+        Conseil régional
+      </h2>
+      <div className="mt-3">
+        {data.conseil.state === "DISPONIBLE" ? (
+          <ConseilMembres conseil={data.conseil} groupLabel="section départementale" />
+        ) : (
+          <p className="text-sm">
+            La composition du conseil régional n{"'"}est pas établie dans nos données.
+          </p>
+        )}
+      </div>
+    </section>
   );
 }
 
