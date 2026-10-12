@@ -12,7 +12,15 @@ const LEGACY_STATS_REDIRECTS = [
   ["participation", "/statistiques/participation"],
 ] as const;
 
+export const HTML_LIMITED_BOTS =
+  /Googlebot|Google-InspectionTool|Storebot-Google|GoogleOther|[\w-]+-Google|Google-[\w-]+|Chrome-Lighthouse|Slurp|DuckDuckBot|baiduspider|yandex|sogou|bitlybot|tumblr|vkShare|quora link preview|redditbot|ia_archiver|Bingbot|BingPreview|applebot|facebookexternalhit|facebookcatalog|Twitterbot|LinkedInBot|Slackbot|Discordbot|WhatsApp|SkypeUriPreview|Yeti|googleweblight/i;
+
 const nextConfig: NextConfig = {
+  // Next 16 streams the metadata of dynamic pages into <body> for every user agent outside this
+  // list, Googlebot included: the government pages then served their <title>, description and
+  // canonical outside <head>, where Google ignores a canonical. Next's default list plus Google's
+  // own crawlers, so they receive the metadata in <head>. Humans keep streamed metadata.
+  htmlLimitedBots: HTML_LIMITED_BOTS,
   serverExternalPackages: ["jsdom"],
   staticPageGenerationTimeout: 120,
   // Content syncs at most once a day and is invalidated on-demand via
