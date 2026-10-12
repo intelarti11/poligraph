@@ -542,7 +542,7 @@ export default async function MembresPage({ searchParams }: PageProps) {
         </form>
 
         {presidencyShortcuts.length > 1 && (
-          <div className="-mx-4 flex items-center gap-2 overflow-x-auto whitespace-nowrap px-4 text-sm sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
+          <div className="relative -mx-4 flex items-center gap-2 overflow-x-auto whitespace-nowrap px-4 text-sm sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
             <span className="shrink-0 text-muted-foreground">Présidences :</span>
             {presidencyShortcuts.map((p) => (
               <Link
