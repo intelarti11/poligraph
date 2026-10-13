@@ -122,4 +122,11 @@ describe("parseScdlFile", () => {
     expect(r.candidates).toHaveLength(1);
     expect(r.duplicates).toBe(1);
   });
+
+  it("garde les colonnes d'un fichier sans ligne de données", () => {
+    const r = parseScdlFile(file());
+    expect(r.missingColumns).toEqual([]);
+    expect(r.conformingHeaders).toBe(true);
+    expect(r.candidates).toHaveLength(0);
+  });
 });

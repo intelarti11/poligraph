@@ -104,7 +104,7 @@ export function isPublicAddress(ip: string): boolean {
   return false;
 }
 
-async function checkUrl(raw: string): Promise<URL | { reason: string }> {
+export async function checkPublicUrl(raw: string): Promise<URL | { reason: string }> {
   let url: URL;
   try {
     url = new URL(raw);
@@ -129,7 +129,7 @@ async function checkUrl(raw: string): Promise<URL | { reason: string }> {
 export async function fetchPublicPhoto(raw: string): Promise<PublicPhotoFetch> {
   let current = raw;
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
-    const checked = await checkUrl(current);
+    const checked = await checkPublicUrl(current);
     if (!(checked instanceof URL)) return { kind: "forbidden", reason: checked.reason };
 
     let response: Response;

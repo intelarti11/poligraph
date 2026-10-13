@@ -1,3 +1,4 @@
+import { checkPublicUrl } from "@/lib/api/fetch-public-photo";
 import { USER_AGENT } from "@/config/site";
 import type { ScdlSource } from "@/config/scdl-sources";
 import { parseScdlFile, type RejectReason, type ScdlCandidate } from "./scdl-deliberations-parse";
@@ -57,15 +58,33 @@ async function getJson<T>(url: string): Promise<T> {
   return (await response.json()) as T;
 }
 
-async function download(url: string): Promise<Buffer> {
-  const response = await fetch(url, { headers: { "User-Agent": USER_AGENT } });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const declared = Number(response.headers.get("content-length") ?? 0);
-  if (declared > MAX_FILE_BYTES)
-    throw new Error(`fichier de ${declared} octets, au-delà de la limite`);
-  const buffer = Buffer.from(await response.arrayBuffer());
-  if (buffer.length > MAX_FILE_BYTES) throw new Error("fichier au-delà de la limite");
-  return buffer;
+const MAX_REDIRECTS = 3;
+
+/** Follows redirects by hand so every hop is checked against internal addresses (SSRF). */
+async function download(rawUrl: string): Promise<Buffer> {
+  let current = rawUrl;
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    const checked = await checkPublicUrl(current);
+    if (!(checked instanceof URL)) throw new Error(`adresse refusée : ${checked.reason}`);
+    const response = await fetch(checked, {
+      headers: { "User-Agent": USER_AGENT },
+      redirect: "manual",
+    });
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("location");
+      if (!location) throw new Error(`HTTP ${response.status} sans destination`);
+      current = new URL(location, checked).toString();
+      continue;
+    }
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const declared = Number(response.headers.get("content-length") ?? 0);
+    if (declared > MAX_FILE_BYTES)
+      throw new Error(`fichier de ${declared} octets, au-delà de la limite`);
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length > MAX_FILE_BYTES) throw new Error("fichier au-delà de la limite");
+    return buffer;
+  }
+  throw new Error("trop de redirections");
 }
 
 export async function reportScdlSource(source: ScdlSource): Promise<ScdlReport> {

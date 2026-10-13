@@ -161,16 +161,21 @@ export function parseScdlFile(buffer: Buffer): ScdlParseResult {
   const firstLine = text.split(/\r?\n/, 1)[0] ?? "";
   const delimiter = detectDelimiter(firstLine);
 
+  // Header names come from the parser callback so a file without data rows keeps its columns.
+  let headerNames: string[] = [];
   const rows = parse(text, {
     delimiter,
-    columns: (header: string[]) => header.map((h) => ALIASES[headerKey(h)] ?? h.trim()),
+    columns: (header: string[]) => {
+      headerNames = header.map((h) => ALIASES[headerKey(h)] ?? h.trim());
+      return headerNames;
+    },
     skip_empty_lines: true,
     relax_column_count: true,
     trim: true,
     bom: true,
   }) as Array<Record<string, string>>;
 
-  const present = new Set(rows.length ? Object.keys(rows[0]!) : []);
+  const present = new Set(headerNames);
   const missingColumns = REQUIRED.filter((c) => !present.has(c));
 
   const candidates: ScdlCandidate[] = [];
