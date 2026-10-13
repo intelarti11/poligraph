@@ -902,6 +902,52 @@ describe("le mot qui porte le stade", () => {
     expect(h.createDraft).not.toHaveBeenCalled();
   });
 
+  it("refuse « enquête » sur une source qui n'atteste qu'un signalement", async () => {
+    h.searchBrave.mockResolvedValue([
+      {
+        ...hit,
+        description:
+          "Joseph Afribo fait l'objet d'un signalement au procureur au titre de l'article 40.",
+      },
+    ]);
+    h.extractToolUse.mockReturnValue({
+      is_subject: true,
+      confidence: 95,
+      reasoning: "x",
+      suggested_title: "T",
+      judicial_status: "ENQUETE_PRELIMINAIRE",
+      status_evidence: "Joseph Afribo fait l'objet d'un signalement au procureur",
+    });
+
+    const stats = await discoverAffairsWeb({ limit: 1 });
+
+    expect(stats.statusUnsupported).toBe(1);
+    expect(h.createDraft).not.toHaveBeenCalled();
+  });
+
+  it("retient SIGNALEMENT_PARQUET quand la source n'atteste qu'un signalement", async () => {
+    h.searchBrave.mockResolvedValue([
+      {
+        ...hit,
+        description:
+          "Joseph Afribo fait l'objet d'un signalement au procureur au titre de l'article 40.",
+      },
+    ]);
+    h.extractToolUse.mockReturnValue({
+      is_subject: true,
+      confidence: 95,
+      reasoning: "x",
+      suggested_title: "T",
+      judicial_status: "SIGNALEMENT_PARQUET",
+      status_evidence: "Joseph Afribo fait l'objet d'un signalement au procureur",
+    });
+
+    const stats = await discoverAffairsWeb({ limit: 1 });
+
+    expect(stats.statusUnsupported).toBe(0);
+    expect(h.createDraft.mock.calls[0]![0].status).toBe("SIGNALEMENT_PARQUET");
+  });
+
   it("accepte quand la source porte bien le terme du stade", async () => {
     h.searchBrave.mockResolvedValue([
       { ...hit, description: "Joseph Afribo a été relaxé définitivement, après mise en examen." },

@@ -61,6 +61,7 @@ export const MANDATE_ROW_LABELS = ["Exécutif", "Parlement", "Local", "Parti", "
 export const AFFAIR_STATUS_MARKER_COLORS: Record<AffairStatus, string> = {
   // En cours (orange)
   PLAINTE_DEPOSEE: "#f97316",
+  SIGNALEMENT_PARQUET: "#f97316",
   ENQUETE_PRELIMINAIRE: "#f97316",
   INSTRUCTION: "#f97316",
   MISE_EN_EXAMEN: "#ea580c",

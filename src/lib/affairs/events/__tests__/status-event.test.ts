@@ -12,6 +12,8 @@ describe("suggestEventForStatus", () => {
       type: "PLAINTE",
       outcome: null,
     });
+    // Un signalement n'est pas une plainte : aucune étape devinée, l'admin choisit.
+    expect(suggestEventForStatus("SIGNALEMENT_PARQUET", null)).toBeNull();
     expect(suggestEventForStatus("INSTRUCTION", "ENQUETE_PRELIMINAIRE")).toEqual({
       type: "INFORMATION_JUDICIAIRE",
       outcome: null,

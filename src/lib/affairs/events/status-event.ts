@@ -22,6 +22,7 @@ function decision(outcome: EventOutcome) {
 // (une condamnation devient définitive par un arrêt, un désistement ou l'expiration d'un délai).
 const RULES: Record<AffairStatus, Rule> = {
   PLAINTE_DEPOSEE: step("PLAINTE"),
+  SIGNALEMENT_PARQUET: null,
   ENQUETE_PRELIMINAIRE: step("ENQUETE_PRELIMINAIRE"),
   INSTRUCTION: step("INFORMATION_JUDICIAIRE"),
   INSTRUCTION_CLOTUREE_SANS_MISE_EN_EXAMEN: null,

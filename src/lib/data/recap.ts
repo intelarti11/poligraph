@@ -459,6 +459,7 @@ async function queryWeeklyRecap(weekStart: Date, weekEnd: Date): Promise<WeeklyR
         WHEN 'PROCES_EN_COURS' THEN 2
         WHEN 'ENQUETE_PRELIMINAIRE' THEN 2
         WHEN 'PLAINTE_DEPOSEE' THEN 2
+        WHEN 'SIGNALEMENT_PARQUET' THEN 2
         WHEN 'INSTRUCTION' THEN 2
         WHEN 'INSTRUCTION_CLOTUREE_SANS_MISE_EN_EXAMEN' THEN 3
         ELSE 4

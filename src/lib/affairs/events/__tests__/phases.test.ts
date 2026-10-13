@@ -166,4 +166,9 @@ describe("buildPhaseTrail : plainte déposée", () => {
     const { STATUS_PHASE } = await import("../phases");
     expect(STATUS_PHASE.PLAINTE_DEPOSEE).toBe("ENQUETE");
   });
+
+  it("place un signalement au parquet dans la phase d'enquête", async () => {
+    const { STATUS_PHASE } = await import("../phases");
+    expect(STATUS_PHASE.SIGNALEMENT_PARQUET).toBe("ENQUETE");
+  });
 });

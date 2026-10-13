@@ -6,6 +6,7 @@ import { z } from "zod/v4";
 // `AffairEventType`, not to `AffairStatus`. Guarded by a test (#511).
 export const VALID_STATUSES = [
   "PLAINTE_DEPOSEE",
+  "SIGNALEMENT_PARQUET",
   "ENQUETE_PRELIMINAIRE",
   "INSTRUCTION",
   "INSTRUCTION_CLOTUREE_SANS_MISE_EN_EXAMEN",
