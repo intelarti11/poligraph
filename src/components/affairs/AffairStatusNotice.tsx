@@ -14,6 +14,7 @@ import { CONDAMNATION_STATUSES } from "@/config/judicial-maturity";
 
 export type AffairNoticeVariant =
   | "presumption"
+  | "no_inquiry"
   | "non_definitive"
   | "pourvoi"
   | "definitive"
@@ -35,9 +36,11 @@ const NON_DEFINITIVE_STATUSES: readonly AffairStatus[] = [
   "APPEL_EN_COURS",
 ];
 
+// Une plainte ou un signalement seuls : aucune procédure n'est « en cours » tant que rien n'est
+// ouvert. L'encart « cette procédure est en cours » affirmerait faux.
+const NO_INQUIRY_STATUSES: readonly AffairStatus[] = ["PLAINTE_DEPOSEE", "SIGNALEMENT_PARQUET"];
+
 const EN_COURS_STATUSES: readonly AffairStatus[] = [
-  "PLAINTE_DEPOSEE",
-  "SIGNALEMENT_PARQUET",
   "ENQUETE_PRELIMINAIRE",
   "INSTRUCTION",
   "MISE_EN_EXAMEN",
@@ -65,6 +68,7 @@ export function getAffairNoticeVariant(
   if (status === "POURVOI_EN_CASSATION") return "pourvoi";
   if (status === "INSTRUCTION_CLOTUREE_SANS_MISE_EN_EXAMEN") return "instruction_close";
   if (NON_DEFINITIVE_STATUSES.includes(status)) return "non_definitive";
+  if (NO_INQUIRY_STATUSES.includes(status)) return "no_inquiry";
   if (EN_COURS_STATUSES.includes(status)) return "presumption";
   return null;
 }
@@ -73,6 +77,12 @@ const NOTICES: Record<AffairNoticeVariant, { title: string; body: string; classN
   presumption: {
     title: "Présomption d'innocence",
     body: "cette procédure est en cours. La personne concernée est présumée innocente jusqu'à une éventuelle condamnation définitive.",
+    className:
+      "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200",
+  },
+  no_inquiry: {
+    title: "Présomption d'innocence",
+    body: "aucune enquête n'est connue à ce stade. La personne concernée est présumée innocente.",
     className:
       "border-amber-200 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200",
   },

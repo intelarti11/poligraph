@@ -483,11 +483,11 @@ export default async function PartyAffairsPage({ params }: PageProps) {
               <Card className="mb-6 border-l-4 border-l-gray-300 dark:border-l-gray-600">
                 <CardHeader>
                   <CardTitle className="text-muted-foreground">
-                    Enquêtes préliminaires ({enquetePoliticians.length})
+                    Plaintes, signalements et enquêtes préliminaires ({enquetePoliticians.length})
                   </CardTitle>
                   <p className="text-sm text-muted-foreground">
-                    Stade de l{"'"}enquête, aucun juge n{"'"}a validé la poursuite. La présomption d
-                    {"'"}innocence s{"'"}applique.
+                    Stade de la plainte, du signalement ou de l{"'"}enquête, aucun juge n{"'"}a
+                    validé la poursuite. La présomption d{"'"}innocence s{"'"}applique.
                   </p>
                 </CardHeader>
                 <CardContent>

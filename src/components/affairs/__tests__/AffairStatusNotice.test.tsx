@@ -28,8 +28,6 @@ describe("getAffairNoticeVariant — sélection par statut et involvement", () =
 
   it("procédures en cours : présomption d'innocence", () => {
     for (const s of [
-      "PLAINTE_DEPOSEE",
-      "SIGNALEMENT_PARQUET",
       "ENQUETE_PRELIMINAIRE",
       "INSTRUCTION",
       "MISE_EN_EXAMEN",
@@ -38,6 +36,18 @@ describe("getAffairNoticeVariant — sélection par statut et involvement", () =
     ] as const) {
       expect(getAffairNoticeVariant(s, "DIRECT")).toBe("presumption");
     }
+  });
+
+  it("plainte ou signalement seuls : jamais « procédure en cours »", () => {
+    for (const s of ["PLAINTE_DEPOSEE", "SIGNALEMENT_PARQUET"] as const) {
+      expect(getAffairNoticeVariant(s, "DIRECT")).toBe("no_inquiry");
+    }
+    const { getByRole } = render(
+      <AffairStatusNotice status="SIGNALEMENT_PARQUET" involvement="DIRECT" />
+    );
+    const text = getByRole("note").textContent ?? "";
+    expect(text).toContain("aucune enquête n'est connue");
+    expect(text).not.toContain("en cours");
   });
 
   it("non mis en cause : encart de rôle, jamais un encart à charge (I5)", () => {
