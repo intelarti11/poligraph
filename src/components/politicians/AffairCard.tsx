@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { formatDate, stripMarkdown } from "@/lib/utils";
 import {
-  AFFAIR_STATUS_LABELS,
+  getAffairStatusLabel,
   AFFAIR_STATUS_COLORS,
   AFFAIR_CATEGORY_LABELS,
   INVOLVEMENT_LABELS,
@@ -88,7 +88,7 @@ export function AffairCard({ affair, variant }: AffairCardProps) {
                   : "bg-muted text-muted-foreground border-transparent"
               }`}
             >
-              {AFFAIR_STATUS_LABELS[affair.status as AffairStatus]}
+              {getAffairStatusLabel(affair.status as AffairStatus, affair.jurisdictionOrder)}
             </Badge>
             <CiteAnchor anchorId={citeAnchorId.affair(affair.id)} label="cette affaire" />
           </div>
@@ -120,6 +120,7 @@ export function AffairCard({ affair, variant }: AffairCardProps) {
       <AffairStatusNotice
         status={affair.status as AffairStatus}
         involvement={affair.involvement}
+        jurisdictionOrder={affair.jurisdictionOrder}
         className="mb-3"
       />
 

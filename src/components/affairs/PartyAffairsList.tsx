@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { stripMarkdown } from "@/lib/utils";
 import {
-  AFFAIR_STATUS_LABELS,
+  getAffairStatusLabel,
   AFFAIR_STATUS_COLORS,
   AFFAIR_SUPER_CATEGORY_LABELS,
   AFFAIR_SUPER_CATEGORY_COLORS,
@@ -18,7 +18,7 @@ import {
 import { AffairStatusNotice } from "@/components/affairs/AffairStatusNotice";
 import { getJudicialMaturity, type JudicialMaturity } from "@/config/judicial-maturity";
 import { ADVERSE_JURISDICTION_ORDER, isAccusedInvolvement } from "@/config/certainty";
-import type { AffairCategory, AffairStatus, Involvement } from "@/types";
+import type { AffairCategory, AffairStatus, Involvement, JurisdictionOrder } from "@/types";
 
 const MATURITY_TAB_LABELS: Record<string, string> = {
   ALL: "Toutes",
@@ -194,7 +194,10 @@ export function PartyAffairsList({ affairs }: PartyAffairsListProps) {
                           : "bg-muted text-muted-foreground border-transparent"
                       }
                     >
-                      {AFFAIR_STATUS_LABELS[affair.status as AffairStatus]}
+                      {getAffairStatusLabel(
+                        affair.status as AffairStatus,
+                        affair.jurisdictionOrder as JurisdictionOrder
+                      )}
                     </Badge>
                     <Badge className={INVOLVEMENT_COLORS[affair.involvement as Involvement]}>
                       {INVOLVEMENT_LABELS[affair.involvement as Involvement]}
@@ -220,6 +223,7 @@ export function PartyAffairsList({ affairs }: PartyAffairsListProps) {
                   <AffairStatusNotice
                     status={affair.status as AffairStatus}
                     involvement={affair.involvement as Involvement}
+                    jurisdictionOrder={affair.jurisdictionOrder as JurisdictionOrder}
                     className="mt-2"
                   />
                 </div>

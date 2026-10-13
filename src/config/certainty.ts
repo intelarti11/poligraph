@@ -1,4 +1,4 @@
-import type { AffairStatus, Involvement } from "@/generated/prisma";
+import type { AffairStatus, Involvement, JurisdictionOrder } from "@/generated/prisma";
 
 /**
  * Involvements qui désignent la personne suivie comme mise en cause. Défini ici (module sans
@@ -60,10 +60,20 @@ export function getCertaintyLevel(status: AffairStatus): CertaintyLevel {
 }
 
 /** Certitude d'une affaire pour la personne suivie, null quand elle n'est pas la personne mise en cause. */
+/**
+ * Niveau de certitude à charge, ou null. L'échelle est pénale (« condamnation définitive »,
+ * « procédure en cours ») : hors du pénal, elle affirmerait une condamnation qui n'existe pas.
+ * Un ordre absent vaut pénal. Un appelant qui doit savoir si la personne est mise en cause
+ * lit `isAccusedInvolvement`, pas ce niveau.
+ */
 export function getAttributedCertaintyLevel(affair: {
   involvement: Involvement;
   status: AffairStatus;
+  jurisdictionOrder?: JurisdictionOrder;
 }): CertaintyLevel | null {
+  if (affair.jurisdictionOrder && affair.jurisdictionOrder !== ADVERSE_JURISDICTION_ORDER) {
+    return null;
+  }
   return isAccusedInvolvement(affair.involvement) ? getCertaintyLevel(affair.status) : null;
 }
 

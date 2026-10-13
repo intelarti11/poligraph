@@ -1114,6 +1114,9 @@ enum JurisdictionOrder {
   PENAL
   FINANCIER
   ADMINISTRATIF
+  // Justice civile, prud'homale ou commerciale. Une seule valeur : aucun total public ne
+  // distingue ces juridictions, elles sortent toutes des compteurs.
+  CIVIL
 }
 
 enum AffairCategory {

@@ -46,7 +46,7 @@ const VALID_CATEGORIES = [
  * ordre que la modération ne peut pas poser, et une valeur absente de Prisma
  * passe Zod pour échouer en base. Gardé par un test.
  */
-export const VALID_JURISDICTION_ORDERS = ["PENAL", "FINANCIER", "ADMINISTRATIF"] as const;
+export const VALID_JURISDICTION_ORDERS = ["PENAL", "FINANCIER", "ADMINISTRATIF", "CIVIL"] as const;
 
 export const quickUpdateAffairSchema = z.object({
   status: z.enum(VALID_STATUSES).optional(),

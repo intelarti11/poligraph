@@ -11,9 +11,9 @@ import { Badge } from "@/components/ui/badge";
 import { formatDate, stripMarkdown } from "@/lib/utils";
 import { MarkdownText } from "@/components/ui/markdown";
 import {
-  AFFAIR_STATUS_LABELS,
+  getAffairStatusLabel,
   AFFAIR_STATUS_COLORS,
-  AFFAIR_STATUS_DESCRIPTIONS,
+  getAffairStatusDescription,
   AFFAIR_STATUS_NEEDS_PRESUMPTION,
   AFFAIR_CATEGORY_LABELS,
   AFFAIR_SUPER_CATEGORY_LABELS,
@@ -271,9 +271,15 @@ export default async function AffairDetailPage({ params }: PageProps) {
   // The certainty/status describes the outcome for the person prosecuted. When
   // the tracked politician is a witness, plaintiff, victim or merely mentioned, a
   // charging badge ("Condamnation définitive") would misrepresent them (#383).
+  // Hors du pénal, il n'y a pas de niveau de certitude (l'échelle dit « condamnation ») : la
+  // mise en cause se lit sur l'implication, pas sur ce niveau.
   const certainty = getAttributedCertaintyLevel(affair);
-  const accused = certainty !== null;
-  const noticeVariant = getAffairNoticeVariant(affair.status, affair.involvement);
+  const accused = isAccusedInvolvement(affair.involvement);
+  const noticeVariant = getAffairNoticeVariant(
+    affair.status,
+    affair.involvement,
+    affair.jurisdictionOrder
+  );
   const partyDisplay = getAffairPartyDisplay({
     factsDate: affair.factsDate,
     partyAtTime: affair.partyAtTime,
@@ -358,7 +364,7 @@ export default async function AffairDetailPage({ params }: PageProps) {
       <AffairStickyBar
         title={affair.title}
         shareUrl={`${SITE_URL}/affaires/${affair.slug}`}
-        shareText={`Affaire : ${affair.title} (${AFFAIR_STATUS_LABELS[affair.status]})`}
+        shareText={`Affaire : ${affair.title} (${getAffairStatusLabel(affair.status, affair.jurisdictionOrder)})`}
         superCategoryLabel={superCategoryLabel}
         superCategoryHref={superCategoryHref}
       />
@@ -368,17 +374,19 @@ export default async function AffairDetailPage({ params }: PageProps) {
           <div className="mb-3 flex flex-wrap items-center gap-2">
             {accused ? (
               <>
-                <Badge className={`${CERTAINTY_COLORS[certainty]} px-3 py-1 text-sm`}>
-                  {CERTAINTY_LABELS[certainty]}
-                </Badge>
+                {certainty !== null && (
+                  <Badge className={`${CERTAINTY_COLORS[certainty]} px-3 py-1 text-sm`}>
+                    {CERTAINTY_LABELS[certainty]}
+                  </Badge>
+                )}
                 <Badge className={AFFAIR_SUPER_CATEGORY_COLORS[superCategory]}>
                   {AFFAIR_SUPER_CATEGORY_LABELS[superCategory]}
                 </Badge>
                 <Badge variant="outline">{AFFAIR_CATEGORY_LABELS[affair.category]}</Badge>
                 <StatusTooltip
                   status={affair.status}
-                  label={AFFAIR_STATUS_LABELS[affair.status]}
-                  description={AFFAIR_STATUS_DESCRIPTIONS[affair.status]}
+                  label={getAffairStatusLabel(affair.status, affair.jurisdictionOrder)}
+                  description={getAffairStatusDescription(affair.status, affair.jurisdictionOrder)}
                   colorClass={AFFAIR_STATUS_COLORS[affair.status]}
                 />
               </>
@@ -389,8 +397,8 @@ export default async function AffairDetailPage({ params }: PageProps) {
               // re-attach everything to the affair.
               <StatusTooltip
                 status={affair.status}
-                label={AFFAIR_STATUS_LABELS[affair.status]}
-                description={AFFAIR_STATUS_DESCRIPTIONS[affair.status]}
+                label={getAffairStatusLabel(affair.status, affair.jurisdictionOrder)}
+                description={getAffairStatusDescription(affair.status, affair.jurisdictionOrder)}
                 colorClass="bg-muted text-muted-foreground border-transparent"
               />
             )}
@@ -410,7 +418,7 @@ export default async function AffairDetailPage({ params }: PageProps) {
               {AFFAIR_CATEGORY_LABELS[affair.category]}
             </p>
           )}
-          {accused && (
+          {certainty !== null && (
             <p className="text-sm text-muted-foreground mb-4">
               {CERTAINTY_DESCRIPTIONS[certainty]}
             </p>
@@ -445,6 +453,7 @@ export default async function AffairDetailPage({ params }: PageProps) {
           <AffairStatusNotice
             status={affair.status}
             involvement={affair.involvement}
+            jurisdictionOrder={affair.jurisdictionOrder}
             className="mb-6"
           />
         )}

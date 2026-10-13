@@ -16,6 +16,7 @@ import {
   CANDIDACY_STATUS_LABELS,
   FACTCHECK_ALLOWED_SOURCES,
   canonicalizeFactCheckSource,
+  getAffairStatusLabel,
 } from "./labels";
 
 describe("AFFAIR_STATUS_LABELS", () => {
@@ -283,5 +284,27 @@ describe("canonicalizeFactCheckSource", () => {
   it("returns an unknown publisher unchanged", () => {
     expect(canonicalizeFactCheckSource("Snopes")).toBe("Snopes");
     expect(canonicalizeFactCheckSource("dpa-factchecking")).toBe("dpa-factchecking");
+  });
+});
+
+describe("getAffairStatusLabel", () => {
+  it("garde « condamnation » dans l'ordre pénal, y compris par défaut", () => {
+    expect(getAffairStatusLabel("CONDAMNATION_DEFINITIVE")).toBe("Condamnation définitive");
+    expect(getAffairStatusLabel("CONDAMNATION_DEFINITIVE", "PENAL")).toBe(
+      "Condamnation définitive"
+    );
+  });
+
+  it("parle de décision hors du pénal, jamais de condamnation", () => {
+    for (const order of ["CIVIL", "ADMINISTRATIF", "FINANCIER"] as const) {
+      expect(getAffairStatusLabel("CONDAMNATION_DEFINITIVE", order)).toBe("Décision définitive");
+      expect(getAffairStatusLabel("CONDAMNATION_PREMIERE_INSTANCE", order)).not.toMatch(
+        /condamnation/i
+      );
+    }
+  });
+
+  it("laisse les autres statuts inchangés hors du pénal", () => {
+    expect(getAffairStatusLabel("APPEL_EN_COURS", "CIVIL")).toBe("Appel en cours");
   });
 });
