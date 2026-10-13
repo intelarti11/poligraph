@@ -70,6 +70,7 @@ const NEUTRAL_STATUS_SET = new Set<AffairStatus>([
 
 const ONGOING_STATUSES = new Set<AffairStatus>([
   "PLAINTE_DEPOSEE",
+  "SIGNALEMENT_PARQUET",
   "ENQUETE_PRELIMINAIRE",
   "INSTRUCTION",
   "MISE_EN_EXAMEN",

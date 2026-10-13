@@ -1,7 +1,8 @@
 # Territoires : protocole de sélection et de saisie des décisions
 
-Date : 11 octobre 2026. Statut : **projet, à arrêter par la rédaction**. Ce protocole doit être publié
-avant la première collecte. Tant qu'il ne l'est pas, aucune décision n'est saisie en production.
+Date : 13 octobre 2026. Statut : **version 2, proposée à la relecture de la rédaction**. Les points
+encore ouverts sont marqués « à arrêter ». Ce protocole doit être publié avant la première collecte.
+Tant qu'il ne l'est pas, aucune décision n'est saisie en production.
 
 Références : cadrage produit et UX du 8 octobre (§6.1 à §6.4), plan d'implémentation (lot 2).
 
@@ -14,10 +15,43 @@ l'endroit exact où la preuve se trouve dans ce document.
 Le pilote publie une sélection documentée. Ce n'est pas un relevé exhaustif : le nombre de
 décisions référencées ne mesure ni l'activité ni la performance d'un conseil, et la page le dit.
 
+Trois couches se superposent (§3). Seule la première produit des notices rédigées par Poligraph.
+Les deux autres renvoient vers la source officielle ou passent par le même circuit de relecture.
+
 ## 2. Choix des douze communes
 
-**Liste : à arrêter.** Les critères ci-dessous servent à la construire et à la justifier. La liste
-retenue est publiée avec, pour chaque commune, le critère qui l'a fait entrer.
+**Liste proposée, à arrêter.** Les critères ci-dessous ont servi à la construire. La liste retenue
+est publiée avec, pour chaque commune, le critère qui l'a fait entrer.
+
+| #   | Commune            | Dép. | Population | Strate          | Source ouverte                |
+| --- | ------------------ | ---- | ---------- | --------------- | ----------------------------- |
+| 1   | Taugon             | 17   | 772        | moins de 1 000  | jeu SCDL, mis à jour 09/2026  |
+| 2   | Bouloc             | 31   | 4 618      | 1 000 à 9 999   | jeu SCDL, 08/2026             |
+| 3   | Boé                | 47   | 5 846      | 1 000 à 9 999   | jeu de délibérations, 10/2025 |
+| 4   | Neuville-sur-Saône | 69   | 7 812      | 1 000 à 9 999   | 09/2026                       |
+| 5   | Cogolin            | 83   | 12 301     | 10 000 à 99 999 | 09/2026                       |
+| 6   | Rillieux-la-Pape   | 69   | 31 389     | 10 000 à 99 999 | 08/2025                       |
+| 7   | La Possession      | 974  | 36 568     | 10 000 à 99 999 | jeu SCDL, 08/2026             |
+| 8   | Saint-Herblain     | 44   | 50 973     | 10 000 à 99 999 | 07/2026                       |
+| 9   | Villejuif          | 94   | 60 183     | 10 000 à 99 999 | 09/2026                       |
+| 10  | Antibes            | 06   | 77 637     | 10 000 à 99 999 | 07/2026                       |
+| 11  | Brest              | 29   | 142 346    | 100 000 et plus | jeu SCDL, 10/2026             |
+| 12  | Saint-Étienne      | 42   | 173 136    | 100 000 et plus | 01/2026                       |
+
+Populations et dates de mise à jour relevées le 12 octobre 2026. Les populations sont à re-vérifier
+sur le millésime légal en vigueur avant publication.
+
+Points non réglés :
+
+- **Une seule commune ultramarine** (La Possession). Le critère 2 en demande deux, de bassins
+  différents. La seconde reste à trouver (Mayotte, Antilles, Guyane ou Pacifique) avec un recueil
+  des actes consultable. Tant qu'elle manque, la page le dit.
+- **Les cas d'épreuve** du critère 5 ne se lisent pas dans les fichiers ouverts. Ils sont constatés
+  commune par commune, et la liste peut changer si un cas reste sans exemple.
+- **Équilibre politique** : contrôlé après coup, jamais utilisé pour choisir (critère 6). Résultat à
+  consigner ici avant publication.
+
+### Critères
 
 1. **Tailles différentes.** Au moins une commune par strate : moins de 1 000 habitants, 1 000 à
    9 999, 10 000 à 99 999, 100 000 et plus. Population légale INSEE, millésime indiqué.
@@ -31,7 +65,8 @@ retenue est publiée avec, pour chaque commune, le critère qui l'a fait entrer.
 3. **Sources accessibles.** Les délibérations ou le recueil des actes sont publiés en ligne
    et consultables sans compte. Depuis le 1er juillet 2022, la publication électronique est la
    règle, mais les communes de moins de 3 500 habitants peuvent en choisir une autre : pour
-   elles, vérifier la disponibilité avant de les retenir.
+   elles, vérifier la disponibilité avant de les retenir. Un jeu ouvert non mis à jour depuis
+   2025 écarte la commune (Marseillan, Le Pré-Saint-Gervais et Lys-Saint-Georges l'ont été).
 4. **Période institutionnelle établissable.** Le maire en fonction est établi dans Poligraph, et
    les dates de début et de fin des mandats couverts sont connues au jour près. Sans cela, les
    décisions de la commune s'afficheraient sous « période institutionnelle non établie ».
@@ -46,24 +81,71 @@ retenue est publiée avec, pour chaque commune, le critère qui l'a fait entrer.
 7. **Pas de commune choisie pour une actualité.** Une commune ne rejoint pas le pilote parce
    qu'une affaire, une polémique ou un fait divers la met en avant.
 
+### Biais assumé : les communes qui publient
+
+Le pilote ne peut contenir que des communes dont les actes sont en ligne et lisibles par machine.
+Ce sont, en moyenne, des communes plus grandes, mieux équipées et plus transparentes que celles
+qui ne publient pas. Le pilote ne dit donc rien de la France des communes qui ne publient pas, et
+ses résultats ne se généralisent pas. La page l'écrit en clair.
+
 Le jeu de communes de recette (`territoires-recette.md`) sert aux tests d'affichage. Il ne
 constitue pas la liste du pilote.
 
-## 3. Choix des actes dans une commune
+## 3. Choix des actes : trois couches
 
-**Règle : à arrêter.** Deux options, à trancher avant la collecte :
+Choisir à la main « les actes importants » introduirait un biais éditorial. Se limiter à des
+matières communes garantit un traitement identique, mais fait perdre à l'habitant ce qui est
+propre à sa commune (un équipement, un projet d'aménagement, un litige local). D'où trois couches.
 
-- **Par séances** : toutes les délibérations de séances tirées selon une règle fixée à l'avance
-  (par exemple la première séance de chaque semestre). Neutre, mais donne des actes de portée
-  très inégale.
-- **Par types d'actes communs** : la même liste de types pour toutes les communes (budget primitif,
-  compte financier unique ou compte administratif, plan local d'urbanisme, tarifs des services
-  publics locaux). Comparable d'une commune à l'autre, mais le choix de la liste est lui-même
-  éditorial et doit être publié.
+| Couche              | Contenu                                                                                                                             | Revue humaine            |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------ |
+| 1. Socle commun     | Les mêmes matières pour toutes les communes (liste ci-dessous), en notices documentées avec l'endroit exact de la preuve            | Oui, chaque notice       |
+| 2. Liste officielle | Un lien « Toutes les délibérations, source officielle » vers le jeu ouvert ou le recueil des actes de la collectivité. Aucune copie | Une vérification du lien |
+| 3. Actes signalés   | Un habitant signale une délibération précise avec le lien du document. Elle passe par le même circuit de relecture                  | Oui, chaque notice       |
 
-Dans les deux cas, la règle est la même pour toutes les communes, et la profondeur couverte est
-affichée (par exemple « depuis mars 2020 »). Un acte n'est jamais retenu ou écarté pour ce qu'il
-dit d'un élu.
+### Couche 1 : matières du socle
+
+Nomenclature des matières de la préfecture (ACTES), telle qu'elle apparaît dans les jeux ouverts
+relevés le 12 octobre 2026. Proposition, à arrêter par la rédaction :
+
+| Code     | Matière                                                      | Dans le socle                                  |
+| -------- | ------------------------------------------------------------ | ---------------------------------------------- |
+| 1.1      | Commande publique, marchés publics                           | Oui                                            |
+| 2.1      | Urbanisme, documents d'urbanisme                             | Oui                                            |
+| 3.1      | Domaine et patrimoine, acquisitions                          | Oui                                            |
+| 3.2      | Domaine et patrimoine, aliénations                           | Oui                                            |
+| 7.1      | Finances locales, décisions budgétaires                      | Oui                                            |
+| 7.5      | Finances locales, subventions                                | Oui, aux personnes morales seulement           |
+| 8.4      | Compétences par thèmes, aménagement du territoire            | Oui                                            |
+| 8.8      | Compétences par thèmes, environnement                        | Oui                                            |
+| 4.x      | Fonction publique                                            | Non : actes nominatifs sur des agents          |
+| 5.2, 5.3 | Fonctionnement des assemblées, désignation des représentants | Non : procédural, sans effet sur les habitants |
+| 9.1      | Autres domaines                                              | Non : catégorie fourre-tout, hétérogène        |
+
+Une notice n'est créée que si la matière figure dans le socle, quelle que soit la commune. Le
+socle est le même pour les douze, publié avec sa date, et ne change pas en cours de collecte.
+
+### Pourquoi pas toutes les délibérations d'un fichier ouvert
+
+- **Données personnelles** : les objets de délibération citent parfois des personnes nommées
+  (protection fonctionnelle, litiges, aides à des particuliers). Republier la liste brute
+  demanderait un tri ligne à ligne.
+- **Volume** : une grande commune en produit plusieurs centaines par an, pour une relecture qui
+  n'apporte rien de plus que le lien officiel de la couche 2.
+
+### Ce qui n'est pas un critère de sélection
+
+Ni le nombre de voix contre, ni l'absence d'unanimité, ni la présence d'un élu nommé. Un tri sur
+« votes non unanimes » se lirait comme un signal politique et ne serait pas neutre.
+
+### Profondeur et indicateurs
+
+La règle est la même pour toutes les communes, et la profondeur couverte est affichée (par exemple
+« depuis mars 2020 »). Un acte n'est jamais retenu ou écarté pour ce qu'il dit d'un élu.
+
+Les comptes tirés des jeux ouverts (issue, votes) ne sont qu'un indice de travail pour la
+relecture. Une notice ne porte jamais une issue déduite automatiquement : la personne qui relit
+la confirme sur le document.
 
 ## 4. Sources admissibles
 
@@ -124,7 +206,10 @@ dépubliée.
 
 ## 8. Avant la première collecte
 
-- [ ] Liste des douze communes arrêtée, avec le critère de chacune.
-- [ ] Règle de choix des actes arrêtée (§3).
+- [ ] Liste des douze communes arrêtée, avec le critère de chacune (§2).
+- [ ] Seconde commune ultramarine trouvée, ou absence assumée sur la page.
+- [ ] Équilibre politique des douze contrôlé et consigné (§2).
+- [ ] Liste des matières du socle arrêtée (§3).
 - [ ] Fréquence de revérification fixée (§6).
+- [ ] Table de correspondance « jeu ouvert vers institution » complétée pour les douze.
 - [ ] Protocole publié sur le site, avec sa date.

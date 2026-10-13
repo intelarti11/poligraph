@@ -12,6 +12,7 @@ export const contentType = "image/png";
 
 const STATUS_LABELS: Partial<Record<AffairStatus, string>> = {
   PLAINTE_DEPOSEE: "Plainte déposée",
+  SIGNALEMENT_PARQUET: "Signalement au parquet",
   ENQUETE_PRELIMINAIRE: "Enquête préliminaire",
   INSTRUCTION: "Instruction",
   MISE_EN_EXAMEN: "Mise en examen",

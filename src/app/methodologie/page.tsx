@@ -29,6 +29,7 @@ const CERTAINTY_STATUSES: Record<CertaintyLevel, string[]> = {
   PRONONCE: ["Condamnation en première instance", "Appel en cours"],
   EN_COURS: [
     "Plainte déposée",
+    "Signalement au parquet",
     "Enquête préliminaire",
     "Instruction",
     "Mise en examen",

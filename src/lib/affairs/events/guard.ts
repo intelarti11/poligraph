@@ -232,32 +232,29 @@ export function checkEventPublishable(e: EventGuardInput, today: Date = new Date
     }
   }
 
-  const needsCorroboration =
+  // Une seule source suffit : un article d'un média de la liste admise atteste une décision.
+  // La seconde source reste possible (elle renforce la fiche) et, quand elle est donnée, elle
+  // est contrôlée comme avant. Décision de Lamine du 13 octobre 2026.
+  const hasCorroborableOutcome =
     isDecision(e.type) &&
     e.occurrence === "HELD" &&
     e.sourceKind === "PRESS" &&
     (e.outcome === "CONDAMNATION" || e.outcome === "RELAXE_PARTIELLE");
-  if (needsCorroboration) {
-    if (!e.corroborationUrl) {
-      errors.push(
-        "Une condamnation sourcée par la presse exige une seconde source d'un autre média."
-      );
-    } else {
-      const corroborationError = checkSourceUrl(e.corroborationUrl, "La seconde source");
-      if (corroborationError) {
-        errors.push(corroborationError);
-      } else if (
-        !isAcceptedPressUrl(e.corroborationUrl) &&
-        !isOfficialSourceUrl(e.corroborationUrl)
-      ) {
-        errors.push("La seconde source ne figure pas dans la liste des sources admises.");
-      } else if (
-        e.sourceUrl &&
-        URL.canParse(e.sourceUrl) &&
-        mediaOf(e.sourceUrl) === mediaOf(e.corroborationUrl)
-      ) {
-        errors.push("La seconde source doit venir d'un autre média que la première.");
-      }
+  if (hasCorroborableOutcome && e.corroborationUrl) {
+    const corroborationError = checkSourceUrl(e.corroborationUrl, "La seconde source");
+    if (corroborationError) {
+      errors.push(corroborationError);
+    } else if (
+      !isAcceptedPressUrl(e.corroborationUrl) &&
+      !isOfficialSourceUrl(e.corroborationUrl)
+    ) {
+      errors.push("La seconde source ne figure pas dans la liste des sources admises.");
+    } else if (
+      e.sourceUrl &&
+      URL.canParse(e.sourceUrl) &&
+      mediaOf(e.sourceUrl) === mediaOf(e.corroborationUrl)
+    ) {
+      errors.push("La seconde source doit venir d'un autre média que la première.");
     }
   }
 

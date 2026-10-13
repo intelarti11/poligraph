@@ -102,11 +102,6 @@ describe("checkEventPublishable", () => {
       /issue/i,
     ],
     [
-      "condamnation de presse sans corroboration",
-      { ...pressConviction, corroborationUrl: null },
-      /seconde source/i,
-    ],
-    [
       "corroboration sur le même hôte",
       { ...pressConviction, corroborationUrl: "https://lemonde.fr/autre" },
       /autre média|même/i,
@@ -238,6 +233,22 @@ describe("checkEventPublishable : seconde source du même média (L4)", () => {
     ["https://www.bbc.co.uk/a", "https://www.legifrance.gouv.fr/b"],
   ])("accepte %s puis %s (suffixe public à deux niveaux)", (sourceUrl, corroborationUrl) => {
     expect(checkEventPublishable({ ...pressConviction, sourceUrl, corroborationUrl })).toEqual([]);
+  });
+});
+
+describe("checkEventPublishable : une seule source suffit pour une condamnation de presse", () => {
+  it("publie sans seconde source quand le média est admis", () => {
+    expect(checkEventPublishable({ ...pressConviction, corroborationUrl: null })).toEqual([]);
+  });
+
+  it("refuse toujours une source de presse hors liste, seconde source ou non", () => {
+    expect(
+      checkEventPublishable({
+        ...pressConviction,
+        sourceUrl: "https://www.aol.com/a",
+        corroborationUrl: null,
+      })
+    ).not.toEqual([]);
   });
 });
 

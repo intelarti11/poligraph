@@ -114,6 +114,7 @@ export function getAffairStatusLabel(
 
 export const AFFAIR_STATUS_LABELS: Record<AffairStatus, string> = {
   PLAINTE_DEPOSEE: "Plainte déposée",
+  SIGNALEMENT_PARQUET: "Signalement au parquet",
   ENQUETE_PRELIMINAIRE: "Enquête préliminaire",
   INSTRUCTION: "Instruction en cours",
   INSTRUCTION_CLOTUREE_SANS_MISE_EN_EXAMEN: "Instruction clôturée, sans mise en examen",
@@ -133,6 +134,7 @@ export const AFFAIR_STATUS_LABELS: Record<AffairStatus, string> = {
 
 export const AFFAIR_STATUS_COLORS: Record<AffairStatus, string> = {
   PLAINTE_DEPOSEE: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300",
+  SIGNALEMENT_PARQUET: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300",
   ENQUETE_PRELIMINAIRE: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300",
   INSTRUCTION: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300",
   INSTRUCTION_CLOTUREE_SANS_MISE_EN_EXAMEN:
@@ -155,6 +157,8 @@ export const AFFAIR_STATUS_COLORS: Record<AffairStatus, string> = {
 
 export const AFFAIR_STATUS_DESCRIPTIONS: Record<AffairStatus, string> = {
   PLAINTE_DEPOSEE: "Une plainte a été déposée. Aucune enquête n'est connue à ce stade.",
+  SIGNALEMENT_PARQUET:
+    "Un signalement a été transmis au parquet. Aucune enquête n'est connue à ce stade.",
   ENQUETE_PRELIMINAIRE:
     "Le parquet a ordonné une enquête pour vérifier les faits. Aucune mise en cause formelle.",
   INSTRUCTION:
@@ -183,6 +187,7 @@ export const AFFAIR_STATUS_DESCRIPTIONS: Record<AffairStatus, string> = {
 // Indicates if presumption of innocence reminder is needed
 export const AFFAIR_STATUS_NEEDS_PRESUMPTION: Record<AffairStatus, boolean> = {
   PLAINTE_DEPOSEE: true,
+  SIGNALEMENT_PARQUET: true,
   ENQUETE_PRELIMINAIRE: true,
   INSTRUCTION: true,
   INSTRUCTION_CLOTUREE_SANS_MISE_EN_EXAMEN: true,

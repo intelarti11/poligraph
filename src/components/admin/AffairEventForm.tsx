@@ -31,7 +31,8 @@ const INCIDENTAL_TYPES: readonly AffairEventType[] = [
 
 const CORROBORATED_OUTCOMES: readonly EventOutcome[] = ["CONDAMNATION", "RELAXE_PARTIELLE"];
 
-export const CORROBORATION_HINT = "Deux médias indépendants, pas deux reprises de la même dépêche.";
+export const CORROBORATION_HINT =
+  "Facultative : un second média indépendant renforce la fiche, pas une reprise de la même dépêche.";
 
 const SOURCE_KINDS = Object.keys(EVENT_SOURCE_KIND_LABELS) as EventSourceKind[];
 
@@ -402,7 +403,7 @@ export function AffairEventForm({
       {showCorroboration && (
         <div className="space-y-1 sm:col-span-2">
           <label htmlFor={id("corroboration")} className="text-sm font-medium">
-            Seconde source (URL)
+            Seconde source (URL, facultative)
           </label>
           <input
             id={id("corroboration")}
