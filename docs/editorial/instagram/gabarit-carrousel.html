@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="fr">
+  <!-- Gabarit de carrousel Instagram Poligraph, 1080 x 1350. Mode d'emploi : README.md. -->
+  <head>
+    <meta charset="utf-8" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&amp;family=Outfit:wght@600;700;800&amp;display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --navy: #082b4d;
+        --red: #df123d;
+        --blue: #80afe0;
+        --paper: #f7f5ef;
+        --ink: #101820;
+        --muted: #56616b;
+        --line: #d8d9d5;
+        --cream: #ece7da;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 72px;
+        background: #ddd;
+        color: var(--ink);
+        font-family: "Atkinson Hyperlegible", sans-serif;
+      }
+      main {
+        display: flex;
+        gap: 40px;
+        align-items: flex-start;
+      }
+      .slide {
+        position: relative;
+        flex: 0 0 auto;
+        width: 1080px;
+        height: 1350px;
+        overflow: hidden;
+        background: var(--paper);
+      }
+      .accent {
+        height: 11px;
+        background: linear-gradient(90deg, var(--red), var(--blue));
+      }
+      .page {
+        position: relative;
+        display: flex;
+        height: 1339px;
+        flex-direction: column;
+        padding: 72px 78px 62px;
+      }
+      .center {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        justify-content: center;
+        padding-bottom: 40px;
+      }
+      .kicker {
+        margin: 0 0 30px;
+        color: var(--muted);
+        font:
+          700 25px/1 "Outfit",
+          sans-serif;
+        letter-spacing: 0.115em;
+        text-transform: uppercase;
+      }
+      .kicker.light {
+        color: #bdd2e6;
+      }
+      h1,
+      h2 {
+        margin: 0;
+        font-family: "Outfit", sans-serif;
+        font-weight: 800;
+        letter-spacing: -0.045em;
+        text-wrap: balance;
+      }
+      h1 {
+        font-size: 91px;
+        line-height: 0.94;
+      }
+      h2 {
+        font-size: 74px;
+        line-height: 0.98;
+      }
+      .lead {
+        margin: 28px 0 0;
+        color: var(--muted);
+        font-size: 32px;
+        line-height: 1.36;
+      }
+      .footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: auto;
+        padding-top: 24px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 24px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 13px;
+        font:
+          800 29px/1 "Outfit",
+          sans-serif;
+      }
+      .brand-logo {
+        width: 42px;
+        height: 42px;
+        object-fit: contain;
+      }
+      .cover,
+      .cta {
+        background: var(--navy);
+        color: #fff;
+      }
+      .cover .footer,
+      .cta .footer {
+        border-color: #ffffff32;
+        color: #fff;
+      }
+      .cover .kicker {
+        display: inline-flex;
+        align-self: flex-start;
+        margin-bottom: 34px;
+        padding: 12px 21px;
+        border-radius: 999px;
+        background: #fff;
+        color: var(--navy);
+      }
+      .cover h1 {
+        max-width: 880px;
+      }
+      .cover .lead,
+      .cta .lead {
+        max-width: 790px;
+        color: #d6e2ec;
+      }
+      .card {
+        margin-top: 44px;
+        padding: 36px 38px;
+        border: 1px solid var(--line);
+        border-left: 9px solid var(--red);
+        border-radius: 22px;
+        background: #fff;
+      }
+      .card-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        margin-bottom: 20px;
+      }
+      .card-name {
+        font:
+          800 44px/1.05 "Outfit",
+          sans-serif;
+      }
+      .badge {
+        flex: 0 0 auto;
+        padding: 11px 20px;
+        border-radius: 999px;
+        background: #e9f0f7;
+        color: var(--navy);
+        font-size: 23px;
+        font-weight: 700;
+      }
+      .card p {
+        margin: 0;
+        font-size: 34px;
+        line-height: 1.4;
+      }
+      .rule,
+      .source {
+        margin-top: 24px;
+        padding: 26px 30px;
+        border-radius: 15px;
+        background: var(--cream);
+        color: #38404a;
+        font-size: 28px;
+        line-height: 1.38;
+      }
+      .button {
+        display: inline-block;
+        margin-top: 36px;
+        padding: 17px 28px;
+        border-radius: 999px;
+        background: #fff;
+        color: var(--navy);
+        font:
+          800 27px/1 "Outfit",
+          sans-serif;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <!-- Couverture : la phrase qui dit tout. -->
+      <section class="slide cover" data-screen-label="01 Couverture">
+        <div class="accent"></div>
+        <div class="page">
+          <div class="center">
+            <p class="kicker">Rubrique à remplacer</p>
+            <h1>Titre à remplacer, écrit en dernier</h1>
+            <p class="lead">
+              Première phrase à remplacer : elle apprend quelque chose à qui ne connaît pas le
+              sujet.
+            </p>
+          </div>
+          <div class="footer">
+            <div class="brand">
+              <img class="brand-logo" src="public/logo-inverse.svg" alt="" />Poligraph
+            </div>
+            <span>poligraph.fr</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Slide de fait : une carte, puis sa source. Chaque slide de données porte sa source. -->
+      <section class="slide" data-screen-label="02 Fait">
+        <div class="accent"></div>
+        <div class="page">
+          <div class="center">
+            <p class="kicker">Rubrique à remplacer</p>
+            <h2>Titre à remplacer</h2>
+            <div class="card">
+              <div class="card-row">
+                <div class="card-name">Nom à remplacer</div>
+                <div class="badge">Libellé à remplacer</div>
+              </div>
+              <p>Fait à remplacer, avec sa date.</p>
+            </div>
+            <div class="source">Source à remplacer : autorité, date, référence.</div>
+          </div>
+          <div class="footer">
+            <div class="brand">
+              <img class="brand-logo" src="public/logo.svg" alt="" />Poligraph
+            </div>
+            <span>poligraph.fr</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Slide de méthode : une règle par encadré, seulement autant que nécessaire. -->
+      <section class="slide" data-screen-label="03 Methode">
+        <div class="accent"></div>
+        <div class="page">
+          <div class="center">
+            <p class="kicker">Rubrique à remplacer</p>
+            <h2>Titre à remplacer</h2>
+            <div class="rule">Règle à remplacer.</div>
+          </div>
+          <div class="footer">
+            <div class="brand">
+              <img class="brand-logo" src="public/logo.svg" alt="" />Poligraph
+            </div>
+            <span>poligraph.fr</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Clôture : ce qui vient d'être expliqué, puis l'adresse exacte. -->
+      <section class="slide cta" data-screen-label="04 Cloture">
+        <div class="accent"></div>
+        <div class="page">
+          <div class="center">
+            <p class="kicker light">Rubrique à remplacer</p>
+            <h2>Titre à remplacer</h2>
+            <p class="lead">Phrase à remplacer.</p>
+            <div><div class="button">Adresse à remplacer</div></div>
+          </div>
+          <div class="footer">
+            <div class="brand">
+              <img class="brand-logo" src="public/logo-inverse.svg" alt="" />Poligraph
+            </div>
+            <span>@poligraph_fr</span>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
