@@ -222,6 +222,7 @@ export function AffairsSection({ affairs, civility }: AffairsSectionProps) {
                     <AffairStatusNotice
                       status={affair.status as AffairStatus}
                       involvement={affair.involvement as Involvement}
+                      jurisdictionOrder={affair.jurisdictionOrder}
                       className="mt-2"
                     />
                   </div>

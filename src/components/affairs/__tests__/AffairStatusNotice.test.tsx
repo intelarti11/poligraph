@@ -90,6 +90,35 @@ describe("AffairStatusNotice — wordings validés (RGPD art. 10)", () => {
   });
 });
 
+describe("décision non pénale (civile, administrative, financière)", () => {
+  it("une décision civile n'est jamais lue comme une condamnation pénale", () => {
+    expect(getAffairNoticeVariant("CONDAMNATION_DEFINITIVE", "DIRECT", "CIVIL")).toBe("non_penal");
+    expect(
+      getAffairNoticeVariant("CONDAMNATION_PREMIERE_INSTANCE", "DIRECT", "ADMINISTRATIF")
+    ).toBe("non_penal");
+    const { getByRole } = render(
+      <AffairStatusNotice
+        status="CONDAMNATION_DEFINITIVE"
+        involvement="DIRECT"
+        jurisdictionOrder="CIVIL"
+      />
+    );
+    const text = getByRole("note").textContent ?? "";
+    expect(text).toContain("Décision non pénale");
+    expect(text).toContain("Ce n'est pas une condamnation pénale");
+    expect(text).not.toContain("voies de recours");
+  });
+
+  it("l'ordre pénal garde ses encarts, y compris sans ordre précisé", () => {
+    expect(getAffairNoticeVariant("CONDAMNATION_DEFINITIVE", "DIRECT", "PENAL")).toBe("definitive");
+    expect(getAffairNoticeVariant("CONDAMNATION_DEFINITIVE", "DIRECT")).toBe("definitive");
+  });
+
+  it("une personne non mise en cause garde l'encart de rôle, quel que soit l'ordre", () => {
+    expect(getAffairNoticeVariant("RELAXE", "VICTIM", "CIVIL")).toBe("not_accused");
+  });
+});
+
 describe("instruction close sans mise en examen", () => {
   it("rend une variante dédiée pour une personne mise en cause", () => {
     expect(getAffairNoticeVariant("INSTRUCTION_CLOTUREE_SANS_MISE_EN_EXAMEN", "DIRECT")).toBe(

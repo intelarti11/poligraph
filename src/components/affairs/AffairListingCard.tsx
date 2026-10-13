@@ -18,7 +18,7 @@ import { AffairStatusNotice } from "@/components/affairs/AffairStatusNotice";
 import { CiteAnchor } from "@/components/ui/CiteAnchor";
 import { citeAnchorId } from "@/lib/cite";
 import { getAffairPartyDisplay, type PartyDisplayRef } from "@/lib/affairs/party-display";
-import type { AffairStatus, AffairCategory, Involvement } from "@/types";
+import type { AffairStatus, AffairCategory, Involvement, JurisdictionOrder } from "@/types";
 
 /**
  * Left-border hex per certainty level, distinct from the super-category
@@ -46,6 +46,8 @@ export interface AffairListingCardData {
   status: AffairStatus;
   involvement: Involvement;
   involvementNote: string | null;
+  /** Absent = pénal. Hors du pénal, l'encart dit que la décision n'est pas une condamnation. */
+  jurisdictionOrder?: JurisdictionOrder;
   category: AffairCategory;
   verdictDate: Date | null;
   startDate: Date | null;
@@ -190,6 +192,7 @@ export function AffairListingCard({ affair, retour, resultCount }: AffairListing
       <AffairStatusNotice
         status={affair.status}
         involvement={affair.involvement}
+        jurisdictionOrder={affair.jurisdictionOrder}
         className="mt-3"
       />
 

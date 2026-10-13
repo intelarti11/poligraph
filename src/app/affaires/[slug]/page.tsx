@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatDate, stripMarkdown } from "@/lib/utils";
 import { MarkdownText } from "@/components/ui/markdown";
 import {
-  AFFAIR_STATUS_LABELS,
+  getAffairStatusLabel,
   AFFAIR_STATUS_COLORS,
   AFFAIR_STATUS_DESCRIPTIONS,
   AFFAIR_STATUS_NEEDS_PRESUMPTION,
@@ -273,7 +273,11 @@ export default async function AffairDetailPage({ params }: PageProps) {
   // charging badge ("Condamnation définitive") would misrepresent them (#383).
   const certainty = getAttributedCertaintyLevel(affair);
   const accused = certainty !== null;
-  const noticeVariant = getAffairNoticeVariant(affair.status, affair.involvement);
+  const noticeVariant = getAffairNoticeVariant(
+    affair.status,
+    affair.involvement,
+    affair.jurisdictionOrder
+  );
   const partyDisplay = getAffairPartyDisplay({
     factsDate: affair.factsDate,
     partyAtTime: affair.partyAtTime,
@@ -358,7 +362,7 @@ export default async function AffairDetailPage({ params }: PageProps) {
       <AffairStickyBar
         title={affair.title}
         shareUrl={`${SITE_URL}/affaires/${affair.slug}`}
-        shareText={`Affaire : ${affair.title} (${AFFAIR_STATUS_LABELS[affair.status]})`}
+        shareText={`Affaire : ${affair.title} (${getAffairStatusLabel(affair.status, affair.jurisdictionOrder)})`}
         superCategoryLabel={superCategoryLabel}
         superCategoryHref={superCategoryHref}
       />
@@ -377,7 +381,7 @@ export default async function AffairDetailPage({ params }: PageProps) {
                 <Badge variant="outline">{AFFAIR_CATEGORY_LABELS[affair.category]}</Badge>
                 <StatusTooltip
                   status={affair.status}
-                  label={AFFAIR_STATUS_LABELS[affair.status]}
+                  label={getAffairStatusLabel(affair.status, affair.jurisdictionOrder)}
                   description={AFFAIR_STATUS_DESCRIPTIONS[affair.status]}
                   colorClass={AFFAIR_STATUS_COLORS[affair.status]}
                 />
@@ -389,7 +393,7 @@ export default async function AffairDetailPage({ params }: PageProps) {
               // re-attach everything to the affair.
               <StatusTooltip
                 status={affair.status}
-                label={AFFAIR_STATUS_LABELS[affair.status]}
+                label={getAffairStatusLabel(affair.status, affair.jurisdictionOrder)}
                 description={AFFAIR_STATUS_DESCRIPTIONS[affair.status]}
                 colorClass="bg-muted text-muted-foreground border-transparent"
               />
@@ -445,6 +449,7 @@ export default async function AffairDetailPage({ params }: PageProps) {
           <AffairStatusNotice
             status={affair.status}
             involvement={affair.involvement}
+            jurisdictionOrder={affair.jurisdictionOrder}
             className="mb-6"
           />
         )}

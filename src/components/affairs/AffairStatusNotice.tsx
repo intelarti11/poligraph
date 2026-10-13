@@ -1,4 +1,4 @@
-import type { AffairStatus, Involvement } from "@/types";
+import type { AffairStatus, Involvement, JurisdictionOrder } from "@/types";
 import { isAccusedInvolvement } from "@/config/certainty";
 import { CONDAMNATION_STATUSES } from "@/config/judicial-maturity";
 
@@ -13,6 +13,7 @@ import { CONDAMNATION_STATUSES } from "@/config/judicial-maturity";
  */
 
 export type AffairNoticeVariant =
+  | "non_penal"
   | "presumption"
   | "non_definitive"
   | "pourvoi"
@@ -46,7 +47,8 @@ const EN_COURS_STATUSES: readonly AffairStatus[] = [
 
 export function getAffairNoticeVariant(
   status: AffairStatus,
-  involvement: Involvement
+  involvement: Involvement,
+  jurisdictionOrder: JurisdictionOrder = "PENAL"
 ): AffairNoticeVariant | null {
   // Les encarts qualifient la situation d'une personne mise en cause. Quand le
   // politicien est victime, plaignant ou simplement mentionné, aucun encart à charge
@@ -56,6 +58,9 @@ export function getAffairNoticeVariant(
   if (!isAccusedInvolvement(involvement)) {
     return CONDAMNATION_STATUSES.includes(status) ? "third_party" : "not_accused";
   }
+  // Hors du pénal, l'encart dit d'abord la nature de la décision : « condamnation définitive »
+  // et « voies de recours épuisées » se liraient comme une condamnation pénale.
+  if (jurisdictionOrder !== "PENAL") return "non_penal";
   if (status === "PRESCRIPTION") return "prescription";
   if (FAVORABLE_STATUSES.includes(status)) return "favorable";
   if (status === "CONDAMNATION_DEFINITIVE") return "definitive";
@@ -69,6 +74,12 @@ export function getAffairNoticeVariant(
 }
 
 const NOTICES: Record<AffairNoticeVariant, { title: string; body: string; className: string }> = {
+  non_penal: {
+    title: "Décision non pénale",
+    body: "cette décision ne relève pas de la justice pénale.",
+    className:
+      "border-slate-200 bg-slate-50 text-slate-800 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-200",
+  },
   presumption: {
     title: "Présomption d'innocence",
     body: "cette procédure est en cours. La personne concernée est présumée innocente jusqu'à une éventuelle condamnation définitive.",
@@ -125,20 +136,35 @@ const NOTICES: Record<AffairNoticeVariant, { title: string; body: string; classN
   },
 };
 
+const NON_PENAL_NOTICES: Record<Exclude<JurisdictionOrder, "PENAL">, string> = {
+  CIVIL:
+    "cette décision relève de la justice civile, prud'homale ou commerciale. Ce n'est pas une condamnation pénale, et elle n'est comptée dans aucun total de condamnés.",
+  ADMINISTRATIF:
+    "cette décision relève d'une juridiction administrative. Ce n'est pas une condamnation pénale, et elle n'est comptée dans aucun total de condamnés.",
+  FINANCIER:
+    "cette décision relève d'une juridiction financière (Cour des comptes). Ce n'est pas une condamnation pénale, et elle n'est comptée dans aucun total de condamnés.",
+};
+
 interface AffairStatusNoticeProps {
   status: AffairStatus;
   involvement: Involvement;
+  jurisdictionOrder?: JurisdictionOrder;
   className?: string;
 }
 
 export function AffairStatusNotice({
   status,
   involvement,
+  jurisdictionOrder = "PENAL",
   className = "",
 }: AffairStatusNoticeProps) {
-  const variant = getAffairNoticeVariant(status, involvement);
+  const variant = getAffairNoticeVariant(status, involvement, jurisdictionOrder);
   if (!variant) return null;
   const notice = NOTICES[variant];
+  const body =
+    variant === "non_penal" && jurisdictionOrder !== "PENAL"
+      ? NON_PENAL_NOTICES[jurisdictionOrder]
+      : notice.body;
 
   return (
     <div
@@ -147,7 +173,7 @@ export function AffairStatusNotice({
       className={`rounded-lg border p-4 ${notice.className} ${className}`}
     >
       <p className="text-sm">
-        <strong>{notice.title} :</strong> {notice.body}
+        <strong>{notice.title} :</strong> {body}
       </p>
     </div>
   );

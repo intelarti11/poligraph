@@ -18,7 +18,7 @@ import {
 import { AffairStatusNotice } from "@/components/affairs/AffairStatusNotice";
 import { getJudicialMaturity, type JudicialMaturity } from "@/config/judicial-maturity";
 import { ADVERSE_JURISDICTION_ORDER, isAccusedInvolvement } from "@/config/certainty";
-import type { AffairCategory, AffairStatus, Involvement } from "@/types";
+import type { AffairCategory, AffairStatus, Involvement, JurisdictionOrder } from "@/types";
 
 const MATURITY_TAB_LABELS: Record<string, string> = {
   ALL: "Toutes",
@@ -220,6 +220,7 @@ export function PartyAffairsList({ affairs }: PartyAffairsListProps) {
                   <AffairStatusNotice
                     status={affair.status as AffairStatus}
                     involvement={affair.involvement as Involvement}
+                    jurisdictionOrder={affair.jurisdictionOrder as JurisdictionOrder}
                     className="mt-2"
                   />
                 </div>

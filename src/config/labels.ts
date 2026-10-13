@@ -61,13 +61,36 @@ export const AN_SEAT_COUNT = 577;
  * Ordre de juridiction, libellé pour la modération.
  *
  * Le libellé dit la conséquence, pas seulement le nom : un modérateur qui pose
- * FINANCIER doit savoir que l'affaire sortira des compteurs publics.
+ * FINANCIER doit savoir que l'affaire ne sera comptée dans aucun total public (nombre d'élus
+ * condamnés, d'élus mis en cause, totaux par parti).
  */
 export const JURISDICTION_ORDER_LABELS: Record<JurisdictionOrder, string> = {
   PENAL: "Pénal",
-  FINANCIER: "Financier (Cour des comptes), hors compteurs",
-  ADMINISTRATIF: "Administratif, hors compteurs",
+  FINANCIER: "Financier (Cour des comptes) : non pénal, jamais compté dans les totaux",
+  ADMINISTRATIF: "Administratif : non pénal, jamais compté dans les totaux",
+  CIVIL: "Civil, prud'homal ou commercial : non pénal, jamais compté dans les totaux",
 };
+
+/**
+ * Libellé de statut d'une affaire selon l'ordre de juridiction. Hors du pénal, le mot
+ * « condamnation » se lirait comme une condamnation pénale : on parle de décision.
+ */
+const NON_PENAL_STATUS_LABELS: Partial<Record<AffairStatus, string>> = {
+  CONDAMNATION_PREMIERE_INSTANCE: "Décision de première instance",
+  POURVOI_EN_CASSATION: "Décision non définitive, pourvoi en cassation en cours",
+  CONDAMNATION_DEFINITIVE: "Décision définitive",
+};
+
+export function getAffairStatusLabel(
+  status: AffairStatus,
+  jurisdictionOrder: JurisdictionOrder = "PENAL"
+): string {
+  if (jurisdictionOrder !== "PENAL") {
+    const label = NON_PENAL_STATUS_LABELS[status];
+    if (label) return label;
+  }
+  return AFFAIR_STATUS_LABELS[status];
+}
 
 export const AFFAIR_STATUS_LABELS: Record<AffairStatus, string> = {
   PLAINTE_DEPOSEE: "Plainte déposée",
