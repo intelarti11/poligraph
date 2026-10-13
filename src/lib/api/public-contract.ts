@@ -8,8 +8,8 @@ import {
 } from "@/generated/prisma";
 import {
   AFFAIR_CATEGORY_LABELS,
-  AFFAIR_STATUS_DESCRIPTIONS,
-  AFFAIR_STATUS_LABELS,
+  getAffairStatusDescription,
+  getAffairStatusLabel,
   AFFAIR_STATUS_NEEDS_PRESUMPTION,
   FACTCHECK_ALLOWED_SOURCES,
   INVOLVEMENT_LABELS,
@@ -109,8 +109,8 @@ export function getPublicAffairSemantics(affair: {
 
   return {
     involvementLabel: INVOLVEMENT_LABELS[affair.involvement],
-    statusLabel: AFFAIR_STATUS_LABELS[affair.status],
-    statusDescription: AFFAIR_STATUS_DESCRIPTIONS[affair.status],
+    statusLabel: getAffairStatusLabel(affair.status, affair.jurisdictionOrder),
+    statusDescription: getAffairStatusDescription(affair.status, affair.jurisdictionOrder),
     categoryLabel: AFFAIR_CATEGORY_LABELS[affair.category],
     statusAppliesToPolitician,
     needsPresumption: statusAppliesToPolitician && AFFAIR_STATUS_NEEDS_PRESUMPTION[affair.status],

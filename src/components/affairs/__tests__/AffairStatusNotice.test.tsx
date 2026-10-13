@@ -105,8 +105,31 @@ describe("décision non pénale (civile, administrative, financière)", () => {
     );
     const text = getByRole("note").textContent ?? "";
     expect(text).toContain("Décision non pénale");
-    expect(text).toContain("Ce n'est pas une condamnation pénale");
+    expect(text).toContain("Elle n'est pas pénale");
     expect(text).not.toContain("voies de recours");
+  });
+
+  it("une décision non pénale non définitive dit qu'un recours reste possible", () => {
+    const { getByRole } = render(
+      <AffairStatusNotice
+        status="CONDAMNATION_PREMIERE_INSTANCE"
+        involvement="DIRECT"
+        jurisdictionOrder="CIVIL"
+      />
+    );
+    expect(getByRole("note").textContent).toContain("La décision n'est pas définitive");
+  });
+
+  it("une procédure non pénale en cours garde la présomption d'innocence (retour Codex #1108)", () => {
+    for (const s of ["INSTRUCTION", "PROCES_EN_COURS"] as const) {
+      expect(getAffairNoticeVariant(s, "DIRECT", "CIVIL")).toBe("presumption");
+    }
+    const { getByRole } = render(
+      <AffairStatusNotice status="PROCES_EN_COURS" involvement="DIRECT" jurisdictionOrder="CIVIL" />
+    );
+    const text = getByRole("note").textContent ?? "";
+    expect(text).toContain("présumée innocente");
+    expect(text).toContain("Procédure non pénale");
   });
 
   it("l'ordre pénal garde ses encarts, y compris sans ordre précisé", () => {

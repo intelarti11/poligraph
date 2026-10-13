@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { stripMarkdown } from "@/lib/utils";
 import {
-  AFFAIR_STATUS_LABELS,
+  getAffairStatusLabel,
   AFFAIR_STATUS_COLORS,
   AFFAIR_SUPER_CATEGORY_LABELS,
   AFFAIR_SUPER_CATEGORY_COLORS,
@@ -194,7 +194,10 @@ export function PartyAffairsList({ affairs }: PartyAffairsListProps) {
                           : "bg-muted text-muted-foreground border-transparent"
                       }
                     >
-                      {AFFAIR_STATUS_LABELS[affair.status as AffairStatus]}
+                      {getAffairStatusLabel(
+                        affair.status as AffairStatus,
+                        affair.jurisdictionOrder as JurisdictionOrder
+                      )}
                     </Badge>
                     <Badge className={INVOLVEMENT_COLORS[affair.involvement as Involvement]}>
                       {INVOLVEMENT_LABELS[affair.involvement as Involvement]}

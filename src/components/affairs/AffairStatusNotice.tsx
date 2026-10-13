@@ -58,9 +58,10 @@ export function getAffairNoticeVariant(
   if (!isAccusedInvolvement(involvement)) {
     return CONDAMNATION_STATUSES.includes(status) ? "third_party" : "not_accused";
   }
-  // Hors du pénal, l'encart dit d'abord la nature de la décision : « condamnation définitive »
-  // et « voies de recours épuisées » se liraient comme une condamnation pénale.
-  if (jurisdictionOrder !== "PENAL") return "non_penal";
+  // Hors du pénal, une décision rendue ne s'annonce pas comme une condamnation : l'encart dit
+  // la nature de la décision. Une procédure en cours garde son encart de présomption, et le
+  // composant y ajoute la nature (voir NON_PENAL_NOTICES).
+  if (jurisdictionOrder !== "PENAL" && CONDAMNATION_STATUSES.includes(status)) return "non_penal";
   if (status === "PRESCRIPTION") return "prescription";
   if (FAVORABLE_STATUSES.includes(status)) return "favorable";
   if (status === "CONDAMNATION_DEFINITIVE") return "definitive";
@@ -138,11 +139,11 @@ const NOTICES: Record<AffairNoticeVariant, { title: string; body: string; classN
 
 const NON_PENAL_NOTICES: Record<Exclude<JurisdictionOrder, "PENAL">, string> = {
   CIVIL:
-    "cette décision relève de la justice civile, prud'homale ou commerciale. Ce n'est pas une condamnation pénale, et elle n'est comptée dans aucun total de condamnés.",
+    "cette procédure relève de la justice civile, prud'homale ou commerciale. Elle n'est pas pénale et n'est comptée dans aucun total de condamnés.",
   ADMINISTRATIF:
-    "cette décision relève d'une juridiction administrative. Ce n'est pas une condamnation pénale, et elle n'est comptée dans aucun total de condamnés.",
+    "cette procédure relève d'une juridiction administrative. Elle n'est pas pénale et n'est comptée dans aucun total de condamnés.",
   FINANCIER:
-    "cette décision relève d'une juridiction financière (Cour des comptes). Ce n'est pas une condamnation pénale, et elle n'est comptée dans aucun total de condamnés.",
+    "cette procédure relève d'une juridiction financière (Cour des comptes). Elle n'est pas pénale et n'est comptée dans aucun total de condamnés.",
 };
 
 interface AffairStatusNoticeProps {
@@ -161,10 +162,15 @@ export function AffairStatusNotice({
   const variant = getAffairNoticeVariant(status, involvement, jurisdictionOrder);
   if (!variant) return null;
   const notice = NOTICES[variant];
+  const nonPenal = jurisdictionOrder !== "PENAL" ? NON_PENAL_NOTICES[jurisdictionOrder] : null;
+  const notFinal = NON_DEFINITIVE_STATUSES.includes(status) || status === "POURVOI_EN_CASSATION";
   const body =
-    variant === "non_penal" && jurisdictionOrder !== "PENAL"
-      ? NON_PENAL_NOTICES[jurisdictionOrder]
+    variant === "non_penal" && nonPenal
+      ? `${nonPenal}${notFinal ? " La décision n'est pas définitive : un recours est encore possible ou en cours." : ""}`
       : notice.body;
+  // Une procédure non pénale en cours garde son encart (présomption, issue favorable) : la
+  // nature de la procédure s'y ajoute, elle ne le remplace pas.
+  const extra = nonPenal && variant !== "non_penal" && isAccusedInvolvement(involvement);
 
   return (
     <div
@@ -175,6 +181,11 @@ export function AffairStatusNotice({
       <p className="text-sm">
         <strong>{notice.title} :</strong> {body}
       </p>
+      {extra && (
+        <p className="mt-2 text-sm">
+          <strong>Procédure non pénale :</strong> {nonPenal}
+        </p>
+      )}
     </div>
   );
 }

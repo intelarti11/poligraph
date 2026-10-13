@@ -52,3 +52,37 @@ describe("AffairsSection — liens vers les fiches d'affaires", () => {
     expect(container.querySelector('a[href="/affaires/affaire-victime"]')).toBeTruthy();
   });
 });
+
+describe("AffairsSection — décisions non pénales", () => {
+  it("ne range jamais une décision civile sous « Condamnation définitive »", () => {
+    const { container } = render(
+      <AffairsSection
+        affairs={[
+          makeAffair({
+            id: "c1",
+            slug: "affaire-civile",
+            involvement: "DIRECT",
+            jurisdictionOrder: "CIVIL",
+          }),
+        ]}
+        civility="M"
+      />
+    );
+    const text = container.textContent ?? "";
+    expect(text).toContain("Décisions non pénales");
+    expect(text).not.toContain("Condamnation définitive");
+    expect(text).toContain("Décision définitive");
+    expect(container.querySelector('a[href="/affaires/affaire-civile"]')).toBeTruthy();
+  });
+
+  it("garde le groupe « Condamnation définitive » pour une affaire pénale", () => {
+    const { container } = render(
+      <AffairsSection
+        affairs={[makeAffair({ id: "p1", involvement: "DIRECT", jurisdictionOrder: "PENAL" })]}
+        civility="M"
+      />
+    );
+    expect(container.textContent).toContain("Condamnation définitive");
+    expect(container.textContent).not.toContain("Décisions non pénales");
+  });
+});

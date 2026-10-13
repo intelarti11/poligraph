@@ -3,13 +3,15 @@ import { pickPublicLinkedAffair } from "@/lib/affairs/affair-lookup";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  AFFAIR_STATUS_LABELS,
+  getAffairStatusLabel,
   INVOLVEMENT_LABELS,
   INVOLVEMENT_COLORS,
   AFFAIR_CATEGORY_LABELS,
 } from "@/config/labels";
 import {
+  ADVERSE_JURISDICTION_ORDER,
   getAttributedCertaintyLevel,
+  isAccusedInvolvement,
   CERTAINTY_LABELS,
   CERTAINTY_COLORS,
   CERTAINTY_DESCRIPTIONS,
@@ -53,6 +55,9 @@ export function AffairsSection({ affairs, civility }: AffairsSectionProps) {
     CLOS_FAVORABLE: [],
   };
   const directAffairs: typeof affairs = [];
+  // Mis en cause devant une juridiction non pénale : hors de l'échelle de certitude, qui dit
+  // « condamnation ». Groupe à part, jamais sous « Condamnation définitive ».
+  const nonPenalAffairs: typeof affairs = [];
   const mentionAffairs: typeof affairs = [];
   const victimAffairs: typeof affairs = [];
 
@@ -60,6 +65,13 @@ export function AffairsSection({ affairs, civility }: AffairsSectionProps) {
     const level = getAttributedCertaintyLevel(affair);
     if (level !== null) {
       groupedByLevel[level].push(affair);
+      directAffairs.push(affair);
+    } else if (
+      isAccusedInvolvement(affair.involvement) &&
+      affair.jurisdictionOrder &&
+      affair.jurisdictionOrder !== ADVERSE_JURISDICTION_ORDER
+    ) {
+      nonPenalAffairs.push(affair);
       directAffairs.push(affair);
     } else if (VICTIM_ROLES.has(affair.involvement)) {
       victimAffairs.push(affair);
@@ -149,6 +161,28 @@ export function AffairsSection({ affairs, civility }: AffairsSectionProps) {
                   </div>
                 );
               })}
+              {nonPenalAffairs.length > 0 && (
+                <div className="border-t border-dashed pt-6">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Badge className="bg-slate-100 text-slate-800 dark:bg-slate-800/50 dark:text-slate-300">
+                      Décisions non pénales
+                    </Badge>
+                    <span className="text-sm text-muted-foreground">
+                      ({nonPenalAffairs.length})
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-4">
+                    Procédures civiles, prud&apos;homales, commerciales, administratives ou
+                    financières. Ce ne sont pas des condamnations pénales, et elles ne sont comptées
+                    dans aucun total de condamnés.
+                  </p>
+                  <div className="space-y-6">
+                    {nonPenalAffairs.map((affair) => (
+                      <AffairCard key={affair.id} affair={affair} variant="other" />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div>
@@ -279,7 +313,10 @@ export function AffairsSection({ affairs, civility }: AffairsSectionProps) {
                               describes the defendant's outcome, not the tracked
                               politician's own conviction (#383). */}
                           <Badge variant="outline" className="whitespace-nowrap">
-                            {AFFAIR_STATUS_LABELS[affair.status as AffairStatus]}
+                            {getAffairStatusLabel(
+                              affair.status as AffairStatus,
+                              affair.jurisdictionOrder
+                            )}
                           </Badge>
                           <CiteAnchor
                             anchorId={citeAnchorId.affair(affair.id)}

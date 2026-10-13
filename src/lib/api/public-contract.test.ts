@@ -67,6 +67,21 @@ describe("public affair semantics", () => {
     expect(semantics.statusLabel).toBe("Mise en examen");
   });
 
+  it("never exposes a non-penal decision as a conviction (retour Codex #1108)", () => {
+    const semantics = getPublicAffairSemantics({
+      status: "CONDAMNATION_DEFINITIVE",
+      category: "HARCELEMENT_MORAL",
+      involvement: "DIRECT",
+      jurisdictionOrder: "CIVIL",
+    });
+
+    expect(semantics.statusLabel).toBe("Décision définitive");
+    expect(semantics.statusDescription).toContain("n'est pas une condamnation pénale");
+    expect(semantics.certaintyLevel).toBeNull();
+    expect(semantics.certaintyLabel).toBeNull();
+    expect(semantics.countedInAdverseAggregates).toBe(false);
+  });
+
   it("never attributes the affair status or certainty to a victim", () => {
     const semantics = getPublicAffairSemantics({
       status: "CONDAMNATION_DEFINITIVE",
