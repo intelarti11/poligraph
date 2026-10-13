@@ -11,11 +11,14 @@ import {
   QuiDecideSection,
 } from "@/components/territoires/CommuneSections";
 import { getCommuneDossier } from "@/lib/data/territoires";
+import { getCommuneElections } from "@/lib/data/territoire-elections";
+import { communeScrutins } from "@/lib/territoires/commune-elections";
 import { missingEntityMetadata } from "@/lib/seo/not-found-metadata";
 import { territoireCommuneRobotsMetadata } from "@/lib/seo/territoire-robots";
 import { communeDescription, communeTitle } from "@/lib/territoires/commune-display";
 import {
   territoireCommuneDecisionsPath,
+  territoireCommuneElectionsPath,
   territoireCommunePath,
   territoireDepartementPath,
 } from "@/lib/territoires/paths";
@@ -65,14 +68,21 @@ export default async function TerritoireCommunePage({ params }: PageProps) {
   if (!dossier) notFound();
 
   const { identity } = dossier;
-  // No link to the decisions while none is published (plan §7).
-  const anchors =
-    dossier.decisionsPubliees > 0
-      ? [
-          ...ANCHORS,
-          { href: territoireCommuneDecisionsPath(identity.inseeCode), label: "Décisions" },
-        ]
-      : ANCHORS;
+  // The dossier knows 2026 and the presidential only: the earlier municipales come from the
+  // elections reader, so the count and the lines match the dedicated page.
+  const elections = await getCommuneElections(identity.inseeCode);
+  const scrutins = elections?.scrutins ?? communeScrutins(dossier.elections, identity.inseeCode);
+  // No link to a sub-page while it has nothing to show (plan §7).
+  const hasElections = scrutins.length > 0;
+  const anchors = [
+    ...ANCHORS,
+    ...(hasElections
+      ? [{ href: territoireCommuneElectionsPath(identity.inseeCode), label: "Tous les scrutins" }]
+      : []),
+    ...(dossier.decisionsPubliees > 0
+      ? [{ href: territoireCommuneDecisionsPath(identity.inseeCode), label: "Décisions" }]
+      : []),
+  ];
   const departmentName = identity.department.name ?? identity.territoireHorsRegion?.name ?? null;
 
   return (
@@ -114,7 +124,7 @@ export default async function TerritoireCommunePage({ params }: PageProps) {
           <div className="min-w-0 space-y-6">
             <QuiDecideSection dossier={dossier} />
             <ParlementSection dossier={dossier} />
-            <ElectionsSection dossier={dossier} />
+            <ElectionsSection dossier={dossier} scrutins={scrutins} />
           </div>
           <CommuneSidebar dossier={dossier} />
         </div>
