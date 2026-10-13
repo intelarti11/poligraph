@@ -1,8 +1,9 @@
 # Territoires : protocole de sélection et de saisie des décisions
 
-Date : 13 octobre 2026. Statut : **version 2, proposée à la relecture de la rédaction**. Les points
-encore ouverts sont marqués « à arrêter ». Ce protocole doit être publié avant la première collecte.
-Tant qu'il ne l'est pas, aucune décision n'est saisie en production.
+Date : 13 octobre 2026. Statut : **version 2, arrêtée par la rédaction le 13 octobre 2026**. Publiée
+sur `/methodologie/decisions-territoires`. Les points encore ouverts (seconde commune ultramarine,
+équilibre politique, mapping des sources) sont listés au §8 et bloquent la collecte, pas le
+protocole.
 
 Références : cadrage produit et UX du 8 octobre (§6.1 à §6.4), plan d'implémentation (lot 2).
 
@@ -48,8 +49,11 @@ Points non réglés :
   des actes consultable. Tant qu'elle manque, la page le dit.
 - **Les cas d'épreuve** du critère 5 ne se lisent pas dans les fichiers ouverts. Ils sont constatés
   commune par commune, et la liste peut changer si un cas reste sans exemple.
-- **Équilibre politique** : contrôlé après coup, jamais utilisé pour choisir (critère 6). Résultat à
-  consigner ici avant publication.
+- **Équilibre politique** : contrôlé après coup le 13 octobre 2026, jamais utilisé pour choisir
+  (critère 6). Nuance de la liste élue en 2026 (ministère de l'Intérieur) : gauche 4 (PS, NFP à
+  deux reprises, DVG), centre 2 (DVC à deux reprises), droite 3 (LR, DVD à deux reprises), divers
+  ou sans nuance 3 (DIV à deux reprises, Taugon sans nuance). Aucune concentration. Limite : c'est
+  la nuance de la liste, pas l'appartenance déclarée du maire.
 
 ### Critères
 
@@ -208,7 +212,7 @@ dépubliée.
 
 - [ ] Liste des douze communes arrêtée, avec le critère de chacune (§2).
 - [ ] Seconde commune ultramarine trouvée, ou absence assumée sur la page.
-- [ ] Équilibre politique des douze contrôlé et consigné (§2).
+- [x] Équilibre politique des douze contrôlé et consigné (§2).
 - [ ] Liste des matières du socle arrêtée (§3).
 - [ ] Fréquence de revérification fixée (§6).
 - [ ] Table de correspondance « jeu ouvert vers institution » complétée pour les douze.

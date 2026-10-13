@@ -111,6 +111,15 @@ export default function MethodologiePage() {
           </span>
         </Link>
         <Link
+          href="/methodologie/decisions-territoires"
+          className="rounded-xl border border-border p-4 hover:border-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        >
+          <span className="block font-bold">Décisions des conseils</span>
+          <span className="mt-1 block text-sm text-muted-foreground">
+            Protocole du pilote : communes, actes retenus, sources et relecture.
+          </span>
+        </Link>
+        <Link
           href="#candidatures-presidentielle-2027"
           className="rounded-xl border border-border p-4 hover:border-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         >
