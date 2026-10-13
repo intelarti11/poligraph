@@ -164,12 +164,6 @@ export default function TerritoireDecisionsMethodologyPage() {
               généralisent donc pas à l&apos;ensemble des communes.
             </p>
             <p>
-              <strong>Un contrôle fait après le choix.</strong> Nuance de la liste élue en 2026,
-              selon le ministère de l&apos;Intérieur : 4 communes à gauche, 2 au centre, 3 à droite,
-              3 divers ou sans nuance. Cette nuance est celle de la liste, pas l&apos;appartenance
-              déclarée du maire. Elle n&apos;a servi à choisir aucune commune.
-            </p>
-            <p>
               <strong>Une limite connue.</strong> Une seule commune ultramarine figure dans la
               liste, alors que nous en visons deux, de bassins différents. La seconde reste à
               trouver. Les collectivités d&apos;outre-mer sans commune (Saint-Barthélemy,

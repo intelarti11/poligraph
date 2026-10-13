@@ -101,7 +101,7 @@ describe("pages de méthodologie", () => {
     expect(sitemapSource).toContain("url: `${SITE_URL}/methodologie/sources-medias`");
   });
 
-  it("publie le protocole des décisions des conseils, relié à l'index et au sitemap", () => {
+  it("publie le protocole des décisions des conseils", () => {
     render(<TerritoireDecisionsMethodologyPage />);
 
     expect(territoireDecisionsMetadata.alternates?.canonical).toBe(
@@ -113,7 +113,5 @@ describe("pages de méthodologie", () => {
     expect(
       within(screen.getByRole("list", { name: "Matières du socle" })).getAllByRole("listitem")
     ).toHaveLength(8);
-    const sitemapSource = readFileSync(join(process.cwd(), "src/app/sitemap.ts"), "utf8");
-    expect(sitemapSource).toContain("url: `${SITE_URL}/methodologie/decisions-territoires`");
   });
 });

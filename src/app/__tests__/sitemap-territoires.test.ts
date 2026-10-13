@@ -23,6 +23,7 @@ import sitemap from "@/app/sitemap";
 import { SITEMAP_SHARD_TAGS } from "@/lib/seo/sitemap-tags";
 import { REGIONS } from "@/config/regions";
 
+const shard0 = () => sitemap({ id: Promise.resolve("0") });
 const shard5 = () => sitemap({ id: Promise.resolve("5") });
 const path = (url: string) => url.replace(/^https?:\/\/[^/]+/, "");
 
@@ -110,5 +111,12 @@ describe("sitemap : départements sous /territoires (#1052)", () => {
     expect(urls).toContain("/territoires/departements/ille-et-vilaine");
     expect(urls).toContain("/territoires/departements/polynesie-francaise");
     expect(urls.filter((u) => u.startsWith("/departements"))).toEqual([]);
+  });
+});
+
+describe("sitemap : protocole des décisions des conseils", () => {
+  it("annonce la page de méthodologie dans le shard des pages statiques", async () => {
+    const urls = (await shard0()).map((e) => path(e.url));
+    expect(urls).toContain("/methodologie/decisions-territoires");
   });
 });

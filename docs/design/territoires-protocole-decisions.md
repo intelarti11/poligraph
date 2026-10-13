@@ -21,7 +21,7 @@ Les deux autres renvoient vers la source officielle ou passent par le même circ
 
 ## 2. Choix des douze communes
 
-**Liste proposée, à arrêter.** Les critères ci-dessous ont servi à la construire. La liste retenue
+**Liste arrêtée le 13 octobre 2026.** Les critères ci-dessous ont servi à la construire. La liste retenue
 est publiée avec, pour chaque commune, le critère qui l'a fait entrer.
 
 | #   | Commune            | Dép. | Population | Strate          | Source ouverte                |
@@ -110,7 +110,7 @@ propre à sa commune (un équipement, un projet d'aménagement, un litige local)
 ### Couche 1 : matières du socle
 
 Nomenclature des matières de la préfecture (ACTES), telle qu'elle apparaît dans les jeux ouverts
-relevés le 12 octobre 2026. Proposition, à arrêter par la rédaction :
+relevés le 12 octobre 2026. Socle arrêté par la rédaction le 13 octobre 2026 :
 
 | Code     | Matière                                                      | Dans le socle                                  |
 | -------- | ------------------------------------------------------------ | ---------------------------------------------- |
@@ -194,7 +194,7 @@ technique** : l'administration n'a qu'un compte partagé, le nom du relecteur es
 La séparation des rôles repose sur l'organisation de la rédaction tant qu'il n'y a pas de comptes
 nominatifs.
 
-Entretien : chaque lien est revérifié à une fréquence à fixer (proposition : tous les six mois).
+Entretien : chaque lien est revérifié tous les six mois (arrêté le 13 octobre 2026).
 Un lien mort est remplacé par l'archive ou par la nouvelle adresse ; à défaut, la notice est
 dépubliée.
 
@@ -210,10 +210,10 @@ dépubliée.
 
 ## 8. Avant la première collecte
 
-- [ ] Liste des douze communes arrêtée, avec le critère de chacune (§2).
+- [x] Liste des douze communes arrêtée, avec le critère de chacune (§2).
 - [ ] Seconde commune ultramarine trouvée, ou absence assumée sur la page.
 - [x] Équilibre politique des douze contrôlé et consigné (§2).
-- [ ] Liste des matières du socle arrêtée (§3).
-- [ ] Fréquence de revérification fixée (§6).
+- [x] Liste des matières du socle arrêtée (§3).
+- [x] Fréquence de revérification fixée (§6).
 - [ ] Table de correspondance « jeu ouvert vers institution » complétée pour les douze.
-- [ ] Protocole publié sur le site, avec sa date.
+- [x] Protocole publié sur le site, avec sa date (page `/methodologie/decisions-territoires`).
