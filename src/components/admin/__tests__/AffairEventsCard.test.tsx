@@ -229,7 +229,7 @@ describe("AffairEventsCard", () => {
       expect(screen.queryByLabelText(/Recours sur un acte de procédure/)).not.toBeInTheDocument();
     });
 
-    it("demande une seconde source pour une condamnation sourcée par la presse", async () => {
+    it("propose une seconde source facultative pour une condamnation sourcée par la presse", async () => {
       await openForm();
       await userEvent.selectOptions(screen.getByLabelText("Type"), "JUGEMENT");
       await userEvent.selectOptions(screen.getByLabelText("Issue"), "CONDAMNATION");
@@ -238,7 +238,9 @@ describe("AffairEventsCard", () => {
       await userEvent.selectOptions(screen.getByLabelText("Nature de la source"), "PRESS");
       expect(screen.getByLabelText(/Seconde source/)).toBeInTheDocument();
       expect(
-        screen.getByText("Deux médias indépendants, pas deux reprises de la même dépêche.")
+        screen.getByText(
+          "Facultative : un second média indépendant renforce la fiche, pas une reprise de la même dépêche."
+        )
       ).toBeInTheDocument();
     });
 

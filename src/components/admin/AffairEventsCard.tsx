@@ -361,7 +361,7 @@ function EventRow({
           {confirmCorroboration && (
             <div className="space-y-1 sm:col-span-2">
               <label htmlFor={id("confirm-corroboration")} className="text-sm font-medium">
-                Seconde source (URL)
+                Seconde source (URL, facultative)
               </label>
               <input
                 id={id("confirm-corroboration")}
