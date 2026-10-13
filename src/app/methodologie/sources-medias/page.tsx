@@ -72,8 +72,9 @@ export default function MediaSourcesMethodologyPage() {
             <p>
               Un article de presse doit venir d&apos;un média de la liste publiée plus bas. La
               révélation d&apos;une affaire se source toujours par un article, puisque c&apos;est la
-              presse qui la rend publique. Une condamnation rapportée par la presse, même partielle,
-              demande une seconde source : un autre média de la liste, ou une source officielle.
+              presse qui la rend publique. Une condamnation rapportée par la presse s&apos;appuie
+              sur un seul article d&apos;un média de la liste. Quand un second média indépendant ou
+              une source officielle la confirme, nous l&apos;ajoutons.
             </p>
           </div>
         </section>
