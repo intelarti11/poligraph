@@ -7,6 +7,9 @@ import MethodologiePage, { metadata as indexMetadata } from "./page";
 import PresidentialMeasuresMethodologyPage, {
   metadata as measuresMetadata,
 } from "./mesures-presidentielle-2027/page";
+import TerritoireDecisionsMethodologyPage, {
+  metadata as territoireDecisionsMetadata,
+} from "./decisions-territoires/page";
 import MediaSourcesMethodologyPage, {
   metadata as mediaSourcesMetadata,
 } from "./sources-medias/page";
@@ -96,5 +99,19 @@ describe("pages de méthodologie", () => {
     );
     const sitemapSource = readFileSync(join(process.cwd(), "src/app/sitemap.ts"), "utf8");
     expect(sitemapSource).toContain("url: `${SITE_URL}/methodologie/sources-medias`");
+  });
+
+  it("publie le protocole des décisions des conseils", () => {
+    render(<TerritoireDecisionsMethodologyPage />);
+
+    expect(territoireDecisionsMetadata.alternates?.canonical).toBe(
+      "/methodologie/decisions-territoires"
+    );
+    expect(
+      within(screen.getByRole("list", { name: "Communes du pilote" })).getAllByRole("listitem")
+    ).toHaveLength(12);
+    expect(
+      within(screen.getByRole("list", { name: "Matières du socle" })).getAllByRole("listitem")
+    ).toHaveLength(8);
   });
 });
