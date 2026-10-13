@@ -1056,6 +1056,9 @@ enum AffairStatus {
   // A complaint has been filed (e.g. before the Cour de justice de la République) and no
   // inquiry is known yet. Earlier than ENQUETE_PRELIMINAIRE: no parquet has opened anything.
   PLAINTE_DEPOSEE
+  // A report (article 40) has been sent to a parquet and no inquiry is known. Not a complaint:
+  // nobody has filed one. Same maturity as PLAINTE_DEPOSEE, never counted as a mise en cause.
+  SIGNALEMENT_PARQUET
   ENQUETE_PRELIMINAIRE
   INSTRUCTION
   // Instruction closed with no mise en examen: article 175 CPP avis de fin

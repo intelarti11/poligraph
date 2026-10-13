@@ -37,6 +37,7 @@ const NON_DEFINITIVE_STATUSES: readonly AffairStatus[] = [
 
 const EN_COURS_STATUSES: readonly AffairStatus[] = [
   "PLAINTE_DEPOSEE",
+  "SIGNALEMENT_PARQUET",
   "ENQUETE_PRELIMINAIRE",
   "INSTRUCTION",
   "MISE_EN_EXAMEN",

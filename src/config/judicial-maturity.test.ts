@@ -111,6 +111,12 @@ describe("AGGREGATE_STATUSES", () => {
     expect(isJudiciallyValidated("PLAINTE_DEPOSEE")).toBe(false);
   });
 
+  it("excludes SIGNALEMENT_PARQUET: a report to the parquet is never a mise en cause", () => {
+    expect(AGGREGATE_STATUSES).not.toContain("SIGNALEMENT_PARQUET");
+    expect(getJudicialMaturity("SIGNALEMENT_PARQUET")).toBe("ENQUETE");
+    expect(isJudiciallyValidated("SIGNALEMENT_PARQUET")).toBe(false);
+  });
+
   it("excludes all Tier 4 statuses", () => {
     const tier4: AffairStatus[] = [
       "RELAXE",

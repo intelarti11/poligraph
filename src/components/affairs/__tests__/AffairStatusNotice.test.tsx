@@ -29,6 +29,7 @@ describe("getAffairNoticeVariant — sélection par statut et involvement", () =
   it("procédures en cours : présomption d'innocence", () => {
     for (const s of [
       "PLAINTE_DEPOSEE",
+      "SIGNALEMENT_PARQUET",
       "ENQUETE_PRELIMINAIRE",
       "INSTRUCTION",
       "MISE_EN_EXAMEN",
