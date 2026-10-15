@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { SimplePagination } from "@/components/ui/SimplePagination";
 import { cacheTag, cacheLife } from "next/cache";
@@ -134,137 +134,6 @@ async function getPoliticianVoteComparison(leftSlug: string, rightSlug: string) 
 }
 
 // ============================================
-// Party vote comparison
-// ============================================
-
-interface PartyMajorityVoteRow {
-  scrutinId: string;
-  title: string;
-  slug: string | null;
-  votingDate: Date;
-  majorityPosition: string;
-  pour: bigint;
-  contre: bigint;
-  abstention: bigint;
-}
-
-interface PartyComparedVote {
-  scrutinId: string;
-  title: string;
-  slug: string | null;
-  votingDate: Date;
-  leftPosition: string;
-  rightPosition: string;
-  agreement: AgreementType;
-}
-
-function getPartyAgreement(leftPosition: string, rightPosition: string): AgreementType {
-  if (leftPosition === rightPosition) return "agree";
-  if (
-    (leftPosition === "POUR" && rightPosition === "CONTRE") ||
-    (leftPosition === "CONTRE" && rightPosition === "POUR")
-  ) {
-    return "disagree";
-  }
-  return "partial";
-}
-
-async function getPartyVoteComparisonData(leftSlug: string, rightSlug: string) {
-  "use cache";
-  cacheTag(`party:${leftSlug}`, `party:${rightSlug}`, "votes");
-  cacheLife("synced");
-
-  const [leftParty, rightParty] = await Promise.all([
-    db.party.findFirst({
-      where: { OR: [{ slug: leftSlug }, { id: leftSlug }] },
-      select: { id: true, name: true, shortName: true },
-    }),
-    db.party.findFirst({
-      where: { OR: [{ slug: rightSlug }, { id: rightSlug }] },
-      select: { id: true, name: true, shortName: true },
-    }),
-  ]);
-
-  if (!leftParty || !rightParty) return null;
-
-  const [leftRows, rightRows] = await Promise.all([
-    db.$queryRaw<PartyMajorityVoteRow[]>`
-      SELECT
-        v."scrutinId" as "scrutinId",
-        s.title,
-        s.slug,
-        s."votingDate" as "votingDate",
-        SUM(CASE WHEN v.position = 'POUR' THEN 1 ELSE 0 END)::bigint as "pour",
-        SUM(CASE WHEN v.position = 'CONTRE' THEN 1 ELSE 0 END)::bigint as "contre",
-        SUM(CASE WHEN v.position = 'ABSTENTION' THEN 1 ELSE 0 END)::bigint as "abstention",
-        CASE
-          WHEN SUM(CASE WHEN v.position = 'POUR' THEN 1 ELSE 0 END) >= SUM(CASE WHEN v.position = 'CONTRE' THEN 1 ELSE 0 END)
-           AND SUM(CASE WHEN v.position = 'POUR' THEN 1 ELSE 0 END) >= SUM(CASE WHEN v.position = 'ABSTENTION' THEN 1 ELSE 0 END)
-          THEN 'POUR'
-          WHEN SUM(CASE WHEN v.position = 'CONTRE' THEN 1 ELSE 0 END) >= SUM(CASE WHEN v.position = 'ABSTENTION' THEN 1 ELSE 0 END)
-          THEN 'CONTRE'
-          ELSE 'ABSTENTION'
-        END as "majorityPosition"
-      FROM "Vote" v
-      JOIN "Politician" pol ON v."politicianId" = pol.id
-      JOIN "Scrutin" s ON v."scrutinId" = s.id
-      WHERE pol."currentPartyId" = ${leftParty.id}
-        AND v.position IN ('POUR', 'CONTRE', 'ABSTENTION')
-      GROUP BY v."scrutinId", s.title, s.slug, s."votingDate"
-    `,
-    db.$queryRaw<PartyMajorityVoteRow[]>`
-      SELECT
-        v."scrutinId" as "scrutinId",
-        s.title,
-        s.slug,
-        s."votingDate" as "votingDate",
-        SUM(CASE WHEN v.position = 'POUR' THEN 1 ELSE 0 END)::bigint as "pour",
-        SUM(CASE WHEN v.position = 'CONTRE' THEN 1 ELSE 0 END)::bigint as "contre",
-        SUM(CASE WHEN v.position = 'ABSTENTION' THEN 1 ELSE 0 END)::bigint as "abstention",
-        CASE
-          WHEN SUM(CASE WHEN v.position = 'POUR' THEN 1 ELSE 0 END) >= SUM(CASE WHEN v.position = 'CONTRE' THEN 1 ELSE 0 END)
-           AND SUM(CASE WHEN v.position = 'POUR' THEN 1 ELSE 0 END) >= SUM(CASE WHEN v.position = 'ABSTENTION' THEN 1 ELSE 0 END)
-          THEN 'POUR'
-          WHEN SUM(CASE WHEN v.position = 'CONTRE' THEN 1 ELSE 0 END) >= SUM(CASE WHEN v.position = 'ABSTENTION' THEN 1 ELSE 0 END)
-          THEN 'CONTRE'
-          ELSE 'ABSTENTION'
-        END as "majorityPosition"
-      FROM "Vote" v
-      JOIN "Politician" pol ON v."politicianId" = pol.id
-      JOIN "Scrutin" s ON v."scrutinId" = s.id
-      WHERE pol."currentPartyId" = ${rightParty.id}
-        AND v.position IN ('POUR', 'CONTRE', 'ABSTENTION')
-      GROUP BY v."scrutinId", s.title, s.slug, s."votingDate"
-    `,
-  ]);
-
-  const rightMap = new Map(rightRows.map((r) => [r.scrutinId, r]));
-
-  const votes: PartyComparedVote[] = leftRows
-    .filter((l) => rightMap.has(l.scrutinId))
-    .map((l) => {
-      const r = rightMap.get(l.scrutinId)!;
-      return {
-        scrutinId: l.scrutinId,
-        title: l.title,
-        slug: l.slug,
-        votingDate: l.votingDate,
-        leftPosition: l.majorityPosition,
-        rightPosition: r.majorityPosition,
-        agreement: getPartyAgreement(l.majorityPosition, r.majorityPosition),
-      };
-    });
-
-  votes.sort((a, b) => new Date(b.votingDate).getTime() - new Date(a.votingDate).getTime());
-
-  return {
-    leftName: leftParty.shortName,
-    rightName: rightParty.shortName,
-    votes,
-  };
-}
-
-// ============================================
 // Page component
 // ============================================
 
@@ -290,12 +159,13 @@ export default async function VotesComparisonPage({ searchParams }: PageProps) {
     notFound();
   }
 
-  const isPartyMode = cat === "partis";
+  // Ancien mode « partis » retiré : il attribuait chaque vote au parti ACTUEL des élus.
+  // Les liens existants retombent sur la comparaison de la rubrique.
+  if (cat === "partis") {
+    redirect(`/comparer?cat=partis&a=${encodeURIComponent(slugA)}&b=${encodeURIComponent(slugB)}`);
+  }
 
-  // Fetch all compared votes
-  const data = isPartyMode
-    ? await getPartyVoteComparisonData(slugA, slugB)
-    : await getPoliticianVoteComparison(slugA, slugB);
+  const data = await getPoliticianVoteComparison(slugA, slugB);
 
   if (!data) {
     notFound();
@@ -396,9 +266,7 @@ export default async function VotesComparisonPage({ searchParams }: PageProps) {
               >
                 {stats.total}
               </div>
-              <div className="text-sm font-semibold mt-0.5 leading-tight">
-                {isPartyMode ? "Scrutins comparés" : "Votes en commun"}
-              </div>
+              <div className="text-sm font-semibold mt-0.5 leading-tight">Votes en commun</div>
             </CardContent>
           </Card>
           <Card className="border-l-4" style={{ borderLeftColor: COMPARISON_ACCENT.agree!.border }}>

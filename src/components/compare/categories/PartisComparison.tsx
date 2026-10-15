@@ -5,14 +5,12 @@ import { getJudicialMaturity } from "@/config/judicial-maturity";
 import type { AffairStatus } from "@/types";
 import { AffairsSection } from "../sections/AffairsSection";
 import { FactchecksSection } from "../sections/FactchecksSection";
-import { VoteConcordanceSection } from "../sections/VoteConcordanceSection";
-import type { PartyComparisonData, PartyVoteComparisonRow } from "@/lib/data/compare";
+import type { PartyComparisonData } from "@/lib/data/compare";
 import type { PoliticalPosition } from "@/types";
 
 interface Props {
   left: PartyComparisonData;
   right: PartyComparisonData;
-  voteComparison: PartyVoteComparisonRow[];
 }
 
 function countBy<T>(items: T[], key: keyof T): Record<string, number> {
@@ -33,50 +31,7 @@ function countByMaturity(affairs: { status: string }[]): Record<string, number> 
   return counts;
 }
 
-export function PartisComparison({ left, right, voteComparison }: Props) {
-  // Compute vote concordance from party majority positions
-  const total = voteComparison.length;
-  let agree = 0;
-  let disagree = 0;
-  let partial = 0;
-  const divergent: Array<{
-    scrutinId: string;
-    title: string;
-    slug: string | null;
-    votingDate: Date;
-    leftPosition: string;
-    rightPosition: string;
-  }> = [];
-
-  for (const row of voteComparison) {
-    if (row.leftPosition === row.rightPosition) {
-      agree++;
-    } else if (
-      (row.leftPosition === "POUR" && row.rightPosition === "CONTRE") ||
-      (row.leftPosition === "CONTRE" && row.rightPosition === "POUR")
-    ) {
-      disagree++;
-      divergent.push({
-        scrutinId: row.scrutinId,
-        title: row.title,
-        slug: row.slug,
-        votingDate: row.votingDate,
-        leftPosition: row.leftPosition,
-        rightPosition: row.rightPosition,
-      });
-    } else {
-      partial++;
-    }
-  }
-
-  const concordanceStats = {
-    total,
-    agree,
-    disagree,
-    partial,
-    agreementRate: total > 0 ? Math.round((agree / total) * 100) : 0,
-  };
-
+export function PartisComparison({ left, right }: Props) {
   return (
     <div className="space-y-8">
       {/* Info block */}
@@ -96,17 +51,6 @@ export function PartisComparison({ left, right, voteComparison }: Props) {
           <MandateCountsCard data={right} />
         </div>
       </section>
-
-      {/* Vote concordance between parties */}
-      {concordanceStats.total > 0 && (
-        <VoteConcordanceSection
-          stats={concordanceStats}
-          recentDivergent={divergent.slice(0, 5)}
-          compareVotesUrl={`/comparer/votes?cat=partis&a=${left.party.slug ?? left.party.id}&b=${right.party.slug ?? right.party.id}`}
-          leftLabel={left.party.shortName}
-          rightLabel={right.party.shortName}
-        />
-      )}
 
       <AffairsSection
         left={{

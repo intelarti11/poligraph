@@ -109,7 +109,6 @@ const PARTY_SURFACES = [
   "src/app/api/votes/stats/route.ts",
   "src/app/carte/page.tsx",
   "src/app/comparer/page.tsx",
-  "src/app/comparer/votes/page.tsx",
   "src/app/declarations-et-patrimoine/page.tsx",
   // Commune-list variants of the department page: same body and same deputies and senators
   // block (party badges included) as the page itself, through departement-page.tsx.
