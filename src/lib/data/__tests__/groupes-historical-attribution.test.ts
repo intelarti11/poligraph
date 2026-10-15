@@ -1,15 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const dbMock = vi.hoisted(() => ({
-  parliamentaryGroup: { findUnique: vi.fn() },
+  parliamentaryGroup: { findUnique: vi.fn(), findMany: vi.fn() },
   scrutinGroupPosition: { findMany: vi.fn() },
+  scrutinAnalysis: { findUnique: vi.fn() },
 }));
 
 vi.mock("next/cache", () => ({ cacheLife: vi.fn(), cacheTag: vi.fn() }));
 vi.mock("@/lib/db", () => ({ db: dbMock }));
 
 import {
+  getGroupeDetail,
+  getGroupesListing,
   getGroupKeyVotes,
+  getScrutinAnalysis,
   getScrutinGroupPositions,
   getScrutinGroupPositionsBatch,
 } from "@/lib/data/groupes";
@@ -95,5 +99,85 @@ describe("positions de groupe : pas d'attribution anachronique", () => {
 
     expect(await getGroupKeyVotes("g1")).toEqual([]);
     expect(dbMock.scrutinGroupPosition.findMany).not.toHaveBeenCalled();
+  });
+
+  it("retient l'analyse IA d'un scrutin de la 16e", async () => {
+    dbMock.scrutinAnalysis.findUnique.mockResolvedValue({
+      argumentsFor: "Le groupe SOC soutient le texte.",
+      argumentsAgainst: "",
+      sourceType: "DEBATE_TRANSCRIPT",
+      modelVersion: "m",
+      scrutin: { chamber: "AN", legislature: 16 },
+    });
+
+    expect(await getScrutinAnalysis("s16")).toBeNull();
+  });
+
+  it("publie l'analyse d'un scrutin de la 17e sans exposer le scrutin", async () => {
+    dbMock.scrutinAnalysis.findUnique.mockResolvedValue({
+      argumentsFor: "a",
+      argumentsAgainst: "b",
+      sourceType: "STRUCTURED_DATA",
+      modelVersion: "m",
+      scrutin: { chamber: "AN", legislature: 17 },
+    });
+
+    const analysis = await getScrutinAnalysis("s17");
+
+    expect(analysis).toMatchObject({ argumentsFor: "a" });
+    expect(analysis).not.toHaveProperty("scrutin");
+  });
+});
+
+describe("statistiques de groupe AN persistées", () => {
+  const stats = [
+    {
+      id: "st",
+      groupId: "g",
+      legislature: 17,
+      cohesionPct: 94.5,
+      governmentAlignmentPct: 93,
+      finalVoteAlignmentPct: 96.9,
+      averageParticipationPct: null,
+      computedAt: new Date(),
+    },
+  ];
+
+  beforeEach(() => vi.clearAllMocks());
+
+  it("n'expose pas les valeurs persistées dans la liste", async () => {
+    dbMock.parliamentaryGroup.findMany.mockResolvedValue([
+      {
+        id: "g",
+        code: "SOC",
+        name: "S",
+        shortName: null,
+        color: null,
+        slug: "soc-an-17",
+        chamber: "AN",
+        politicalPosition: null,
+        stats,
+        _count: { mandates: 70 },
+      },
+    ]);
+
+    const [group] = await getGroupesListing({ chamber: "AN" });
+
+    expect(group?.stats).toBeNull();
+    expect(group?.seatCount).toBe(70);
+  });
+
+  it("n'expose pas les valeurs persistées dans le détail", async () => {
+    dbMock.parliamentaryGroup.findUnique.mockResolvedValue({
+      id: "g",
+      slug: "soc-an-17",
+      chamber: "AN",
+      stats,
+      mandates: [],
+    });
+
+    const group = await getGroupeDetail("soc-an-17");
+
+    expect(group?.stats).toEqual([]);
   });
 });

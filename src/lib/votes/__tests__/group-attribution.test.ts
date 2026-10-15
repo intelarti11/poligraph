@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { filterReliableGroupPositions, isGroupAttributionReliable } from "../group-attribution";
+import {
+  filterReliableGroupPositions,
+  isAnalysisPublishable,
+  isGroupAttributionReliable,
+  isGroupStatsPublishable,
+} from "../group-attribution";
 
 const an = (legislature: number) => ({ chamber: "AN" as const, legislature });
 const anGroup = (legislature: number | null) => ({ chamber: "AN" as const, legislature });
@@ -47,5 +52,23 @@ describe("filterReliableGroupPositions", () => {
   it("peut échouer : une ligne 16e/17e disparaît bien", () => {
     const rows = [{ id: "a", scrutin: an(16), group: anGroup(17) }];
     expect(filterReliableGroupPositions(rows)).toHaveLength(0);
+  });
+});
+
+describe("neutralisation des statistiques de groupe", () => {
+  it("masque les statistiques AN persistées, laisse le Sénat", () => {
+    expect(isGroupStatsPublishable("AN")).toBe(false);
+    expect(isGroupStatsPublishable("SENAT")).toBe(true);
+  });
+});
+
+describe("isAnalysisPublishable", () => {
+  it("retient l'analyse d'un scrutin d'une législature sans groupes attestés", () => {
+    expect(isAnalysisPublishable(an(16), 17)).toBe(false);
+  });
+
+  it("publie l'analyse d'un scrutin de la législature courante et celle du Sénat", () => {
+    expect(isAnalysisPublishable(an(17), 17)).toBe(true);
+    expect(isAnalysisPublishable({ chamber: "SENAT", legislature: 2023 }, 17)).toBe(true);
   });
 });

@@ -45,3 +45,28 @@ export function filterReliableGroupPositions<
 >(rows: T[]): T[] {
   return rows.filter((row) => isGroupAttributionReliable(row.scrutin, row.group));
 }
+
+/**
+ * Neutralisation temporaire des statistiques de groupe AN déjà persistées.
+ *
+ * Les lignes `ParliamentaryGroupStats` ont été calculées avec des positions de plusieurs
+ * législatures (environ 30 % des positions d'un groupe 17e viennent de scrutins de la 16e).
+ * Le calcul est corrigé, mais les valeurs en base ne le sont qu'après un recalcul contrôlé.
+ * Passer à `true` une fois ce recalcul vérifié (voir docs/audits/parlement-historique-lot0.md).
+ */
+export const AN_GROUP_STATS_PUBLISHABLE = false;
+
+export function isGroupStatsPublishable(chamber: Chamber): boolean {
+  return chamber === "SENAT" || AN_GROUP_STATS_PUBLISHABLE;
+}
+
+/**
+ * Une analyse IA peut citer des groupes. Elle n'est publiable que pour un scrutin dont la
+ * législature dispose de groupes attestés : aujourd'hui, la législature courante.
+ */
+export function isAnalysisPublishable(
+  scrutin: AttributionScrutin,
+  attestedAnLegislature: number
+): boolean {
+  return scrutin.chamber !== "AN" || scrutin.legislature === attestedAnLegislature;
+}

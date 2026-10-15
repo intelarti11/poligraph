@@ -114,3 +114,83 @@ des votes individuels et du groupe courant. Les deux ne se substituent pas.
 - Mesures ponctuelles, à relancer avant chaque lot.
 - Aucune vérification navigateur dans ce lot (changement de comportement limité à un encart).
 - L'intégrité des 37 497 lignes n'est pas corrigée, seulement masquée.
+
+## 9. Passe corrective (revue de la PR)
+
+Mesures du 2026-10-15, lecture seule.
+
+### Affichages de scrutins : attribution implicite
+
+| Affichage                                        | Constat                                                                                                         | Traitement                                                                                                                                                        |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Page scrutin, liste des votes individuels        | groupe via `mandates.isCurrent`, parti via `currentParty`, sans mention de date                                 | libellés « Groupe actuel : X » et « Parti actuel : X », info-bulle explicite, phrase d'explication au-dessus de la liste                                          |
+| Générateur social « votes clivants »             | agrège par groupe actuel sur les 30 derniers jours                                                              | ignore un scrutin AN hors législature courante                                                                                                                    |
+| Dissidence d'un député (`politician-dissidence`) | groupe actuel, mais votes bornés par les dates du mandat courant                                                | aucun changement : les votes de la 16e sont exclus par la borne de mandat                                                                                         |
+| `/api/politiques/[slug]/votes`                   | parti courant du député en en-tête, pas par vote                                                                | aucun changement, valeur présentée au niveau du profil                                                                                                            |
+| Récap hebdomadaire                               | parti courant d'élus cités dans la presse, sans lien avec un vote                                               | hors sujet                                                                                                                                                        |
+| Comparateur `/comparer/votes` (mode partis)      | agrège les votes de tous les élus dont `currentPartyId` est le parti, sur tous les scrutins, sans borne de date | **non corrigé** : un vote de 2012 est attribué au parti actuel de l'élu. Nécessite l'appartenance datée à un parti, ou une borne explicite par mandat. À arbitrer |
+
+Reste vrai même après étiquetage : pour un scrutin de la 17e, le groupe actuel peut différer
+du groupe au jour du vote pour un député qui a changé de groupe (R4).
+
+### Analyses IA préexistantes
+
+- 324 analyses en base, toutes sur des scrutins AN de la 17e (`STRUCTURED_DATA` 300,
+  `DEBATE_TRANSCRIPT` 24), générées entre le 2026-03-25 et le 2026-06-11.
+- 317 citent au moins un groupe par son nom ou son code. Aucune n'est reliée à une position
+  hors législature (0).
+- Le modèle `ScrutinAnalysis` ne conserve ni les entrées du prompt, ni un statut de
+  vérification : on ne peut pas dire quelles analyses ont reçu un groupe non daté.
+- Traitement sans schéma : `getScrutinAnalysis` ne publie une analyse que pour un scrutin
+  de la législature courante (ou du Sénat), et la synthèse affiche « Les groupes cités
+  reposent sur l'appartenance actuelle des députés, non datée au moment du vote ».
+- À décider : régénérer les 317 analyses concernées après le lot 5, ou les faire relire.
+
+### Statistiques de groupe persistées
+
+Les 12 lignes AN (`ParliamentaryGroupStats`) datent du 2026-03-25. Environ 30 % des positions
+de chaque groupe viennent de scrutins de la 16e (par exemple DEM : 8 508 positions de 17e sur
+12 346 en base). Recalcul à blanc, borné à la 17e (`npm run audit:group-stats`, lecture seule) :
+
+| Groupe  | Cohésion    | Alignement gouvernement | Alignement vote final |
+| ------- | ----------- | ----------------------- | --------------------- |
+| DEM     | 94,5 → 93,5 | 93 → 91,3               | 96,9 → 96             |
+| DR      | 92,7 → 93,4 | 69,4 → 71,1             | 82,3 → 87,7           |
+| ECOS    | 96,8 → 96,9 | 43,4 → 46,5             | 49,9 → 54,2           |
+| EPR     | 96,1 → 95   | 100 → 100               | 100 → 100             |
+| GDR     | 97,7 → 97,5 | 40,9 → 44,4             | 49,2 → 53,5           |
+| HOR     | 93,6 → 92   | 90,4 → 87,4             | 93,1 → 89,2           |
+| LFI-NFP | 98,7 → 98,7 | 38 → 41,3               | 38,7 → 42,9           |
+| LIOT    | 90,5 → 90,7 | 70,8 → 77,3             | 83 → 88,1             |
+| NI      | 88,1 → 88,1 | 71,9 → 71,8             | 85,8 → 87,8           |
+| RN      | 98,4 → 98,4 | 45,3 → 49,2             | 66 → 73               |
+| SOC     | 94,1 → 95   | 50,9 → 53,7             | 64,3 → 68,1           |
+| UDR     | 97,4 → 97,4 | 51 → 50                 | 77,7 → 76,2           |
+
+Les écarts atteignent 7 points : les valeurs publiées étaient donc fausses, pas seulement
+imprécises.
+
+**Neutralisation temporaire** : `AN_GROUP_STATS_PUBLISHABLE = false`
+(`src/lib/votes/group-attribution.ts`) masque ces statistiques dans la liste des groupes, la
+fiche d'un groupe et la page des statistiques. Les groupes du Sénat ne changent pas. Aucune
+ligne n'est modifiée.
+
+**Recalcul contrôlé proposé** (non lancé) :
+
+1. Fusionner la PR et déployer depuis le dashboard.
+2. Relancer `npm run audit:group-stats` : les valeurs recalculées doivent égaler le tableau
+   ci-dessus.
+3. Exécuter le calcul `compute-group-stats` une fois, depuis un script ponctuel, après
+   sauvegarde des 12 lignes.
+4. Relancer l'audit : persisté == recalculé.
+5. Passer `AN_GROUP_STATS_PUBLISHABLE` à `true` dans une PR séparée.
+
+Précaution : `computedAt` n'est pas mis à jour par l'`upsert` (valeur de création), il ne
+permet donc pas de distinguer une ligne recalculée d'une ligne ancienne.
+
+### Tests ajoutés
+
+- Libellés d'affiliation actuelle (`current-affiliation.test.ts`).
+- Analyse retenue pour la 16e, publiée pour la 17e (`groupes-historical-attribution.test.ts`).
+- Statistiques AN masquées dans la liste, le détail et `getGroupDynamicsStats`.
+- Générateur social : scrutin hors législature courante ignoré (vérifié par mutation).

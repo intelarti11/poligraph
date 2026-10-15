@@ -1,7 +1,12 @@
 import { cacheTag, cacheLife } from "next/cache";
 import { db } from "@/lib/db";
 import { PUBLIC_POLITICIAN_WHERE } from "@/lib/api/public-contract";
-import { filterReliableGroupPositions } from "@/lib/votes/group-attribution";
+import {
+  filterReliableGroupPositions,
+  isAnalysisPublishable,
+  isGroupStatsPublishable,
+} from "@/lib/votes/group-attribution";
+import { CURRENT_LEGISLATURE } from "@/config/scrutin-importance";
 import type { GroupPosition, Chamber } from "@/generated/prisma";
 
 export interface ScrutinGroupPositionData {
@@ -124,15 +129,22 @@ export async function getScrutinAnalysis(scrutinId: string): Promise<ScrutinAnal
   cacheTag("votes");
   cacheLife("synced");
 
-  return db.scrutinAnalysis.findUnique({
+  const row = await db.scrutinAnalysis.findUnique({
     where: { scrutinId },
     select: {
       argumentsFor: true,
       argumentsAgainst: true,
       sourceType: true,
       modelVersion: true,
+      scrutin: { select: { chamber: true, legislature: true } },
     },
   });
+  if (!row) return null;
+
+  // Une analyse peut citer des groupes : on ne la publie pas pour une législature dont les
+  // groupes ne sont pas attestés (group-attribution.ts).
+  const { scrutin, ...analysis } = row;
+  return isAnalysisPublishable(scrutin, CURRENT_LEGISLATURE) ? analysis : null;
 }
 
 export interface GroupListingItem {
@@ -199,14 +211,15 @@ export async function getGroupesListing(
     chamber: g.chamber,
     politicalPosition: g.politicalPosition,
     seatCount: g._count.mandates,
-    stats: g.stats[0]
-      ? {
-          cohesionPct: g.stats[0].cohesionPct,
-          governmentAlignmentPct: g.stats[0].governmentAlignmentPct,
-          finalVoteAlignmentPct: g.stats[0].finalVoteAlignmentPct,
-          averageParticipationPct: null,
-        }
-      : null,
+    stats:
+      isGroupStatsPublishable(g.chamber) && g.stats[0]
+        ? {
+            cohesionPct: g.stats[0].cohesionPct,
+            governmentAlignmentPct: g.stats[0].governmentAlignmentPct,
+            finalVoteAlignmentPct: g.stats[0].finalVoteAlignmentPct,
+            averageParticipationPct: null,
+          }
+        : null,
   }));
 }
 
@@ -300,7 +313,9 @@ export async function getGroupeDetail(slug: string) {
 
   return {
     ...group,
-    stats: group.stats.map((stats) => ({ ...stats, averageParticipationPct: null })),
+    stats: isGroupStatsPublishable(group.chamber)
+      ? group.stats.map((stats) => ({ ...stats, averageParticipationPct: null }))
+      : [],
     seatCount: group.mandates.length,
     members: group.mandates.map((m) => m.mandate.politician),
   };

@@ -22,6 +22,7 @@ import { StatusBadge } from "@/components/legislation";
 import { ArticleJsonLd } from "@/components/seo/JsonLd";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { MissingData } from "@/components/ui/MissingData";
+import { currentAffiliationLabel } from "@/lib/votes/current-affiliation";
 import { CURRENT_LEGISLATURE } from "@/config/scrutin-importance";
 import { getScrutinGroupPositions, getScrutinAnalysis } from "@/lib/data/groupes";
 import { GroupPositions } from "@/components/votes/GroupPositions";
@@ -423,80 +424,77 @@ export default async function ScrutinPage({ params }: PageProps) {
           isKeyVote={isKeyVote}
           votesDetailSlot={
             scrutin.votes.length > 0 ? (
-              <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-6">
-                {(["POUR", "CONTRE", "ABSTENTION", "NON_VOTANT", "ABSENT"] as VotePosition[]).map(
-                  (position) => {
-                    const votes = votesByPosition[position] || [];
-                    return (
-                      <Card key={position}>
-                        <CardHeader className="pb-2">
-                          <div className="flex items-center justify-between">
-                            <CardTitle className="text-base">
-                              <VotePositionBadge position={position} />
-                            </CardTitle>
-                            <span className="text-sm text-muted-foreground">{votes.length}</span>
-                          </div>
-                        </CardHeader>
-                        <CardContent>
-                          {votes.length > 0 ? (
-                            <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                              {votes.map((vote) => (
-                                <Link
-                                  key={vote.id}
-                                  href={`/politiques/${vote.politician.slug}`}
-                                  className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted transition-colors"
-                                >
-                                  <PoliticianAvatar
-                                    photoUrl={vote.politician.photoUrl}
-                                    blobPhotoUrl={vote.politician.blobPhotoUrl}
-                                    firstName={vote.politician.firstName}
-                                    lastName={vote.politician.lastName}
-                                    size="sm"
-                                  />
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium">
-                                      {vote.politician.fullName}
-                                    </p>
-                                    {(() => {
-                                      const group =
-                                        vote.politician.mandates[0]?.parliamentaryData
-                                          ?.parliamentaryGroup;
-                                      if (group) {
-                                        return (
-                                          <p
-                                            className="text-xs text-muted-foreground"
-                                            title={group.name}
-                                          >
-                                            {group.code}
-                                          </p>
-                                        );
-                                      }
-                                      if (vote.politician.currentParty) {
-                                        return (
-                                          <p
-                                            className="text-xs text-muted-foreground"
-                                            title={vote.politician.currentParty.name}
-                                          >
-                                            {vote.politician.currentParty.shortName}
-                                          </p>
-                                        );
-                                      }
-                                      return null;
-                                    })()}
-                                  </div>
-                                </Link>
-                              ))}
+              <div>
+                <p className="mb-4 text-sm text-muted-foreground">
+                  Le groupe ou le parti indiqué sous chaque nom est l&apos;affiliation actuelle du
+                  député. Il peut différer de celle qu&apos;il avait le jour du vote.
+                </p>
+                <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-6">
+                  {(["POUR", "CONTRE", "ABSTENTION", "NON_VOTANT", "ABSENT"] as VotePosition[]).map(
+                    (position) => {
+                      const votes = votesByPosition[position] || [];
+                      return (
+                        <Card key={position}>
+                          <CardHeader className="pb-2">
+                            <div className="flex items-center justify-between">
+                              <CardTitle className="text-base">
+                                <VotePositionBadge position={position} />
+                              </CardTitle>
+                              <span className="text-sm text-muted-foreground">{votes.length}</span>
                             </div>
-                          ) : (
-                            <p className="text-sm text-muted-foreground text-center py-4">
-                              Aucun député
-                            </p>
-                          )}
-                        </CardContent>
-                      </Card>
-                    );
-                  }
-                )}
+                          </CardHeader>
+                          <CardContent>
+                            {votes.length > 0 ? (
+                              <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                                {votes.map((vote) => (
+                                  <Link
+                                    key={vote.id}
+                                    href={`/politiques/${vote.politician.slug}`}
+                                    className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted transition-colors"
+                                  >
+                                    <PoliticianAvatar
+                                      photoUrl={vote.politician.photoUrl}
+                                      blobPhotoUrl={vote.politician.blobPhotoUrl}
+                                      firstName={vote.politician.firstName}
+                                      lastName={vote.politician.lastName}
+                                      size="sm"
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium">
+                                        {vote.politician.fullName}
+                                      </p>
+                                      {(() => {
+                                        const label = currentAffiliationLabel({
+                                          group:
+                                            vote.politician.mandates[0]?.parliamentaryData
+                                              ?.parliamentaryGroup,
+                                          party: vote.politician.currentParty,
+                                        });
+                                        if (!label) return null;
+                                        return (
+                                          <p
+                                            className="text-xs text-muted-foreground"
+                                            title={label.title}
+                                          >
+                                            {label.text}
+                                          </p>
+                                        );
+                                      })()}
+                                    </div>
+                                  </Link>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-sm text-muted-foreground text-center py-4">
+                                Aucun député
+                              </p>
+                            )}
+                          </CardContent>
+                        </Card>
+                      );
+                    }
+                  )}
+                </div>
               </div>
             ) : undefined
           }
