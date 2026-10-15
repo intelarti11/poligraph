@@ -21,6 +21,8 @@ import { ExternalLink, Calendar, Users, FileText } from "lucide-react";
 import { StatusBadge } from "@/components/legislation";
 import { ArticleJsonLd } from "@/components/seo/JsonLd";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { MissingData } from "@/components/ui/MissingData";
+import { CURRENT_LEGISLATURE } from "@/config/scrutin-importance";
 import { getScrutinGroupPositions, getScrutinAnalysis } from "@/lib/data/groupes";
 import { GroupPositions } from "@/components/votes/GroupPositions";
 import { ScrutinContext } from "@/components/votes/ScrutinContext";
@@ -508,6 +510,15 @@ export default async function ScrutinPage({ params }: PageProps) {
             </CardContent>
           </Card>
         )}
+        {groupPositions.length === 0 &&
+          scrutin.chamber === "AN" &&
+          scrutin.legislature !== CURRENT_LEGISLATURE && (
+            <MissingData title="Positions par groupe non affichées" className="mb-8">
+              L&apos;appartenance des députés aux groupes de la {scrutin.legislature}
+              <sup>e</sup> législature n&apos;est pas encore documentée. Le résultat officiel et les
+              votes individuels enregistrés restent disponibles sur cette page.
+            </MissingData>
+          )}
 
         {/* Results summary */}
         <Card className="mb-8">

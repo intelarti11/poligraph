@@ -93,9 +93,13 @@ async function computeForChamber(config: ChamberConfig): Promise<number> {
   });
 
   const govGroup = groups.find((g) => g.code === config.govGroupCode);
+  // AN : un groupe n'atteste que les scrutins de sa législature (group-attribution.ts).
+  // Sans ce filtre, les positions historiques déjà en base gonfleraient les statistiques.
+  const { chamber, legislature } = config.groupFilter;
+  const scrutinScope = chamber === "AN" && legislature !== null ? { scrutin: { legislature } } : {};
   const govPositions = govGroup
     ? await db.scrutinGroupPosition.findMany({
-        where: { groupId: govGroup.id },
+        where: { groupId: govGroup.id, ...scrutinScope },
         select: {
           scrutinId: true,
           position: true,
@@ -106,7 +110,7 @@ async function computeForChamber(config: ChamberConfig): Promise<number> {
 
   for (const group of groups) {
     const positions = await db.scrutinGroupPosition.findMany({
-      where: { groupId: group.id },
+      where: { groupId: group.id, ...scrutinScope },
       select: {
         scrutinId: true,
         position: true,

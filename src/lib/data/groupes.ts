@@ -1,6 +1,7 @@
 import { cacheTag, cacheLife } from "next/cache";
 import { db } from "@/lib/db";
 import { PUBLIC_POLITICIAN_WHERE } from "@/lib/api/public-contract";
+import { filterReliableGroupPositions } from "@/lib/votes/group-attribution";
 import type { GroupPosition, Chamber } from "@/generated/prisma";
 
 export interface ScrutinGroupPositionData {
@@ -27,7 +28,7 @@ export async function getScrutinGroupPositions(
   cacheTag("votes");
   cacheLife("synced");
 
-  return db.scrutinGroupPosition.findMany({
+  const rows = await db.scrutinGroupPosition.findMany({
     where: { scrutinId },
     include: {
       group: {
@@ -38,11 +39,33 @@ export async function getScrutinGroupPositions(
           shortName: true,
           color: true,
           slug: true,
+          chamber: true,
+          legislature: true,
         },
       },
+      scrutin: { select: { chamber: true, legislature: true } },
     },
     orderBy: [{ position: "asc" }, { forCount: "desc" }],
   });
+  return toPublicGroupPositions(rows);
+}
+
+/**
+ * Écarte les positions dont le groupe n'est pas celui de la législature du scrutin
+ * (voir group-attribution.ts) et retire les champs de contrôle du contrat public.
+ */
+function toPublicGroupPositions<
+  T extends ScrutinGroupPositionData & {
+    scrutin: { chamber: Chamber; legislature: number };
+    group: ScrutinGroupPositionData["group"] & { chamber: Chamber; legislature: number | null };
+  },
+>(rows: T[]) {
+  return filterReliableGroupPositions(rows).map(
+    ({ scrutin: _scrutin, group: { chamber: _c, legislature: _l, ...group }, ...rest }) => ({
+      ...rest,
+      group,
+    })
+  );
 }
 
 export function groupPositionsByScrutinId(
@@ -78,12 +101,15 @@ export async function getScrutinGroupPositionsBatch(
           shortName: true,
           color: true,
           slug: true,
+          chamber: true,
+          legislature: true,
         },
       },
+      scrutin: { select: { chamber: true, legislature: true } },
     },
     orderBy: [{ position: "asc" }, { forCount: "desc" }],
   });
-  return groupPositionsByScrutinId(rows);
+  return groupPositionsByScrutinId(toPublicGroupPositions(rows));
 }
 
 export interface ScrutinAnalysisData {
@@ -190,8 +216,19 @@ export async function getGroupKeyVotes(groupId: string, limit = 5) {
   cacheTag("votes", "groupes");
   cacheLife("synced");
 
+  // Un groupe AN n'atteste que les scrutins de sa propre législature (group-attribution.ts).
+  const group = await db.parliamentaryGroup.findUnique({
+    where: { id: groupId },
+    select: { chamber: true, legislature: true },
+  });
+  if (!group) return [];
+  if (group.chamber === "AN" && group.legislature === null) return [];
+
   return db.scrutinGroupPosition.findMany({
-    where: { groupId },
+    where: {
+      groupId,
+      ...(group.chamber === "AN" && { scrutin: { legislature: group.legislature as number } }),
+    },
     orderBy: { cohesionPct: "desc" },
     take: limit,
     include: {
