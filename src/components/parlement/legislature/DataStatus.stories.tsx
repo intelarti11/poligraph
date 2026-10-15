@@ -9,7 +9,7 @@ const meta: Meta<typeof DataStatus> = {
 export default meta;
 type Story = StoryObj<typeof DataStatus>;
 
-export const Complete: Story = { args: { status: "complete" } };
-export const Partial: Story = { args: { status: "partial" } };
-export const Unverified: Story = { args: { status: "unverified" } };
-export const Pending: Story = { args: { status: "pending" } };
+export const Complete: Story = { args: { status: "complete", scope: "Composition" } };
+export const Partial: Story = { args: { status: "partial", scope: "Composition" } };
+export const Unverified: Story = { args: { status: "unverified", scope: "Composition" } };
+export const Pending: Story = { args: { status: "pending", scope: "Composition" } };

@@ -12,6 +12,7 @@ type Story = StoryObj<typeof DataProvenance>;
 export const Partial: Story = {
   args: {
     status: "partial",
+    scope: "Composition",
     sources: [{ label: "Assemblée nationale", url: "https://www.assemblee-nationale.fr" }],
     consultedAt: "2026-10-15",
     limits: [
@@ -22,5 +23,5 @@ export const Partial: Story = {
 };
 
 export const SansSource: Story = {
-  args: { status: "unverified", sources: [] },
+  args: { status: "unverified", scope: "Dates officielles", sources: [] },
 };

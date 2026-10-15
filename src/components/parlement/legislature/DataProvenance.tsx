@@ -6,6 +6,8 @@ import { DataStatus } from "./DataStatus";
 
 interface DataProvenanceProps {
   status: DataStatusKind;
+  /** Périmètre du statut : « Composition », « Dates officielles »… */
+  scope: string;
   sources: SourceRef[];
   consultedAt?: Date | string | null;
   /** Limites connues, une phrase par entrée. */
@@ -20,6 +22,7 @@ interface DataProvenanceProps {
  */
 export function DataProvenance({
   status,
+  scope,
   sources,
   consultedAt,
   limits = [],
@@ -30,7 +33,7 @@ export function DataProvenance({
   return (
     <aside aria-label="Provenance et couverture des données" className={className}>
       <p className="flex flex-wrap items-center gap-2 text-sm">
-        <DataStatus status={status} />
+        <DataStatus status={status} scope={scope} showScope />
         <span className="text-muted-foreground">{DATA_STATUS_DESCRIPTIONS[status]}</span>
       </p>
       {hasSource ? (

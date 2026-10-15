@@ -34,3 +34,20 @@ export const NeBoucle: Story = {
     totals: { seats: 577, filled: 560, vacant: 7 },
   },
 };
+
+export const AvecNonInscrits: Story = {
+  args: {
+    caption: "Groupes d'exemple, en fin de législature",
+    rows,
+    unaffiliated: 0,
+    totals: { seats: 577, filled: 570, vacant: 7 },
+  },
+};
+
+export const NonInscritsNonRenseignes: Story = {
+  args: {
+    caption: "Groupes d'exemple, en fin de législature",
+    rows: [rows[0]!],
+    totals: { seats: 577, filled: 570, vacant: 7 },
+  },
+};

@@ -13,16 +13,36 @@ describe("DataStatus", () => {
     ["unverified", "Non vérifié"],
     ["pending", "En attente"],
   ] as const)("écrit le statut %s en toutes lettres", (status, label) => {
-    render(<DataStatus status={status} />);
+    render(<DataStatus status={status} scope="Composition" />);
     expect(screen.getByText(label, { exact: false })).toBeInTheDocument();
-    expect(screen.getByText("Statut des données :", { exact: false })).toBeInTheDocument();
+    expect(
+      screen.getByText("Statut des données (Composition) :", { exact: false })
+    ).toBeInTheDocument();
+  });
+
+  it("porte toujours son périmètre : un jeu complet n'est pas une législature complète", () => {
+    render(<DataStatus status="complete" scope="Dates officielles" showScope />);
+    expect(screen.getByText("Dates officielles :")).toBeInTheDocument();
+    expect(screen.getByTitle(/Dates officielles/)).toBeInTheDocument();
   });
 });
 
 describe("LegislatureSelector", () => {
   const options = [
-    { number: 16, period: "2022-2024", href: "/x/16", status: "partial" as const },
-    { number: 17, period: "depuis 2024", href: "/x/17", status: "complete" as const },
+    {
+      number: 16,
+      period: "2022-2024",
+      href: "/x/16",
+      status: "partial" as const,
+      statusScope: "Composition",
+    },
+    {
+      number: 17,
+      period: "depuis 2024",
+      href: "/x/17",
+      status: "complete" as const,
+      statusScope: "Composition",
+    },
   ];
 
   it("annonce la législature courante et laisse les autres en liens simples", () => {
@@ -43,14 +63,29 @@ describe("LegislatureSelector", () => {
 
 describe("LegislatureTimeline", () => {
   const items = [
-    { number: 15, startYear: 2017, endYear: 2022, status: "pending" as const, href: "/15" },
-    { number: 16, startYear: 2022, endYear: 2024, status: "partial" as const, href: "/16" },
+    {
+      number: 15,
+      startYear: 2017,
+      endYear: 2022,
+      status: "pending" as const,
+      statusScope: "Composition",
+      href: "/15",
+    },
+    {
+      number: 16,
+      startYear: 2022,
+      endYear: 2024,
+      status: "partial" as const,
+      statusScope: "Composition",
+      href: "/16",
+    },
     {
       number: 17,
       startYear: 2024,
       endYear: null,
       startEvent: "Dissolution et élection de 2024",
       status: "complete" as const,
+      statusScope: "Composition",
       href: "/17",
     },
   ];
@@ -75,8 +110,22 @@ describe("LegislatureTimeline", () => {
 
 describe("CompositionTable", () => {
   const rows = [
-    { key: "a", name: "Groupe A", code: "GA", count: 300, status: "partial" as const },
-    { key: "b", name: "Groupe B", code: "GB", count: 270, status: "partial" as const },
+    {
+      key: "a",
+      name: "Groupe A",
+      code: "GA",
+      count: 300,
+      status: "partial" as const,
+      statusScope: "Composition",
+    },
+    {
+      key: "b",
+      name: "Groupe B",
+      code: "GB",
+      count: 270,
+      status: "partial" as const,
+      statusScope: "Composition",
+    },
   ];
 
   it("distingue « non importée » d'une composition vide", () => {
@@ -103,6 +152,34 @@ describe("CompositionTable", () => {
     expect(screen.queryByText("Composition non vérifiée")).not.toBeInTheDocument();
   });
 
+  it("affiche les non-inscrits à part, sans les classer comme groupe", () => {
+    render(
+      <CompositionTable
+        caption="Groupes"
+        rows={rows}
+        unaffiliated={0}
+        totals={{ seats: 577, filled: 570, vacant: 7 }}
+      />
+    );
+
+    const row = screen.getByRole("row", { name: /non inscrits/i });
+    expect(row).toHaveTextContent("aucun groupe");
+    expect(screen.queryByText("Composition non vérifiée")).not.toBeInTheDocument();
+  });
+
+  it("dit que les non-inscrits ne sont pas renseignés quand l'effectif manque", () => {
+    render(
+      <CompositionTable
+        caption="Groupes"
+        rows={[rows[0]!]}
+        totals={{ seats: 577, filled: 570, vacant: 7 }}
+      />
+    );
+
+    expect(screen.queryByRole("row", { name: /non inscrits/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/effectif des non-inscrits n'est pas renseigné/)).toBeInTheDocument();
+  });
+
   it("signale des totaux qui ne bouclent pas au lieu de les corriger", () => {
     render(
       <CompositionTable
@@ -114,7 +191,9 @@ describe("CompositionTable", () => {
 
     expect(screen.getByText("Composition non vérifiée")).toBeInTheDocument();
     expect(
-      screen.getByText("La somme des groupes ne correspond pas aux sièges pourvus.")
+      screen.getByText(
+        "La somme des groupes et des non-inscrits ne correspond pas aux sièges pourvus."
+      )
     ).toBeInTheDocument();
   });
 });
@@ -124,6 +203,7 @@ describe("DataProvenance", () => {
     render(
       <DataProvenance
         status="partial"
+        scope="Composition"
         sources={[{ label: "Assemblée nationale" }]}
         consultedAt="2026-10-15"
         limits={["Les appartenances datées ne sont pas importées."]}
@@ -136,7 +216,7 @@ describe("DataProvenance", () => {
   });
 
   it("dit qu'une donnée sans source ne doit pas être citée", () => {
-    render(<DataProvenance status="unverified" sources={[]} />);
+    render(<DataProvenance status="unverified" scope="Composition" sources={[]} />);
     expect(screen.getByText("Source non renseignée")).toBeInTheDocument();
   });
 });

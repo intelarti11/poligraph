@@ -28,6 +28,11 @@ interface CompositionTableProps {
   /** `null` : composition non importée. `[]` : importée et vide, ce qui est un fait. */
   rows: CompositionRow[] | null;
   totals?: CompositionTotals;
+  /**
+   * Députés non inscrits : ils n'appartiennent à aucun groupe et ne vont pas dans `rows`.
+   * `null` ou absent : effectif non renseigné.
+   */
+  unaffiliated?: number | null;
   className?: string;
 }
 
@@ -38,7 +43,13 @@ interface CompositionTableProps {
  * et un effectif nul sont deux états distincts. Si les totaux ne bouclent pas, la table le
  * dit au lieu de corriger.
  */
-export function CompositionTable({ caption, rows, totals, className }: CompositionTableProps) {
+export function CompositionTable({
+  caption,
+  rows,
+  totals,
+  unaffiliated = null,
+  className,
+}: CompositionTableProps) {
   if (rows === null) {
     return (
       <MissingData title="Composition non importée" className={className}>
@@ -51,10 +62,12 @@ export function CompositionTable({ caption, rows, totals, className }: Compositi
   const issues = totals
     ? checkCompositionTotals(
         totals,
-        rows.map((row) => row.count)
+        rows.map((row) => row.count),
+        { unaffiliated }
       )
     : [];
-  const filled = totals?.filled ?? rows.reduce((acc, row) => acc + row.count, 0);
+  const filled =
+    totals?.filled ?? rows.reduce((acc, row) => acc + row.count, 0) + (unaffiliated ?? 0);
 
   return (
     <div className={className}>
@@ -111,7 +124,11 @@ export function CompositionTable({ caption, rows, totals, className }: Compositi
                           )}
                         </span>
                         <span className="text-muted-foreground">({row.code})</span>
-                        <DataStatus status={row.status} className="sm:hidden" />
+                        <DataStatus
+                          status={row.status}
+                          scope="Effectif du groupe"
+                          className="sm:hidden"
+                        />
                       </span>
                     </th>
                     <td className="px-3 py-2 text-right tabular-nums">{row.count}</td>
@@ -119,11 +136,28 @@ export function CompositionTable({ caption, rows, totals, className }: Compositi
                       {share === null ? "Non calculée" : `${share.toLocaleString("fr-FR")} %`}
                     </td>
                     <td className="hidden py-2 pl-3 sm:table-cell">
-                      <DataStatus status={row.status} />
+                      <DataStatus status={row.status} scope="Effectif du groupe" />
                     </td>
                   </tr>
                 );
               })
+            )}
+            {unaffiliated !== null && (
+              <tr className="border-b">
+                <th scope="row" className="py-2 pr-3 text-left font-normal">
+                  <span className="flex min-h-11 flex-wrap items-center gap-x-2">
+                    Députés non inscrits
+                    <span className="text-xs text-muted-foreground">(aucun groupe)</span>
+                  </span>
+                </th>
+                <td className="px-3 py-2 text-right tabular-nums">{unaffiliated}</td>
+                <td className="px-3 py-2 text-right tabular-nums">
+                  {seatShare(unaffiliated, filled) === null
+                    ? "Non calculée"
+                    : `${seatShare(unaffiliated, filled)!.toLocaleString("fr-FR")} %`}
+                </td>
+                <td className="hidden sm:table-cell" />
+              </tr>
             )}
           </tbody>
           {totals && (

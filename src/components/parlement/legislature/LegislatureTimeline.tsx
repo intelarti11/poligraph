@@ -11,7 +11,10 @@ export interface TimelineLegislature {
   endYear: number | null;
   /** Événement d'ouverture sourcé : « Élection de juin 2022 ». */
   startEvent?: string;
+  /** Statut d'UN jeu de données, pas de la législature entière. */
   status: DataStatusKind;
+  /** Jeu de données concerné : « Composition », « Votes individuels »… */
+  statusScope: string;
   href: string;
 }
 
@@ -77,11 +80,25 @@ export function LegislatureTimeline({
                 {ordinal(item.number)} législature
                 {item.endYear === null && <span className="font-normal">, en cours</span>}
               </span>
-              <span className="text-muted-foreground">{periodLabel(item)}</span>
+              <span className={isCurrent ? "text-accent-foreground" : "text-muted-foreground"}>
+                {periodLabel(item)}
+              </span>
               {item.startEvent && (
-                <span className="text-xs text-muted-foreground">{item.startEvent}</span>
+                <span
+                  className={cn(
+                    "text-xs",
+                    isCurrent ? "text-accent-foreground" : "text-muted-foreground"
+                  )}
+                >
+                  {item.startEvent}
+                </span>
               )}
-              <DataStatus status={item.status} className="mt-auto" />
+              <DataStatus
+                status={item.status}
+                scope={item.statusScope}
+                showScope
+                className="mt-auto"
+              />
             </Link>
           </li>
         );

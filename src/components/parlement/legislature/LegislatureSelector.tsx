@@ -9,6 +9,8 @@ export interface LegislatureOption {
   period: string;
   href: string;
   status: DataStatusKind;
+  /** Jeu de données auquel le statut s'applique. */
+  statusScope: string;
 }
 
 interface LegislatureSelectorProps {
@@ -54,7 +56,10 @@ export function LegislatureSelector({ options, current, className }: Legislature
                   className={isCurrent ? "text-primary-foreground/90" : "text-muted-foreground"}
                 >
                   {option.period}
-                  <span className="sr-only"> · données : {DATA_STATUS_LABELS[option.status]}</span>
+                  <span className="sr-only">
+                    {" "}
+                    · {option.statusScope} : {DATA_STATUS_LABELS[option.status]}
+                  </span>
                 </span>
               </Link>
             </li>
