@@ -11,6 +11,12 @@ import type { DatasetCoverage, LegislatureCoverage } from "@/lib/parlement/legis
 
 const MEASURED_AT = "2026-10-15" as const;
 
+/** Jusqu'à cet âge (jours), une mesure peut être affichée. Au-delà, ou à la création des pages, relancer. */
+const MAX_AGE_DAYS = 30;
+
+const ABSENCE_NOTICE =
+  "Certaines données de cette législature ne sont pas encore importées dans PoliGraph. Ce n'est pas une absence d'activité parlementaire : l'Assemblée a siégé et voté, nous n'avons simplement pas encore repris ces données.";
+
 function absent(
   dataset: DatasetCoverage["dataset"],
   perimeter: string,
@@ -30,6 +36,8 @@ function absent(
 export const AN_LEGISLATURE_COVERAGE: LegislatureCoverage[] = [
   {
     number: 15,
+    navigation: { listed: true, absenceNotice: ABSENCE_NOTICE },
+    refresh: { onPageCreation: true, maxAgeDays: MAX_AGE_DAYS },
     datasets: [
       absent(
         "scrutins",
@@ -56,15 +64,17 @@ export const AN_LEGISLATURE_COVERAGE: LegislatureCoverage[] = [
   },
   {
     number: 16,
+    navigation: { listed: true, absenceNotice: ABSENCE_NOTICE },
+    refresh: { onPageCreation: true, maxAgeDays: MAX_AGE_DAYS },
     datasets: [
       {
         dataset: "scrutins",
         level: "unverified",
         perimeter: "Scrutins publics de la 16e législature importés.",
-        measured: { count: 4105, expected: 4105 },
+        measured: { count: 4105 },
         measuredAt: MEASURED_AT,
         method:
-          "Le plus grand numéro importé est 4105 et il y a 4105 scrutins. Sur le site de l'Assemblée, le n° 4105 existe (7 juin 2024) et le n° 4106 répond 404. Aucun total officiel publié n'a été relevé.",
+          "Le plus grand numéro importé est 4105 et il y a 4105 scrutins. Sur le site de l'Assemblée, le n° 4105 existe (7 juin 2024) et le n° 4106 répond 404. Aucun total officiel n'est attesté : pas de valeur attendue.",
         note: "Concordance probable, non établie : la sonde du numéro suivant ne prouve pas l'absence de trou ou de scrutin hors numérotation.",
       },
       {
@@ -111,16 +121,17 @@ export const AN_LEGISLATURE_COVERAGE: LegislatureCoverage[] = [
   },
   {
     number: 17,
+    navigation: { listed: true, absenceNotice: ABSENCE_NOTICE },
+    refresh: { onPageCreation: true, maxAgeDays: MAX_AGE_DAYS },
     datasets: [
       {
         dataset: "scrutins",
         level: "partial",
         perimeter: "Scrutins publics de la 17e législature importés.",
-        measured: { count: 8730, outOf: 8772 },
+        measured: { count: 8730 },
         measuredAt: MEASURED_AT,
         method:
-          "8730 scrutins importés pour un plus grand numéro importé de 8772 : au moins 42 numéros manquent. Le plus grand numéro réel n'a pas été relevé à la source.",
-        note: "`outOf` est le plus grand numéro importé, pas un total officiel.",
+          "8730 scrutins importés pour un plus grand numéro importé de 8772 : au moins 42 numéros manquent. Le plus grand numéro réel n'a pas été relevé à la source, aucun total officiel n'est attesté.",
       },
       {
         dataset: "individual-votes",

@@ -22,6 +22,14 @@ export const AN_LEGISLATURE_FACTS: LegislatureFacts[] = [
     endCause: "powers-expiry",
     dates: [
       {
+        kind: "previous-election-second-round",
+        date: "2012-06-17",
+        basis: "sourced",
+        sourceIds: ["decret-2012-558"],
+        explanation:
+          "Second tour de l'élection de la 14e législature (premier tour le 10 juin 2012). Sert de point de départ au calcul de l'expiration de 2017.",
+      },
+      {
         kind: "election-first-round",
         date: "2017-06-11",
         basis: "sourced",
@@ -41,21 +49,24 @@ export const AN_LEGISLATURE_FACTS: LegislatureFacts[] = [
         basis: "derived",
         sourceIds: ["lo-121"],
         explanation:
-          "Troisième mardi de juin 2017. Suppose que l'Assemblée précédente a été élue en 2012 : cette élection n'est pas sourcée dans ce lot.",
+          "Élection de 2012 (décret 2012-558), cinquième année suivante : 2017. Troisième mardi de juin 2017 : 20 juin (LO 121).",
       },
       {
         kind: "mandate-start",
         date: "2017-06-21",
         basis: "observed",
         sourceIds: ["poligraph-mandats-an"],
+        display: "internal-only",
         explanation:
-          "Date de début du seul mandat de la 15e législature importé (identifiant -leg15). Un seul mandat : indicatif, non généralisable.",
+          "Date de début du seul mandat de la 15e législature importé (identifiant -leg15). Un seul mandat : indicatif, non généralisable, non affiché.",
       },
       {
         kind: "archive-start",
         date: "2017-06-23",
         basis: "sourced",
         sourceIds: ["an-archives-15"],
+        explanation:
+          "Date écrite par les archives de l'Assemblée. Aucune signification juridique n'est établie : ni lendemain de l'expiration des pouvoirs, ni ouverture en séance.",
       },
       {
         kind: "opening-sitting",
@@ -88,8 +99,10 @@ export const AN_LEGISLATURE_FACTS: LegislatureFacts[] = [
           { kind: "opening-sitting", date: "2017-06-27", sourceId: "cr-2017-06-27" },
         ],
         proposedReading:
-          "Trois natures de dates différentes. Le 23 juin des archives ne correspond ni au lendemain de l'expiration des pouvoirs (21 juin) ni à l'ouverture en séance (27 juin) : sa signification n'est pas établie. Afficher les trois avec leur nature, ne pas en choisir une seule comme « début ».",
-        arbitrated: false,
+          "Trois natures de dates différentes. Le 23 juin des archives ne correspond ni au lendemain de l'expiration des pouvoirs (21 juin) ni à l'ouverture en séance (27 juin) : sa signification n'est pas établie.",
+        arbitrated: true,
+        resolution:
+          "Conserver les trois dates distinctes avec leur nature. Le 21 juin reste interne (un seul mandat observé). Le 23 juin est présenté comme « date indiquée par les archives de l'Assemblée », sans signification juridique. Le 27 juin est la première séance.",
       },
     ],
   },
@@ -132,8 +145,9 @@ export const AN_LEGISLATURE_FACTS: LegislatureFacts[] = [
         date: "2022-06-22",
         basis: "observed",
         sourceIds: ["poligraph-mandats-an"],
+        display: "internal-only",
         explanation:
-          "Date de début du seul mandat de la 16e législature importé (identifiant -leg16). Un seul mandat : indicatif.",
+          "Date de début du seul mandat de la 16e législature importé (identifiant -leg16). Un seul mandat : indicatif, non généralisable, non affiché.",
       },
       {
         kind: "opening-sitting",
@@ -157,10 +171,20 @@ export const AN_LEGISLATURE_FACTS: LegislatureFacts[] = [
         explanation: "Journal officiel n° 0134 du 10 juin 2024.",
       },
       {
+        kind: "dissolution-entry-into-force",
+        date: "2024-06-10",
+        basis: "sourced",
+        sourceIds: ["decret-dissolution-2024"],
+        explanation:
+          "Version consolidée de Légifrance : articles 1 et 2 « en vigueur depuis le 10 juin 2024 ». Aucune clause d'entrée en vigueur distincte dans le texte.",
+      },
+      {
         kind: "archive-end",
         date: "2024-06-09",
         basis: "sourced",
         sourceIds: ["an-archives-16"],
+        explanation:
+          "Date de fin écrite par les archives de l'Assemblée. Elle n'est ni la date de publication ni celle de l'entrée en vigueur du décret.",
       },
     ],
     seats: { legalCount: 577, legalBasisSourceIds: ["lo-119"], note: SEATS_NOTE },
@@ -175,10 +199,17 @@ export const AN_LEGISLATURE_FACTS: LegislatureFacts[] = [
             date: "2024-06-10",
             sourceId: "decret-dissolution-2024",
           },
+          {
+            kind: "dissolution-entry-into-force",
+            date: "2024-06-10",
+            sourceId: "decret-dissolution-2024",
+          },
         ],
         proposedReading:
-          "Le décret est daté du 9 juin et publié le 10. La date d'entrée en vigueur de la dissolution n'a pas été vérifiée. Afficher « décret du 9 juin 2024, publié le 10 juin » et reprendre le 9 juin des archives comme fin de législature.",
-        arbitrated: false,
+          "Signature le 9 juin, publication et entrée en vigueur le 10 juin (version consolidée), fin indiquée par les archives le 9 juin.",
+        arbitrated: true,
+        resolution:
+          "Quatre dates de nature différente, jamais interchangeables : fin selon les archives (9 juin), signature du décret (9 juin), publication (10 juin), entrée en vigueur (10 juin).",
       },
     ],
   },
@@ -208,16 +239,18 @@ export const AN_LEGISLATURE_FACTS: LegislatureFacts[] = [
         date: "2024-07-08",
         basis: "observed",
         sourceIds: ["poligraph-mandats-an"],
+        display: "internal-only",
         explanation:
-          "Date de début de 454 des mandats importés (sièges pourvus au second tour). Base juridique du début des pouvoirs après dissolution non vérifiée.",
+          "Date de début de 454 des mandats importés. Base juridique du début des pouvoirs après dissolution non vérifiée : observation interne, non généralisable, non affichée.",
       },
       {
         kind: "mandate-start",
         date: "2024-07-01",
         basis: "observed",
         sourceIds: ["poligraph-mandats-an"],
+        display: "internal-only",
         explanation:
-          "Date de début de 76 mandats importés (sièges pourvus au premier tour). Base juridique non vérifiée.",
+          "Date de début de 76 mandats importés. Base juridique non vérifiée : observation interne, non généralisable, non affichée.",
       },
       {
         kind: "opening-sitting",
@@ -225,15 +258,17 @@ export const AN_LEGISLATURE_FACTS: LegislatureFacts[] = [
         basis: "sourced",
         sourceIds: ["cr-2024-07-18", "constitution-art-12", "an-calendrier-17"],
         explanation:
-          "Deuxième jeudi suivant l'élection du 7 juillet (article 12). Ouverture et session de droit prononcées à 15 heures par le doyen d'âge.",
+          "Première séance de la législature : deuxième jeudi suivant l'élection du 7 juillet (article 12). Ouverture et session de droit prononcées à 15 heures par le doyen d'âge.",
       },
       {
         kind: "powers-expiry",
         date: "2029-06-19",
         basis: "derived",
         sourceIds: ["lo-121"],
+        conditional:
+          "Échéance théorique : elle ne vaut qu'en l'absence de dissolution avant cette date. Ce n'est pas une date de fin certaine.",
         explanation:
-          "Échéance théorique (troisième mardi de juin 2029) en l'absence de dissolution. Suppose LO 121 inchangé : version relue en vigueur au 26 mars 2023.",
+          "Troisième mardi de juin 2029, cinquième année après l'élection de 2024 (LO 121, version en vigueur depuis le 16 mai 2001).",
       },
     ],
     seats: { legalCount: 577, legalBasisSourceIds: ["lo-119"], note: SEATS_NOTE },
@@ -245,8 +280,10 @@ export const AN_LEGISLATURE_FACTS: LegislatureFacts[] = [
           { kind: "mandate-start", date: "2024-07-08", sourceId: "poligraph-mandats-an" },
         ],
         proposedReading:
-          "Deux dates observées selon le tour d'élection du député. Ne pas afficher de « début des mandats » unique tant que la règle n'est pas sourcée.",
-        arbitrated: false,
+          "Deux dates observées selon le tour d'élection du député, règle juridique non sourcée.",
+        arbitrated: true,
+        resolution:
+          "Aucune date unique de début des mandats n'est affichée. Les relevés des 1er et 8 juillet 2024 restent internes (display: internal-only). Le 18 juillet 2024 est présenté comme première séance de la législature.",
       },
     ],
   },

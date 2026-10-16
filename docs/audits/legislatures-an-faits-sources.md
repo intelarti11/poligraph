@@ -4,26 +4,28 @@ Préparation du lot 2. Sources lues le 2026-10-16. Données de couverture mesur�
 en lecture seule. Aucune écriture en base, aucun import. Config typée :
 `src/config/legislatures/` (faits, sources, couverture) et `src/lib/parlement/legislature-*.ts`.
 
-Légende de la colonne « Base » : **S** écrit par la source, **D** calculé par une règle citée,
+Légende : **S** écrit par la source, **D** calculé par une règle citée,
 **O** observé dans des données importées (base juridique non vérifiée).
 
 ## 1. Faits institutionnels
 
-|                                                   | 15e                                      | 16e                                       | 17e                                                       |
-| ------------------------------------------------- | ---------------------------------------- | ----------------------------------------- | --------------------------------------------------------- |
-| Intitulé (ouverture en séance)                    | XVe législature de l'Assemblée nationale | XVIe législature de l'Assemblée nationale | XVIIe législature de l'Assemblée nationale                |
-| Statut                                            | terminée, expiration des pouvoirs        | terminée, dissolution                     | en cours                                                  |
-| Élection, 1er tour (métropole)                    | 2017-06-11 (S)                           | 2022-06-12 (S)                            | 2024-06-30 (S)                                            |
-| Élection, 2nd tour (métropole)                    | 2017-06-18 (S)                           | 2022-06-19 (S)                            | 2024-07-07 (S)                                            |
-| Expiration des pouvoirs de l'Assemblée précédente | 2017-06-20 (D)                           | 2022-06-21 (D)                            | sans objet (dissolution)                                  |
-| Début du mandat des députés                       | 2017-06-21 (O, 1 mandat)                 | 2022-06-22 (O, 1 mandat)                  | 2024-07-01 (O, 76 mandats) et 2024-07-08 (O, 454 mandats) |
-| Début selon les archives de l'Assemblée           | 2017-06-23 (S)                           | 2022-06-22 (S)                            | aucune page d'archives                                    |
-| Première séance, ouverture de la législature      | 2017-06-27 (S)                           | 2022-06-28 (S)                            | 2024-07-18 (S)                                            |
-| Décret de dissolution                             | sans objet                               | 2024-06-09 (S)                            | sans objet                                                |
-| Publication au Journal officiel                   | sans objet                               | 2024-06-10 (S)                            | sans objet                                                |
-| Expiration des pouvoirs                           | 2022-06-21 (D)                           | sans objet                                | 2029-06-19 (D, théorique sans dissolution)                |
-| Fin selon les archives de l'Assemblée             | 2022-06-21 (S)                           | 2024-06-09 (S)                            | sans objet                                                |
-| Nombre légal de sièges                            | 577                                      | 577                                       | 577                                                       |
+|                                                   | 15e                                                  | 16e                                         | 17e                                                                                     |
+| ------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Intitulé (ouverture en séance)                    | XVe législature de l'Assemblée nationale             | XVIe législature de l'Assemblée nationale   | XVIIe législature de l'Assemblée nationale                                              |
+| Statut                                            | terminée, expiration des pouvoirs                    | terminée, dissolution                       | en cours                                                                                |
+| Élection précédente, 2nd tour                     | 2012-06-17 (S, décret 2012-558)                      | sans objet                                  | sans objet (dissolution)                                                                |
+| Élection, 1er tour (métropole)                    | 2017-06-11 (S)                                       | 2022-06-12 (S)                              | 2024-06-30 (S)                                                                          |
+| Élection, 2nd tour (métropole)                    | 2017-06-18 (S)                                       | 2022-06-19 (S)                              | 2024-07-07 (S)                                                                          |
+| Expiration des pouvoirs de l'Assemblée précédente | 2017-06-20 (D, depuis l'élection de 2012)            | 2022-06-21 (D)                              | sans objet (dissolution)                                                                |
+| Début du mandat des députés                       | 2017-06-21 (O, 1 mandat, interne)                    | 2022-06-22 (O, 1 mandat, interne)           | aucune date affichée (relevés internes : 2024-07-01 sur 76 mandats, 2024-07-08 sur 454) |
+| Début selon les archives de l'Assemblée           | 2017-06-23 (S, sans signification juridique établie) | 2022-06-22 (S)                              | aucune page d'archives                                                                  |
+| Première séance                                   | 2017-06-27 (S)                                       | 2022-06-28 (S)                              | 2024-07-18 (S)                                                                          |
+| Décret de dissolution                             | sans objet                                           | 2024-06-09 (S)                              | sans objet                                                                              |
+| Publication au Journal officiel                   | sans objet                                           | 2024-06-10 (S)                              | sans objet                                                                              |
+| Entrée en vigueur du décret                       | sans objet                                           | 2024-06-10 (S, version consolidée)          | sans objet                                                                              |
+| Expiration des pouvoirs                           | 2022-06-21 (D)                                       | sans objet                                  | 2029-06-19 (D, échéance théorique et conditionnelle)                                    |
+| Fin selon les archives de l'Assemblée             | 2022-06-21 (S)                                       | 2024-06-09 (S, distincte de la publication) | sans objet                                                                              |
+| Nombre légal de sièges                            | 577                                                  | 577                                         | 577                                                                                     |
 
 Sièges : article LO 119 du code électoral, « Le nombre des députés est de cinq cent
 soixante-dix-sept. », en vigueur depuis le 15 janvier 2009 (loi organique n° 2009-38). C'est un
@@ -56,32 +58,31 @@ qui suit son élection. » (7 juillet 2024, premier jeudi le 11, second le 18.)
 
 Les dates ont été relues sur les pages Légifrance et Assemblée nationale citées. Les résumés d'un moteur de recherche n'ont servi qu'à trouver ces pages.
 
-## 3. Contradictions et points à arbitrer
+## 3. Arbitrages (résolus dans la configuration)
 
-1. **Début de la 15e législature.** Trois dates de nature différente : 21 juin (lendemain de
-   l'expiration, observé sur un seul mandat), 23 juin (archives de l'Assemblée), 27 juin
-   (ouverture en séance). Le 23 juin ne correspond ni à l'une ni à l'autre : sa signification
-   n'est pas établie. Proposition : afficher les trois avec leur nature, ne pas choisir un seul
-   « début ». Pour la 16e, archives et lendemain de l'expiration coïncident (22 juin).
-2. **Fin de la 16e législature.** Décret daté du 9 juin, publié le 10. Les archives retiennent le 9. La date d'entrée en vigueur de la dissolution n'a pas été vérifiée. Proposition : écrire
-   « décret du 9 juin 2024, publié le 10 juin » et reprendre le 9 juin des archives.
-3. **Début des mandats de la 17e.** 76 mandats commencent le 1er juillet, 454 le 8 juillet (selon
-   le tour d'élection). La règle juridique n'est pas sourcée. Proposition : ne pas afficher de
-   « début des mandats » unique.
-4. **Élection de la 14e, non sourcée.** Le calcul de l'expiration de 2017 (20 juin) suppose
-   qu'elle date de 2012. À sourcer ou à retirer de l'affichage.
-5. **LO 121 en vigueur.** Texte relu dans sa version du 26 mars 2023. Le 19 juin 2029 (17e)
-   est calculé avec cette version. À reconfirmer avant d'afficher cette échéance.
-6. **Dates d'élection hors métropole.** Scrutins anticipés ou décalés (outre-mer, étranger) : seules
-   les dates de métropole sont retenues, les exceptions sont dans les explications.
-7. **15e législature dans la navigation.** Intitulé, dates et sièges sont sourcés, mais aucun
-   scrutin ni groupe n'est importé. Faut-il la lister avec le statut « données absentes » ?
-8. **Sièges.** LO 119 donne 577 pour toute la période. Le nombre de sièges pourvus à une date
-   n'est pas disponible et n'est pas déduit.
+1. **15e législature.** Le 21 juin 2017 (observé sur un seul mandat, interne), le 23 juin (archives
+   de l'Assemblée) et le 27 juin (première séance) restent distincts. Le 23 juin est présenté
+   comme « date indiquée par les archives », sans signification juridique. L'expiration du 20 juin
+   2017 est justifiée par le décret n° 2012-558 du 25 avril 2012 (élections des 10 et 17 juin 2012) et
+   LO 121.
+2. **16e législature.** Quatre dates jamais interchangeables : fin selon les archives (9 juin 2024),
+   signature du décret (9 juin), publication (10 juin) et entrée en vigueur (10 juin, version
+   consolidée de Légifrance : articles « en vigueur depuis le 10 juin 2024 »).
+3. **17e législature.** Aucune date unique de début des mandats n'est affichée. Les relevés des 1er et
+   8 juillet 2024 restent internes (`display: "internal-only"`). Le 18 juillet 2024 est la première
+   séance. Le 19 juin 2029 est une échéance théorique, valable sans dissolution. LO 121 est relue
+   dans sa version en vigueur (depuis le 16 mai 2001).
+4. **Couverture.** La 15e figure dans la navigation avec ses jeux absents nommés et la mention que
+   l'absence d'import n'est pas une absence d'activité parlementaire. Les valeurs `expected` ne
+   sont admises qu'avec un total officiellement attesté et sa source : aucune n'est renseignée.
+   Aucun statut global de complétude d'une législature n'existe.
+
+Restes non tranchés : les dates d'élection hors métropole (exceptions écrites dans les
+explications) et le nombre de sièges pourvus à une date, non disponible et non déduit.
 
 ## 4. Couverture dans PoliGraph (structure séparée)
 
-Aucun jeu n'est « complet ». Ce niveau exige une justification de périmètre et une mesure qui
+Mesures du 2026-10-15, à relancer à la création des pages et au-delà de 30 jours. Aucun jeu n'est « complet ». Ce niveau exige une justification de périmètre et une mesure qui
 boucle avec une référence externe, contrôlées par `validateLegislatureCoverage`.
 
 | Jeu                            | 15e                                 | 16e                                                                                     | 17e                                                                               |
@@ -97,4 +98,4 @@ boucle avec une référence externe, contrôlées par `validateLegislatureCovera
 ## 5. Suite
 
 Le lot 2 (pages) s'appuiera sur ces faits et sur les composants de #1119, une fois celle-ci
-intégrée à `main`. Aucune page n'est préparée tant que les points 1 à 3 ne sont pas arbitrés.
+intégrée à `main`. Cette PR ne crée aucune page et ne touche aucune donnée de production.

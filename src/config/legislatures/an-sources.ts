@@ -30,11 +30,19 @@ export const AN_SOURCES: InstitutionalSource[] = [
     kind: "loi-organique",
     publisher: "Légifrance",
     label:
-      "Code électoral, article LO 121 (loi organique n° 2001-419 du 15 mai 2001), version en vigueur au 26 mars 2023",
-    url: "https://www.legifrance.gouv.fr/codes/section_lc/LEGITEXT000006070239/LEGISCTA000006148463/2023-03-26/",
+      "Code électoral, article LO 121, version en vigueur depuis le 16 mai 2001 (loi organique n° 2001-419), relue le 2026-10-16",
+    url: "https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000006353288",
     consultedAt: "2026-10-16",
     quote:
       "Les pouvoirs de l'Assemblée nationale expirent le troisième mardi de juin de la cinquième année qui suit son élection.",
+  },
+  {
+    id: "decret-2012-558",
+    kind: "decret",
+    publisher: "Légifrance",
+    label: "Décret n° 2012-558 du 25 avril 2012 portant convocation des électeurs (députés)",
+    url: "https://www.legifrance.gouv.fr/loda/id/JORFTEXT000025746924",
+    consultedAt: "2026-10-16",
   },
   {
     id: "decret-2017-616",
@@ -65,10 +73,11 @@ export const AN_SOURCES: InstitutionalSource[] = [
     kind: "decret",
     publisher: "Légifrance",
     label:
-      "Décret du 9 juin 2024 portant dissolution de l'Assemblée nationale (JO du 10 juin 2024)",
+      "Décret du 9 juin 2024 portant dissolution de l'Assemblée nationale (JO du 10 juin 2024), version consolidée",
     url: "https://www.legifrance.gouv.fr/jorf/id/JORFTEXT000049689651",
     consultedAt: "2026-10-16",
-    quote: "L'Assemblée nationale est dissoute.",
+    quote:
+      "L'Assemblée nationale est dissoute. (articles « en vigueur depuis le 10 juin 2024 » selon la version consolidée)",
   },
   {
     id: "cr-2017-06-27",

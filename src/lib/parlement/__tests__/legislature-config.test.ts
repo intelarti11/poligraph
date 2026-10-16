@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { AN_LEGISLATURE_COVERAGE, AN_LEGISLATURE_FACTS, AN_SOURCES } from "@/config/legislatures";
 import {
   isIsoDate,
+  publicDates,
+  staleDatasets,
   validateLegislatureCoverage,
   validateLegislatureFacts,
 } from "../legislature-config";
@@ -79,10 +81,67 @@ describe("configuration institutionnelle des législatures de l'AN", () => {
     }
   });
 
-  it("signale les contradictions de dates sans les arbitrer", () => {
+  it("marque les trois arbitrages comme résolus, avec leur résolution", () => {
     const contradictions = AN_LEGISLATURE_FACTS.flatMap((l) => l.contradictions);
-    expect(contradictions.length).toBeGreaterThanOrEqual(3);
-    expect(contradictions.every((c) => c.arbitrated === false)).toBe(true);
+    expect(contradictions).toHaveLength(3);
+    for (const c of contradictions) {
+      expect(c.arbitrated).toBe(true);
+      expect(c.resolution?.length).toBeGreaterThan(20);
+    }
+  });
+
+  it("15e : garde distincts le 21 juin (interne), le 23 juin (archives) et le 27 juin (séance)", () => {
+    const l15 = AN_LEGISLATURE_FACTS[0]!;
+    const get = (k: string) => l15.dates.find((d) => d.kind === k)!;
+    expect(get("mandate-start").date).toBe("2017-06-21");
+    expect(get("mandate-start").display).toBe("internal-only");
+    expect(get("archive-start").date).toBe("2017-06-23");
+    expect(get("archive-start").explanation).toContain("Aucune signification juridique");
+    expect(get("opening-sitting").date).toBe("2017-06-27");
+    expect(publicDates(l15).map((d) => d.date)).not.toContain("2017-06-21");
+  });
+
+  it("15e : l'expiration du 20 juin 2017 s'appuie sur le décret 2012-558", () => {
+    const l15 = AN_LEGISLATURE_FACTS[0]!;
+    const prev = l15.dates.find((d) => d.kind === "previous-election-second-round")!;
+    expect(prev.date).toBe("2012-06-17");
+    expect(prev.sourceIds).toEqual(["decret-2012-558"]);
+    expect(l15.dates.find((d) => d.kind === "previous-powers-expiry")!.date).toBe("2017-06-20");
+    expect(AN_SOURCES.find((s) => s.id === "decret-2012-558")!.url).toContain(
+      "JORFTEXT000025746924"
+    );
+  });
+
+  it("16e : quatre dates de fin distinctes, publication et entrée en vigueur le 10 juin", () => {
+    const l16 = AN_LEGISLATURE_FACTS[1]!;
+    const get = (k: string) => l16.dates.find((d) => d.kind === k)!;
+    expect(get("archive-end").date).toBe("2024-06-09");
+    expect(get("dissolution-decree").date).toBe("2024-06-09");
+    expect(get("dissolution-publication").date).toBe("2024-06-10");
+    expect(get("dissolution-entry-into-force").date).toBe("2024-06-10");
+    expect(get("archive-end").explanation).toContain("n'est ni la date de publication");
+  });
+
+  it("17e : aucune date unique de début de mandat publique, 18 juillet = première séance", () => {
+    const l17 = AN_LEGISLATURE_FACTS[2]!;
+    expect(publicDates(l17).some((d) => d.kind === "mandate-start")).toBe(false);
+    for (const leg of AN_LEGISLATURE_FACTS) {
+      expect(publicDates(leg).some((d) => d.kind === "mandate-start")).toBe(false);
+    }
+    expect(l17.dates.find((d) => d.kind === "opening-sitting")!.date).toBe("2024-07-18");
+  });
+
+  it("17e : le 19 juin 2029 est une échéance conditionnelle", () => {
+    const expiry = AN_LEGISLATURE_FACTS[2]!.dates.find((d) => d.kind === "powers-expiry")!;
+    expect(expiry.date).toBe("2029-06-19");
+    expect(expiry.basis).toBe("derived");
+    expect(expiry.conditional).toContain("absence de dissolution");
+  });
+
+  it("LO 121 pointe vers la version en vigueur", () => {
+    const lo121 = AN_SOURCES.find((s) => s.id === "lo-121")!;
+    expect(lo121.url).toBe("https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000006353288");
+    expect(lo121.label).not.toContain("2023");
   });
 
   it("garde faits et couverture dans des structures distinctes", () => {
@@ -94,6 +153,42 @@ describe("configuration institutionnelle des législatures de l'AN", () => {
       expect(cov).not.toHaveProperty("dates");
       expect(cov).not.toHaveProperty("seats");
     }
+  });
+
+  it("liste la 15e dans la navigation, jeux absents nommés, sans confondre import et activité", () => {
+    for (const cov of AN_LEGISLATURE_COVERAGE) expect(cov.navigation.listed).toBe(true);
+    const c15 = AN_LEGISLATURE_COVERAGE.find((c) => c.number === 15)!;
+    const absent = c15.datasets.filter((d) => d.level === "absent").map((d) => d.dataset);
+    expect(absent).toEqual(
+      expect.arrayContaining(["scrutins", "individual-votes", "official-group-counts"])
+    );
+    expect(c15.navigation.absenceNotice).toContain(
+      "Ce n'est pas une absence d'activité parlementaire"
+    );
+  });
+
+  it("ne porte aucune valeur attendue sans total officiellement attesté", () => {
+    for (const cov of AN_LEGISLATURE_COVERAGE) {
+      for (const ds of cov.datasets) {
+        expect(ds.measured.expected, `${cov.number}/${ds.dataset}`).toBeUndefined();
+      }
+    }
+  });
+
+  it("n'attribue aucun statut global de complétude à une législature", () => {
+    for (const cov of AN_LEGISLATURE_COVERAGE) {
+      expect(cov).not.toHaveProperty("status");
+      expect(cov).not.toHaveProperty("level");
+      expect(cov).not.toHaveProperty("overall");
+    }
+  });
+
+  it("préserve la date de mesure et signale les mesures périmées", () => {
+    const cov = AN_LEGISLATURE_COVERAGE[2]!;
+    expect(cov.datasets.every((d) => d.measuredAt === "2026-10-15")).toBe(true);
+    expect(cov.refresh.onPageCreation).toBe(true);
+    expect(staleDatasets(cov, new Date("2026-10-20T00:00:00Z"))).toEqual([]);
+    expect(staleDatasets(cov, new Date("2026-12-01T00:00:00Z")).length).toBe(cov.datasets.length);
   });
 
   it("n'affirme encore aucun jeu de données « complet »", () => {
@@ -178,6 +273,61 @@ describe("validateLegislatureFacts : cas d'échec", () => {
   });
 });
 
+describe("arbitrages et affichage : cas d'échec", () => {
+  const base = () => clone(AN_LEGISLATURE_FACTS) as LegislatureFacts[];
+
+  it("refuse un arbitrage sans résolution", () => {
+    const facts = base();
+    delete facts[0]!.contradictions[0]!.resolution;
+    expect(validateLegislatureFacts(facts, AN_SOURCES).join()).toContain("sans résolution");
+  });
+
+  it("refuse une date observée affichable ou un début de mandat public", () => {
+    const facts = base();
+    const ms = facts[2]!.dates.find((d) => d.kind === "mandate-start")!;
+    delete ms.display;
+    expect(validateLegislatureFacts(facts, AN_SOURCES).join()).toContain("affichable au public");
+  });
+
+  it("refuse une échéance théorique sans condition", () => {
+    const facts = base();
+    delete facts[2]!.dates.find((d) => d.kind === "powers-expiry")!.conditional;
+    expect(validateLegislatureFacts(facts, AN_SOURCES).join()).toContain("sans condition");
+  });
+
+  it("refuse une dissolution sans entrée en vigueur", () => {
+    const facts = base();
+    facts[1]!.dates = facts[1]!.dates.filter((d) => d.kind !== "dissolution-entry-into-force");
+    expect(validateLegislatureFacts(facts, AN_SOURCES).join()).toContain("sans entrée en vigueur");
+  });
+});
+
+describe("validateLegislatureCoverage : navigation et valeurs attendues", () => {
+  const base = () => clone(AN_LEGISLATURE_COVERAGE) as LegislatureCoverage[];
+
+  it("refuse une valeur attendue sans source officielle", () => {
+    const cov = base();
+    cov[1]!.datasets[0]!.measured.expected = 4105;
+    expect(validateLegislatureCoverage(cov, numbers).join()).toContain("sans source officielle");
+  });
+
+  it("accepte une valeur attendue avec source", () => {
+    const cov = base();
+    cov[1]!.datasets[0]!.measured.expected = 4105;
+    cov[1]!.datasets[0]!.measured.expectedSourceId = "an-archives-16";
+    expect(validateLegislatureCoverage(cov, numbers)).toEqual([]);
+  });
+
+  it("refuse une législature retirée de la navigation ou un jeu absent sans mention", () => {
+    const a = base();
+    a[0]!.navigation.listed = false;
+    expect(validateLegislatureCoverage(a, numbers).join()).toContain("absente de la navigation");
+    const b = base();
+    delete b[0]!.navigation.absenceNotice;
+    expect(validateLegislatureCoverage(b, numbers).join()).toContain("absence d'import");
+  });
+});
+
 describe("validateLegislatureCoverage : cas d'échec", () => {
   const base = () => clone(AN_LEGISLATURE_COVERAGE) as LegislatureCoverage[];
 
@@ -214,7 +364,7 @@ describe("validateLegislatureCoverage : cas d'échec", () => {
     const ds = cov[2]!.datasets[0]!;
     ds.level = "complete";
     ds.completeJustification = "Comparé au total publié par la source.";
-    ds.measured = { count: 100, expected: 100 };
+    ds.measured = { count: 100, expected: 100, expectedSourceId: "an-archives-16" };
     expect(validateLegislatureCoverage(cov, numbers)).toEqual([]);
   });
 

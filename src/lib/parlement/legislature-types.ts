@@ -42,6 +42,8 @@ export interface InstitutionalSource {
  * - `opening-sitting` : première séance, déclaration d'ouverture de la législature ;
  * - `dissolution-decree` : date de signature du décret de dissolution ;
  * - `dissolution-publication` : publication au Journal officiel ;
+ * - `dissolution-entry-into-force` : entrée en vigueur selon la version consolidée ;
+ * - `previous-election-second-round` : second tour de l'élection de l'Assemblée précédente ;
  * - `powers-expiry` : expiration des pouvoirs (LO 121) ;
  * - `archive-end` : fin telle que l'Assemblée l'écrit dans ses archives.
  */
@@ -54,6 +56,8 @@ export type DateKind =
   | "opening-sitting"
   | "dissolution-decree"
   | "dissolution-publication"
+  | "dissolution-entry-into-force"
+  | "previous-election-second-round"
   | "powers-expiry"
   | "archive-end";
 
@@ -67,6 +71,13 @@ export interface InstitutionalDate {
   sourceIds: string[];
   /** Obligatoire pour `derived` (règle et calcul) et `observed` (d'où vient l'observation). */
   explanation?: string;
+  /**
+   * `internal-only` : jamais affichée au public. Obligatoire pour toute date `observed` :
+   * un relevé sur des mandats importés n'est pas un fait institutionnel généralisable.
+   */
+  display?: "public" | "internal-only";
+  /** Condition de validité. Obligatoire pour une échéance théorique (`powers-expiry` en cours). */
+  conditional?: string;
 }
 
 export interface DateContradiction {
@@ -77,6 +88,8 @@ export interface DateContradiction {
   /** Lecture proposée, jamais présentée comme tranchée tant qu'`arbitrated` est faux. */
   proposedReading: string;
   arbitrated: boolean;
+  /** Arbitrage éditorial retenu. Obligatoire quand `arbitrated` est vrai. */
+  resolution?: string;
 }
 
 export type LegislatureStatus = "ended" | "ongoing";
@@ -115,8 +128,11 @@ export interface DatasetCoverage {
   level: CoverageLevel;
   /** Périmètre exact de la mesure, en une phrase. */
   perimeter: string;
-  /** Valeurs mesurées. `expected` n'est renseigné que si une référence externe a été vérifiée. */
-  measured: { count: number; outOf?: number; expected?: number };
+  /**
+   * Valeurs mesurées. `outOf` est un dénominateur de NOTRE base (précisé dans `method`).
+   * `expected` n'existe que pour un total officiellement attesté, avec `expectedSourceId`.
+   */
+  measured: { count: number; outOf?: number; expected?: number; expectedSourceId?: string };
   measuredAt: IsoDate;
   /** Comment la mesure a été faite (requête, comparaison à une source). */
   method: string;
@@ -127,5 +143,19 @@ export interface DatasetCoverage {
 
 export interface LegislatureCoverage {
   number: number;
+  /**
+   * Chaque jeu a son niveau. Il n'existe volontairement aucun niveau global de complétude
+   * d'une législature.
+   */
   datasets: DatasetCoverage[];
+  navigation: {
+    listed: boolean;
+    /**
+     * Obligatoire dès qu'un jeu est absent : l'absence d'import n'est pas une absence
+     * d'activité parlementaire.
+     */
+    absenceNotice?: string;
+  };
+  /** Les mesures sont à relancer à la création des pages et au-delà de `maxAgeDays`. */
+  refresh: { onPageCreation: true; maxAgeDays: number };
 }
