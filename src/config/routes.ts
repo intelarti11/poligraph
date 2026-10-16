@@ -12,6 +12,8 @@ export const ROUTES = {
   dossierDetail: (slug: string) => `/parlement/dossiers/${slug}`,
   groupes: "/parlement/groupes",
   groupeDetail: (slug: string) => `/parlement/groupes/${slug}`,
+  legislatures: "/parlement/assemblee/legislatures",
+  legislature: (n: number) => `/parlement/assemblee/legislatures/${n}`,
 } as const;
 
 /** Stable URLs keep each statistics section server-rendered and indexable. */

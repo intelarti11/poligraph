@@ -95,6 +95,12 @@ const ENTREES: RubriqueEntree[] = [
     detail: "Composition des chambres et équilibres politiques",
     icon: Users,
   },
+  {
+    href: ROUTES.legislatures,
+    title: "Législatures",
+    detail: "L'Assemblée nationale depuis 2017, dates et données disponibles",
+    icon: Calendar,
+  },
 ];
 
 function getPeriodIcon(type: ParliamentaryPeriodType) {

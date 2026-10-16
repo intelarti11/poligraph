@@ -90,6 +90,8 @@ export interface DateContradiction {
   arbitrated: boolean;
   /** Arbitrage éditorial retenu. Obligatoire quand `arbitrated` est vrai. */
   resolution?: string;
+  /** Précision affichable au public, sans vocabulaire de configuration. */
+  publicNote?: string;
 }
 
 export type LegislatureStatus = "ended" | "ongoing";
@@ -139,6 +141,8 @@ export interface DatasetCoverage {
   /** Obligatoire pour `complete` : pourquoi ce périmètre est entièrement couvert. */
   completeJustification?: string;
   note?: string;
+  /** Précision affichable au public, sans vocabulaire interne. */
+  publicNote?: string;
 }
 
 export interface LegislatureCoverage {

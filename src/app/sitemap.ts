@@ -21,6 +21,7 @@ import { getPublicPresidentialCandidates } from "@/lib/data/presidential-candida
 import { getPublicMeasureStatsByCandidacy } from "@/lib/data/measures";
 import { loadPresidentialReaderGuideIndex } from "@/lib/data/presidential-reader-guides";
 import { getPresidentialAffairs } from "@/lib/data/presidentielle-affaires";
+import { indexableLegislatureNumbers } from "@/lib/seo/legislature-robots";
 import {
   presidentialReaderGuidePath,
   presidentialReaderGuidesPath,
@@ -161,6 +162,18 @@ async function buildStaticAndPoliticiansSitemap(): Promise<MetadataRoute.Sitemap
       changeFrequency: "daily",
       priority: 0.8,
     },
+    {
+      url: `${SITE_URL}/parlement/assemblee/legislatures`,
+      lastModified: new Date(),
+      changeFrequency: "monthly",
+      priority: 0.7,
+    },
+    ...indexableLegislatureNumbers().map((n) => ({
+      url: `${SITE_URL}/parlement/assemblee/legislatures/${n}`,
+      lastModified: new Date(),
+      changeFrequency: "monthly" as const,
+      priority: 0.6,
+    })),
     {
       url: `${SITE_URL}/mon-depute`,
       lastModified: new Date(),
