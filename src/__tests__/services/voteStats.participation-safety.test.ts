@@ -298,7 +298,14 @@ describe("agrégats et données persistées hostiles", () => {
     expect(dbMock.statsSnapshot.findUnique).not.toHaveBeenCalled();
   });
 
-  it.each(["AN", "SENAT"] as const)(
+  it("masque les statistiques de groupe AN persistées avant le recalcul contrôlé", async () => {
+    dbMock.parliamentaryGroupStats.findMany.mockClear();
+
+    await expect(voteStatsService.getGroupDynamicsStats("AN")).resolves.toEqual([]);
+    expect(dbMock.parliamentaryGroupStats.findMany).not.toHaveBeenCalled();
+  });
+
+  it.each(["SENAT"] as const)(
     "neutralise averageParticipationPct pour %s même si la ligne vaut 100",
     async (chamber) => {
       dbMock.parliamentaryGroupStats.findMany.mockResolvedValue([

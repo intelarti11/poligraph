@@ -53,6 +53,11 @@ export function aggregateGroupVotes(votes: VoteInput[]): GroupAggregation | null
 
 /**
  * Compute group positions for a single scrutin (call right after vote insertion).
+ *
+ * La jointure passe par le mandat `isCurrent`, donc par le groupe actuel du député. Elle
+ * n'est valable que pour les scrutins de la législature de ce groupe : le filtre
+ * `g.legislature = s.legislature` (AN) empêche d'écrire un vote de la 16e sous un groupe
+ * de la 17e. Voir src/lib/votes/group-attribution.ts.
  */
 export async function computeGroupPositionsForScrutin(scrutinId: string): Promise<number> {
   const rows = await db.$queryRaw<Array<{ groupId: string; position: string; voteCount: bigint }>>`
@@ -61,12 +66,16 @@ export async function computeGroupPositionsForScrutin(scrutinId: string): Promis
       v.position,
       COUNT(*) AS "voteCount"
     FROM "Vote" v
+    JOIN "Scrutin" s ON s.id = v."scrutinId"
     JOIN "Mandate" m ON m."politicianId" = v."politicianId"
       AND m."isCurrent" = true
     JOIN "MandateParliamentary" mp ON mp."mandateId" = m.id
+    JOIN "ParliamentaryGroup" g ON g.id = mp."parliamentaryGroupId"
     WHERE v."scrutinId" = ${scrutinId}
       AND v.position IN ('POUR', 'CONTRE', 'ABSTENTION')
       AND mp."parliamentaryGroupId" IS NOT NULL
+      AND g.chamber = s.chamber
+      AND (s.chamber = 'SENAT' OR g.legislature = s.legislature)
     GROUP BY mp."parliamentaryGroupId", v.position
   `;
 
@@ -120,8 +129,11 @@ export async function computeGroupPositions(opts?: { since?: Date }): Promise<{
     JOIN "Mandate" m ON m."politicianId" = v."politicianId"
       AND m."isCurrent" = true
     JOIN "MandateParliamentary" mp ON mp."mandateId" = m.id
+    JOIN "ParliamentaryGroup" g ON g.id = mp."parliamentaryGroupId"
     WHERE v.position IN ('POUR', 'CONTRE', 'ABSTENTION')
       AND mp."parliamentaryGroupId" IS NOT NULL
+      AND g.chamber = s.chamber
+      AND (s.chamber = 'SENAT' OR g.legislature = s.legislature)
       AND (${since}::timestamptz IS NULL OR s."votingDate" >= ${since})
     GROUP BY v."scrutinId", mp."parliamentaryGroupId", v.position
   `;

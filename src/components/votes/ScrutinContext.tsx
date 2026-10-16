@@ -179,6 +179,10 @@ function EnjeuxContent({ analysis }: { analysis: ScrutinAnalysisData }) {
           Synthèse Mistral - Sources :{" "}
           {ANALYSIS_SOURCE_TYPE_LABELS[analysis.sourceType as AnalysisSourceType]}
         </p>
+        <p className="text-xs text-muted-foreground mt-1">
+          Les groupes cités reposent sur l&apos;appartenance actuelle des députés, non datée au
+          moment du vote.
+        </p>
       </CardContent>
     </Card>
   );

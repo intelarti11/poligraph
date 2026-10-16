@@ -118,6 +118,7 @@ describe("frontières publiques des groupes parlementaires", () => {
   });
 
   it("sélectionne les attributs réels nécessaires aux cartes de scrutins", async () => {
+    dbMock.parliamentaryGroup.findUnique.mockResolvedValue({ chamber: "SENAT", legislature: null });
     dbMock.scrutinGroupPosition.findMany.mockResolvedValue([]);
 
     await getGroupKeyVotes("group-1");

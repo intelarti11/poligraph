@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { callMistral, extractMistralText, parseMistralJSON } from "@/lib/api/mistral";
 import { escapeXmlText } from "@/lib/text/escape-xml";
+import { isGroupAttributionReliable } from "@/lib/votes/group-attribution";
 import { resolveSubstanceSources } from "@/services/scrutin-policy-title/substance-resolver";
 import { assessCoherence, type CoherenceVerdict } from "@/services/scrutin-substance/coherence";
 import type { SubstanceTextBlock } from "@/services/scrutin-policy-title/types";
@@ -199,8 +200,12 @@ export async function generateScrutinAnalysis(
       votesFor: true,
       votesAgainst: true,
       votesAbstain: true,
+      chamber: true,
+      legislature: true,
       groupPositions: {
-        include: { group: { select: { name: true, code: true } } },
+        include: {
+          group: { select: { name: true, code: true, chamber: true, legislature: true } },
+        },
       },
       debateTranscripts: {
         take: 1,
@@ -238,13 +243,17 @@ export async function generateScrutinAnalysis(
         votesFor: s.votesFor,
         votesAgainst: s.votesAgainst,
         votesAbstain: s.votesAbstain,
-        groupPositions: s.groupPositions.map((gp) => ({
-          groupName: gp.group.name,
-          position: gp.position,
-          forCount: gp.forCount,
-          againstCount: gp.againstCount,
-          abstainCount: gp.abstainCount,
-        })),
+        // Positions de groupe : uniquement celles dont le groupe est celui de la législature
+        // du scrutin, sinon le modèle commente un vote de la 16e avec des groupes de la 17e.
+        groupPositions: s.groupPositions
+          .filter((gp) => isGroupAttributionReliable(s, gp.group))
+          .map((gp) => ({
+            groupName: gp.group.name,
+            position: gp.position,
+            forCount: gp.forCount,
+            againstCount: gp.againstCount,
+            abstainCount: gp.abstainCount,
+          })),
         substanceBlocks: resolved.blocks,
         debateExcerpt,
         dossierContext: s.dossierLegislatif?.title ?? null,

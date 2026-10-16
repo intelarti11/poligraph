@@ -18,7 +18,6 @@ import {
   type MinistreComparisonData,
   type PartyComparisonData,
   type GroupComparisonData,
-  type PartyVoteComparisonRow,
 } from "@/lib/data/compare";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 
@@ -134,7 +133,6 @@ type ComparisonData =
   | {
       left: PartyComparisonData;
       right: PartyComparisonData;
-      voteComparison: PartyVoteComparisonRow[];
     }
   | {
       left: GroupComparisonData;
@@ -158,12 +156,8 @@ function ComparisonContent({
       return <SenateursComparison left={d.left} right={d.right} />;
     }
     case "partis": {
-      const d = data as {
-        left: PartyComparisonData;
-        right: PartyComparisonData;
-        voteComparison: PartyVoteComparisonRow[];
-      };
-      return <PartisComparison left={d.left} right={d.right} voteComparison={d.voteComparison} />;
+      const d = data as { left: PartyComparisonData; right: PartyComparisonData };
+      return <PartisComparison left={d.left} right={d.right} />;
     }
     case "groupes": {
       const d = data as { left: GroupComparisonData; right: GroupComparisonData };
