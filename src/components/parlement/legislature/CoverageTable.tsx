@@ -1,6 +1,7 @@
 import { formatIsoDateFr } from "@/lib/parlement/format-iso-date";
 import {
   COVERAGE_LEVEL_LABELS,
+  DATASET_DESCRIPTIONS,
   DATASET_LABELS,
   coverageToStatus,
 } from "@/lib/parlement/legislature-labels";
@@ -16,7 +17,9 @@ interface CoverageTableProps {
 /**
  * CoverageTable : ce que PoliGraph a importé, jeu par jeu, avec la date de la mesure.
  * Chaque ligne a son propre niveau. Il n'y a ni total ni niveau global : un jeu complet
- * ne rend pas les autres complets.
+ * ne rend pas les autres complets. Les chiffres sont des comptages de PoliGraph, jamais
+ * des statistiques de l'Assemblée. Le périmètre méthodologique (`ds.perimeter`) n'est pas
+ * affiché : seule la description publique l'est.
  */
 export function CoverageTable({ coverage, caption, className }: CoverageTableProps) {
   return (
@@ -46,7 +49,7 @@ export function CoverageTable({ coverage, caption, className }: CoverageTablePro
                 <th scope="row" className="py-2 pr-3 text-left font-normal">
                   <span className="font-medium">{DATASET_LABELS[ds.dataset]}</span>
                   <span className="mt-1 block text-xs text-muted-foreground">
-                    {ds.perimeter}
+                    {DATASET_DESCRIPTIONS[ds.dataset]}
                     {ds.publicNote ? ` ${ds.publicNote}` : ""}
                   </span>
                 </th>
@@ -82,6 +85,11 @@ export function CoverageTable({ coverage, caption, className }: CoverageTablePro
           </tbody>
         </table>
       </div>
+      <p className="mt-3 text-sm text-muted-foreground">
+        Ces nombres sont des comptages faits par PoliGraph sur ses propres données, à la date
+        indiquée pour chaque ligne. Ils ne reprennent aucune statistique officielle de
+        l&apos;Assemblée nationale.
+      </p>
     </div>
   );
 }

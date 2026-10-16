@@ -50,6 +50,21 @@ export const DATASET_LABELS: Record<DatasetKey, string> = {
   "computed-group-positions": "Positions de groupe calculées",
 };
 
+/**
+ * Description publique de chaque jeu. Le périmètre méthodologique exact (identifiants,
+ * requêtes, origines d'import) reste dans `DatasetCoverage.perimeter` et `method`,
+ * réservés à la configuration et à l'audit : il ne s'affiche jamais sur une page citoyenne.
+ */
+export const DATASET_DESCRIPTIONS: Record<DatasetKey, string> = {
+  scrutins: "Scrutins publics de l'Assemblée nationale repris dans PoliGraph.",
+  "individual-votes": "Vote de chaque député sur les scrutins importés.",
+  "official-group-counts": "Décompte par groupe publié par l'Assemblée avec chaque scrutin.",
+  "deputy-mandates": "Mandats de député enregistrés dans PoliGraph pour la période.",
+  "referenced-groups": "Groupes parlementaires enregistrés dans PoliGraph.",
+  "dated-group-membership": "Dates d'entrée et de sortie des députés dans leur groupe.",
+  "computed-group-positions": "Position de chaque groupe sur un scrutin, calculée par PoliGraph.",
+};
+
 export const COVERAGE_LEVEL_LABELS: Record<CoverageLevel, string> = {
   complete: "Complet",
   partial: "Partiel",

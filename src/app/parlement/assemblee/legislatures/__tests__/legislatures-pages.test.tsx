@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { AN_LEGISLATURE_COVERAGE } from "@/config/legislatures";
 import { render, screen, within } from "@testing-library/react";
 
 vi.mock("next/navigation", () => ({
@@ -103,4 +104,33 @@ describe("/parlement/assemblee/legislatures/[n]", () => {
       unmount();
     }
   });
+
+  it("17e : première séance sourcée, sans « a commencé depuis »", async () => {
+    render(await LegislaturePage(params("17")));
+    expect(
+      screen.getByText(/est en cours\. Sa première séance a eu lieu le 18 juillet 2024\./)
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/a commencé depuis/);
+  });
+
+  it.each(["15", "16", "17"])(
+    "%s : le tableau n'affiche pas le périmètre interne et date les mesures de PoliGraph",
+    async (n) => {
+      render(await LegislaturePage(params(n)));
+      const coverage = AN_LEGISLATURE_COVERAGE.find((c) => c.number === Number(n))!;
+      const table = screen.getByRole("table");
+      for (const ds of coverage.datasets) {
+        expect(ds.perimeter.length).toBeGreaterThan(0);
+        expect(table.textContent).not.toContain(ds.perimeter);
+        expect(table.textContent).not.toMatch(/-leg1\d|importé\(s\) toutes origines|externalId/);
+      }
+      expect(within(table).getAllByText("15 octobre 2026")).toHaveLength(coverage.datasets.length);
+      expect(
+        screen.getByText(/comptages faits par PoliGraph sur ses propres données/)
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/aucune statistique officielle de l'Assemblée nationale/)
+      ).toBeInTheDocument();
+    }
+  );
 });

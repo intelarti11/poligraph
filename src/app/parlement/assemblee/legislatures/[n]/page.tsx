@@ -10,8 +10,10 @@ import {
   LegislatureSelector,
 } from "@/components/parlement/legislature";
 import { ROUTES } from "@/config/routes";
+import type { LegislatureFacts } from "@/lib/parlement/legislature-types";
 import { legislatureRobotsMetadata } from "@/lib/seo/legislature-robots";
 import { staleDatasets } from "@/lib/parlement/legislature-config";
+import { formatIsoDateFr } from "@/lib/parlement/format-iso-date";
 import {
   LEGISLATURE_NUMBERS,
   coverageToStatus,
@@ -47,14 +49,24 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
+/** Première séance sourcée de la législature, ou `null` si la configuration n'en porte pas. */
+function openingSittingDate(facts: LegislatureFacts): string | null {
+  return facts.dates.find((d) => d.kind === "opening-sitting")?.date ?? null;
+}
+
 function summarySentence(
   number: number,
   period: string,
   status: "ended" | "ongoing",
-  cause: "powers-expiry" | "dissolution" | null
+  cause: "powers-expiry" | "dissolution" | null,
+  openingSitting: string | null
 ): string {
   const label = `La ${ordinalLegislature(number)} législature de l'Assemblée nationale`;
-  if (status === "ongoing") return `${label} est en cours. Elle a commencé ${period}.`;
+  if (status === "ongoing") {
+    return openingSitting
+      ? `${label} est en cours. Sa première séance a eu lieu le ${formatIsoDateFr(openingSitting)}.`
+      : `${label} est en cours.`;
+  }
   const end =
     cause === "dissolution"
       ? "par une dissolution"
@@ -108,7 +120,13 @@ export default async function LegislaturePage({ params }: PageProps) {
           {label} de l&apos;Assemblée nationale
         </h1>
         <p className="text-muted-foreground">
-          {summarySentence(facts.number, view.period, facts.status, facts.endCause)}
+          {summarySentence(
+            facts.number,
+            view.period,
+            facts.status,
+            facts.endCause,
+            openingSittingDate(facts)
+          )}
         </p>
         {facts.status === "ended" && ongoing !== undefined && (
           <p className="mt-2 text-sm">
@@ -160,8 +178,8 @@ export default async function LegislaturePage({ params }: PageProps) {
         <CoverageTable coverage={coverage} caption={`Jeux de données de la ${label}`} />
         {stale.length > 0 && (
           <p className="mt-3 text-sm text-muted-foreground">
-            Une partie de ces mesures a plus de {coverage.refresh.maxAgeDays} jours et doit être
-            actualisée avant d&apos;être citée.
+            Une partie de ces mesures date de plus de {coverage.refresh.maxAgeDays} jours : les
+            chiffres ont pu évoluer depuis.
           </p>
         )}
         <p className="mt-3 text-sm text-muted-foreground">
