@@ -607,10 +607,10 @@ déjà chargées, il ne lit ni `Mandate.isCurrent`, ni `currentPartyId`, ni
 
 | Statut                 | Contenu                                                                                                          | Quand                                                                     |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ------------------- |
-| `ATTESTED_GROUP`       | `groupRef`, `level` (`BOTH`, `SCRUTIN_ONLY`, `INTERVAL_ONLY`), `evidence[]`, `viaLink?`                          | Voir section 5                                                            |
+| `ATTESTED_GROUP`       | `groupRef`, `level` (`BOTH`, `SCRUTIN_ONLY`, `INTERVAL_ONLY`), `evidence[]`, `viaLink?`, `diagnostics[]`         | Voir section 5                                                            |
 | `ATTESTED_NON_INSCRIT` | idem, avec `transitional: boolean                                                                                | null`                                                                     | Organe `NI` attesté |
 | `UNKNOWN`              | `reason: NO_RECORD`                                                                                              | Aucun enregistrement. Jamais interprété comme non-inscription             |
-| `CONFLICT`             | `candidates[]` avec leurs preuves                                                                                | E1 et E2 divergent sans lien validé, ou deux organes valides le même jour |
+| `CONFLICT`             | `candidates[]` avec leurs preuves, `diagnostics[]`                                                               | E1 et E2 divergent sans lien validé, ou deux organes valides le même jour |
 | `INSUFFICIENT`         | `reason` : `PO0`, `UNKNOWN_ORGAN`, `EDGE_DAY`, `START_DATE_UNKNOWN`, `END_STATE_UNKNOWN`, `OPEN_BEYOND_SNAPSHOT` | Preuve présente mais inutilisable                                         |
 | `UNRESOLVED_IDENTITY`  | `reason` : `NO_OFFICIAL_ID`, `AMBIGUOUS_LINK`, `NO_LINK`                                                         | Aucun acteur officiel établi                                              |
 
@@ -652,6 +652,31 @@ deux intervalles et ne déduit jamais une appartenance passée d'une appartenanc
 9. **Vote d'un acteur dont le mandat de siège ne couvre pas la date** : `CONFLICT`, à signaler à
    l'import (mesuré 0 cas, section 2.4).
 
+10. **Vote valide et preuve d'intervalle indéterminée (E2 indéterminé)** [PR 1, revue]. Une
+    attestation valide est une preuve directe du classement publié dans le scrutin : un intervalle
+    qu'on ne sait pas placer ne l'invalide pas. Il ne disparaît pas non plus : il est porté par un
+    diagnostic structuré `E2_INDETERMINATE`, qui garde, de façon déterministe, la référence, le groupe
+    et le motif de chaque enregistrement, et un drapeau `couldContradict`. Un enregistrement peut
+    contredire quand il nomme un autre groupe que celui du vote, sans décision de continuité
+    validée (un organe inconnu peut contredire). Un enregistrement indéterminé du même groupe ne fait
+    que s'accorder : il est signalé, il ne retient rien.
+
+    | #   | Vote (E1)                        | Intervalle valide (E2)         | Intervalle indéterminé                     | Résultat                                                      |
+    | --- | -------------------------------- | ------------------------------ | ------------------------------------------ | ------------------------------------------------------------- |
+    | 1   | valide                           | aucun pertinent                | aucun                                      | `ATTESTED`, `SCRUTIN_ONLY`, aucun diagnostic                  |
+    | 2   | valide                           | aucun                          | un ou plusieurs                            | `ATTESTED`, `SCRUTIN_ONLY`, diagnostic `E2_INDETERMINATE`     |
+    | 3   | valide                           | identique                      | aucun, ou qui ne peut que s'accorder       | `ATTESTED`, `BOTH` (diagnostic si indéterminé du même groupe) |
+    | 4   | valide                           | identique                      | l'un d'eux pourrait nommer un autre groupe | `ATTESTED`, `SCRUTIN_ONLY`, diagnostic, corroboration écartée |
+    | 5   | valide                           | autre groupe, sans lien validé | quelconque                                 | `CONFLICT`, avec le diagnostic                                |
+    | 6   | valide                           | plusieurs groupes distincts    | quelconque                                 | `CONFLICT`, avec le diagnostic                                |
+    | 7   | invalide (`PO0`, organe inconnu) | quelconque                     | quelconque                                 | `INSUFFICIENT`, aucun repli sur E2                            |
+    | 8   | absent                           | quelconque                     | un ou plusieurs                            | `INSUFFICIENT` (politique prudente inchangée)                 |
+
+    Au cas 4, le résultat garde `withheldCorroboration` : les références des intervalles valides qui
+    s'accordent avec le vote mais n'ont pas été comptées comme corroboration. Les cas 1 et 2 donnent
+    le même niveau et ne sont pas confondus : seul le cas 2 dit qu'une preuve existe qu'on n'a pas
+    pu placer.
+
 ### 6.4 Biais de survivance
 
 Le résolveur est indexé sur l'acteur officiel et sur la date, pas sur `Mandate.isCurrent`. Les
@@ -678,6 +703,7 @@ configuration donnent le même résultat, octet pour octet.
 | Règles d'exclusion et motifs | `exclusionRulesVersion`, `config.exclusion`    | liste des règles, paramètres, motifs                                      |
 | Seuil de publication         | `config.publication`                           | `maxExcludedPerGroup = 0`                                                 |
 | Périmètre                    | `config.scope`                                 | flux et législatures                                                      |
+| Entrées préparées            | `preparedInputsHash`                           | votes, identités, attestations et borne des fins ouvertes, hachés (6.7)   |
 | Code                         | `codeVersion`                                  | SHA git, enregistré mais **hors** de `inputHash` (voir plus bas)          |
 
 ```sql
@@ -690,6 +716,7 @@ CREATE TABLE IF NOT EXISTS "HistoricalResolutionRun" (
   "linkDecisionCutoff"       BIGINT NOT NULL,
   "continuityDecisionCutoff" BIGINT NOT NULL,
   "decisionsHash"            TEXT NOT NULL,
+  "preparedInputsHash"       TEXT NOT NULL,
   "parserVersion"            TEXT NOT NULL,
   "resolverVersion"          TEXT NOT NULL,
   "dateSemanticsVersion"     TEXT NOT NULL,
@@ -762,8 +789,8 @@ Forme de la configuration (JSON canonique, hachée en `configHash`) :
 ```
 
 **`inputHash`.** SHA-256 de la sérialisation canonique de `{snapshotPins, snapshotStateHashes,
-linkDecisionCutoff, continuityDecisionCutoff, decisionsHash, parserVersion, resolverVersion,
-configHash}`. La colonne est `UNIQUE` : les mêmes entrées ne créent pas un second run. Le SHA git
+linkDecisionCutoff, continuityDecisionCutoff, decisionsHash, preparedInputsHash, parserVersion,
+resolverVersion, configHash}`. La colonne est `UNIQUE` : les mêmes entrées ne créent pas un second run. Le SHA git
 n'y figure pas, volontairement : deux commits qui donnent le même résultat ne doivent pas produire
 deux runs. En contrepartie, une logique modifiée sans nouveau `resolverVersion` est rattrapée par
 les tests de référence (voir plus bas), qui épinglent un `outputHash` sur des données de test.
@@ -820,6 +847,47 @@ dérivé du premier par six modifications connues. Scrutins d'essai avec leurs a
 T1 à T9 et T14 ont une version qui ne porte que sur des fonctions pures et des données d'essai : ni
 base ni réseau. Elles entrent dans la première PR (section 14). T10 exige l'analyseur, T11 et T12 la
 base de préproduction, T13 les fichiers : ils viennent avec les phases indiquées.
+
+### 6.7 Frontière de confiance de `executeRun` [PR 1, revue]
+
+`executeRun` reçoit deux sortes d'entrées, qui ne sont pas traitées de la même façon.
+
+**Lu et vérifié ici.** Les affiliations, les organes et les décisions de continuité sont lus par la
+fonction elle-même, à travers les épingles (`stateAt`, `effectiveDecisions`). Avant de calculer :
+chaque enregistrement du snapshot épinglé doit avoir pour empreinte celle qu'il porte, l'ensemble
+doit avoir l'empreinte d'état épinglée, et la version du résolveur épinglée doit être celle du code.
+
+**Préparé ailleurs, déclaré et vérifié contre les épingles.** Les votes, avec leurs identités et leurs
+attestations, sont préparés par la couche qui assemblera un run (phase 5F). La fonction ne peut ouvrir
+ni fichier, ni journal, ni table : elle ne peut pas vérifier d'où ils viennent. Elle exige donc :
+
+- une **déclaration de provenance** (`InputProvenance`) : les flux d'où viennent les attestations
+  avec le numéro de snapshot lu et son empreinte d'état, le plafond de décisions d'identité, et les
+  décisions d'identité en vigueur à ce plafond ;
+- que cette déclaration **égale les épingles** : mêmes flux (tous ceux que le run épingle, sauf le flux
+  de preuves lu ici), mêmes numéros, mêmes empreintes, même plafond ;
+- que les décisions d'identité déclarées, avec les décisions de continuité du magasin, aient pour
+  empreinte `decisionsHash` ;
+- que les entrées préparées elles-mêmes (votes, identités, attestations, borne des fins ouvertes)
+  aient pour empreinte `preparedInputsHash`, épinglée dans le run.
+
+Un écart donne une liste de codes stables (`checkRunInputs`) et un refus (`RunInputContractError`).
+
+| Changement                                                                         | Effet                                                                                 |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Un vote, une identité ou une attestation modifiés **après** le calcul des épingles | `PREPARED_INPUTS_HASH_MISMATCH`, refus                                                |
+| Les mêmes modifications **avant** le calcul des épingles                           | `preparedInputsHash` différent, donc un autre run : jamais un rejeu identique         |
+| Un enregistrement du magasin altéré sans que son empreinte ait changé              | `RECORD_HASH_MISMATCH`                                                                |
+| Un magasin qui a perdu un enregistrement, ou lu à un autre snapshot                | `PINNED_STATE_HASH_MISMATCH`                                                          |
+| Un snapshot ou une décision postérieurs, hors des épingles                         | Sans effet : c'est le rejeu T1                                                        |
+| Un run épinglé sur une autre version du résolveur                                  | `RESOLVER_VERSION_MISMATCH` : l'ancien calcul ne se rejoue pas avec une autre logique |
+
+**Ce qui reste de confiance, et incombe à la couche d'assemblage** : que la déclaration soit vraie. Elle
+se construit à partir des objets mêmes avec lesquels les votes ont été lus, jamais à partir de
+constantes, et les épingles se calculent depuis les entrées préparées une fois qu'elles sont
+définitives. Une couche qui mentirait dans sa déclaration ne peut pas être détectée par cette
+fonction. Cette frontière est la raison pour laquelle l'assemblage est une phase à part, avec ses
+propres critères d'acceptation.
 
 ## 7. Sémantique des dates et incertitudes restantes
 
@@ -1290,13 +1358,15 @@ pas toucher `an-organes.ts`.
 
 La PR livrée suit 14.1, avec ces différences, toutes demandées par la validation ou nées du test :
 
-| Écart                                                                        | Raison                                                                                                                                                                                       |
-| ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `exclusion.ts`, `publication.ts`, `identity.ts`, `run-execution.ts` ajoutés  | La décision d'exclusion (analyse) et la décision de publication (éditorial) sont séparées, et les tests de déterminisme ont besoin d'une exécution de run pour vérifier des résultats métier |
-| `versioning.ts` porte aussi les journaux de décisions (`effectiveDecisions`) | Le test T5 exige un plafond de décision appliqué sans horloge                                                                                                                                |
-| `transitional` vaut `boolean \| null`                                        | Sans enregistrement de non-inscription, ou sans date de formation des groupes, on ne peut pas l'affirmer : `null`, pas `false`                                                               |
-| `RunConfig.evidence.placeholderOrganRefs`                                    | La liste des références de remplissage (`PO0`) est une donnée du run, pas une constante cachée dans le résolveur                                                                             |
-| Règle d'exclusion `DATE_UNDETERMINED` ajoutée à la configuration d'exemple   | La validation de complétude a révélé que `START_DATE_UNKNOWN` et `END_STATE_UNKNOWN` n'étaient couverts par aucune règle de l'exemple de 6.5                                                 |
-| Empreinte d'état : lignes en tableaux JSON, plus `genre\|clé\|rawHash`       | Un séparateur dans une clé ne doit pas pouvoir confondre deux états                                                                                                                          |
-| `__fixtures__/golden.ts`                                                     | Empreintes de référence par version du résolveur (T14)                                                                                                                                       |
-| Aucun type ne reprend un nom de table ou de colonne                          | La représentation SQL reste à décider en 5B. Les intervalles de snapshots sont modélisés comme un concept (`RecordVersion`), pas comme un schéma                                             |
+| Écart                                                                                              | Raison                                                                                                                                                                                       |
+| -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `exclusion.ts`, `publication.ts`, `identity.ts`, `run-execution.ts` ajoutés                        | La décision d'exclusion (analyse) et la décision de publication (éditorial) sont séparées, et les tests de déterminisme ont besoin d'une exécution de run pour vérifier des résultats métier |
+| `versioning.ts` porte aussi les journaux de décisions (`effectiveDecisions`)                       | Le test T5 exige un plafond de décision appliqué sans horloge                                                                                                                                |
+| `transitional` vaut `boolean \| null`                                                              | Sans enregistrement de non-inscription, ou sans date de formation des groupes, on ne peut pas l'affirmer : `null`, pas `false`                                                               |
+| `RunConfig.evidence.placeholderOrganRefs`                                                          | La liste des références de remplissage (`PO0`) est une donnée du run, pas une constante cachée dans le résolveur                                                                             |
+| Règle d'exclusion `DATE_UNDETERMINED` ajoutée à la configuration d'exemple                         | La validation de complétude a révélé que `START_DATE_UNKNOWN` et `END_STATE_UNKNOWN` n'étaient couverts par aucune règle de l'exemple de 6.5                                                 |
+| Empreinte d'état : lignes en tableaux JSON, plus `genre\|clé\|rawHash`                             | Un séparateur dans une clé ne doit pas pouvoir confondre deux états                                                                                                                          |
+| `RunPins.preparedInputsHash`, `InputProvenance`, `checkRunInputs`, `RunInputContractError` ajoutés | Revue de la PR : les votes et identités sont préparés hors de la fonction, la frontière est écrite (6.7) et vérifiée contre les épingles                                                     |
+| Diagnostic `E2_INDETERMINATE` et `RESOLVER_VERSION` portée à `2`                                   | Revue de la PR : un intervalle indéterminé ne s'efface plus derrière un vote valide (6.3, règle 10). La logique change, donc la version                                                      |
+| `__fixtures__/golden.ts`                                                                           | Empreintes de référence par version du résolveur (T14)                                                                                                                                       |
+| Aucun type ne reprend un nom de table ou de colonne                                                | La représentation SQL reste à décider en 5B. Les intervalles de snapshots sont modélisés comme un concept (`RecordVersion`), pas comme un schéma                                             |
