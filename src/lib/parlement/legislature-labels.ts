@@ -51,18 +51,21 @@ export const DATASET_LABELS: Record<DatasetKey, string> = {
 };
 
 /**
- * Description publique de chaque jeu. Le périmètre méthodologique exact (identifiants,
+ * Description publique de chaque jeu. Elle reste vraie à tout niveau de couverture : elle ne
+ * dit jamais que la donnée est présente, c'est le niveau et la `publicNote` qui le disent.
+ * Le périmètre méthodologique exact (identifiants,
  * requêtes, origines d'import) reste dans `DatasetCoverage.perimeter` et `method`,
  * réservés à la configuration et à l'audit : il ne s'affiche jamais sur une page citoyenne.
  */
 export const DATASET_DESCRIPTIONS: Record<DatasetKey, string> = {
-  scrutins: "Scrutins publics de l'Assemblée nationale repris dans PoliGraph.",
-  "individual-votes": "Vote de chaque député sur les scrutins importés.",
+  scrutins: "Votes organisés en séance à l'Assemblée nationale.",
+  "individual-votes": "Position de chaque député sur un scrutin.",
   "official-group-counts": "Décompte par groupe publié par l'Assemblée avec chaque scrutin.",
-  "deputy-mandates": "Mandats de député enregistrés dans PoliGraph pour la période.",
-  "referenced-groups": "Groupes parlementaires enregistrés dans PoliGraph.",
+  "deputy-mandates": "Mandats de député sur la période de la législature.",
+  "referenced-groups": "Groupes parlementaires de la législature.",
   "dated-group-membership": "Dates d'entrée et de sortie des députés dans leur groupe.",
-  "computed-group-positions": "Position de chaque groupe sur un scrutin, calculée par PoliGraph.",
+  "computed-group-positions":
+    "Positions de chaque groupe sur les scrutins, calculées par PoliGraph.",
 };
 
 export const COVERAGE_LEVEL_LABELS: Record<CoverageLevel, string> = {
@@ -71,6 +74,16 @@ export const COVERAGE_LEVEL_LABELS: Record<CoverageLevel, string> = {
   unverified: "Non vérifié",
   absent: "Pas encore importé",
   withheld: "Non publié",
+};
+
+/**
+ * Infobulle des niveaux qui partagent le statut `pending` : sans cela, « Non publié » hériterait
+ * de « Donnée pas encore importée », ce qui est faux (la donnée existe, sa publication est suspendue).
+ */
+export const COVERAGE_LEVEL_DESCRIPTIONS: Partial<Record<CoverageLevel, string>> = {
+  absent: "PoliGraph ne possède pas encore ces données.",
+  withheld:
+    "PoliGraph possède des données mais ne les affiche pas, leur fiabilité étant insuffisante.",
 };
 
 export function coverageToStatus(level: CoverageLevel): DataStatusKind {

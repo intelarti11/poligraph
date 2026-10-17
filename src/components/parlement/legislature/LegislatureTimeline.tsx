@@ -15,6 +15,8 @@ export interface TimelineLegislature {
   status: DataStatusKind;
   /** Jeu de données concerné : « Composition », « Votes individuels »… */
   statusScope: string;
+  /** Libellé précis du niveau (« Pas encore importé », « Non publié »), sinon celui du statut. */
+  statusLabel?: string;
   href: string;
 }
 
@@ -96,6 +98,7 @@ export function LegislatureTimeline({
               <DataStatus
                 status={item.status}
                 scope={item.statusScope}
+                label={item.statusLabel}
                 showScope
                 className="mt-auto"
               />

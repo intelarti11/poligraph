@@ -7,6 +7,7 @@ import { CollectionPageJsonLd } from "@/components/seo/JsonLd";
 import { LegislatureTimeline } from "@/components/parlement/legislature";
 import { ROUTES } from "@/config/routes";
 import {
+  COVERAGE_LEVEL_LABELS,
   LEGISLATURE_NUMBERS,
   coverageToStatus,
   datasetLevel,
@@ -46,6 +47,7 @@ export default function LegislaturesPage() {
     endYear: endYear(v),
     startEvent: v.facts.endCause === "dissolution" ? "Terminée par une dissolution" : undefined,
     status: coverageToStatus(datasetLevel(v.coverage, "scrutins")),
+    statusLabel: COVERAGE_LEVEL_LABELS[datasetLevel(v.coverage, "scrutins")],
     statusScope: "Scrutins publics",
     href: ROUTES.legislature(v.facts.number),
   }));
