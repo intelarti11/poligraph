@@ -16,7 +16,11 @@ import type { RunConfig } from "./types";
  * Version of the resolution logic. Bump it on ANY change of what a resolution can answer. The
  * reference test (`golden.ts`) fails when the logic changes without a new entry.
  */
-export const RESOLVER_VERSION = "1";
+export const RESOLVER_VERSION = "2";
+// History, one line per version. Never rewrite a line.
+// 1: first resolver.
+// 2: a valid vote no longer ignores interval evidence that cannot be placed (E2 indeterminate): it
+//    is reported as a diagnostic, and corroboration is withheld when it could name another group.
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -133,6 +137,12 @@ export interface RunPins {
   continuityDecisionCutoff: number;
   /** Hash of the decisions in force at those cutoffs. */
   decisionsHash: string;
+  /**
+   * Hash of the prepared inputs the run was given: the votes with their identities and
+   * attestations, and the bound of open end dates. `executeRun` does not load these, so this is how
+   * a run proves they are the ones it was pinned on (see `run-execution.ts`, trust boundary).
+   */
+  preparedInputsHash: string;
   parserVersion: string;
   resolverVersion: string;
 }
@@ -241,4 +251,50 @@ export function derivedRunStatus(pinnedStatuses: readonly SnapshotStatus[]): Der
   if (pinnedStatuses.includes("REVOKED")) return "INVALIDATED_BY_REVOCATION";
   if (pinnedStatuses.includes("QUARANTINED")) return "TO_REVIEW";
   return "OK";
+}
+
+// ---------------------------------------------------------------------------
+// Is it the same run?
+// ---------------------------------------------------------------------------
+
+export interface RunIdentity {
+  pins: RunPins;
+  config: RunConfig;
+}
+
+/**
+ * What differs between two runs, by name. Empty when and only when they have the same identity.
+ * A change that is not pinned (another vote, another identity, another bound) shows up here
+ * through `preparedInputsHash`: it can never pass for an identical replay.
+ */
+export function runDifferences(a: RunIdentity, b: RunIdentity): string[] {
+  const differences: string[] = [];
+  const compareRecord = (
+    label: string,
+    left: Readonly<Record<string, number | string>>,
+    right: Readonly<Record<string, number | string>>
+  ): void => {
+    for (const stream of [...new Set([...Object.keys(left), ...Object.keys(right)])].sort()) {
+      if (left[stream] !== right[stream]) differences.push(`${label}:${stream}`);
+    }
+  };
+  compareRecord("snapshotPins", a.pins.snapshotPins, b.pins.snapshotPins);
+  compareRecord("snapshotStateHashes", a.pins.snapshotStateHashes, b.pins.snapshotStateHashes);
+  for (const field of [
+    "linkDecisionCutoff",
+    "continuityDecisionCutoff",
+    "decisionsHash",
+    "preparedInputsHash",
+    "parserVersion",
+    "resolverVersion",
+  ] as const) {
+    if (a.pins[field] !== b.pins[field]) differences.push(field);
+  }
+  if (configHash(a.config) !== configHash(b.config)) differences.push("config");
+  return differences;
+}
+
+/** A replay is identical only if nothing that the run is pinned on has changed. */
+export function isIdenticalReplay(a: RunIdentity, b: RunIdentity): boolean {
+  return runDifferences(a, b).length === 0;
 }

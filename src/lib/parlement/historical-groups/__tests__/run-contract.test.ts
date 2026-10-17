@@ -21,6 +21,7 @@ const pins: RunPins = {
   linkDecisionCutoff: 0,
   continuityDecisionCutoff: 1,
   decisionsHash: "decisions-1",
+  preparedInputsHash: "prepared-1",
   parserVersion: "parser-1",
   resolverVersion: RESOLVER_VERSION,
 };
@@ -141,7 +142,8 @@ describe("configHash and computeInputHash", () => {
     ["the continuity cutoff", { continuityDecisionCutoff: 2 }],
     ["the decisions hash", { decisionsHash: "decisions-2" }],
     ["the parser version", { parserVersion: "parser-2" }],
-    ["the resolver version", { resolverVersion: "2" }],
+    ["the resolver version", { resolverVersion: "other-version" }],
+    ["the prepared inputs", { preparedInputsHash: "prepared-2" }],
   ])("changes the identity of the run when %s changes", (_label, change) => {
     expect(computeInputHash({ ...pins, ...change }, config)).not.toBe(
       computeInputHash(pins, config)

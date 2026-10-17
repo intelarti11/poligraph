@@ -10,14 +10,21 @@
  * after a first run has been computed on snapshot 1: the retroactive correction the architecture
  * is built to survive.
  */
-import { computeStateHash, hashOf } from "../canonical";
+import { hashOf } from "../canonical";
 import {
   defaultRunConfig,
   hashDecisionsInForce,
   RESOLVER_VERSION,
   type RunPins,
 } from "../run-contract";
-import type { EvidenceStore, RunSpec, RunVoteInput } from "../run-execution";
+import {
+  evidenceStateHash,
+  withPreparedInputsHash,
+  type EvidenceStore,
+  type PreparedInputs,
+  type RunSpec,
+  type RunVoteInput,
+} from "../run-execution";
 import {
   applySnapshot,
   effectiveDecisions,
@@ -37,6 +44,9 @@ import {
 } from "../types";
 
 export const STREAM = "AN_AMO30";
+/** The stream the attestations of the votes come from. Opaque here: the assembling layer owns it. */
+export const SCRUTIN_STREAM = "AN_SCRUTINS_L16";
+export const SCRUTIN_STATE_HASH = "scrutins-l16-state-hash-1";
 
 // ---------------------------------------------------------------------------
 // Evidence
@@ -75,6 +85,9 @@ export const MEMBERSHIPS_S1: GroupMembershipEvidence[] = [
   membership("m16", "PA_T13", "PO_G3", "2023-01-01", "OPEN"),
   // PA_T14: non-registered for the whole legislature.
   membership("m17", "PA_T14", "PO_NI", "2022-06-22", "OPEN"),
+  // PA_T15: a valid record of one group, and a record of another group whose end is unknown.
+  membership("m18", "PA_T15", "PO_G1", "2022-06-29", "OPEN"),
+  membership("m19", "PA_T15", "PO_G3", "2022-07-01", "UNKNOWN"),
 ];
 
 /** Snapshot 2: c1 corrects two records, c2 adds one, c3 removes one. The rest is unchanged. */
@@ -123,32 +136,46 @@ export function storeAfter(snapshots: 1 | 2): EvidenceStore {
 
 /** State hash of a snapshot, rebuilt from the stored versions. */
 export function stateHashAt(store: EvidenceStore, seq: number): string {
-  const entries = [
-    ...store.memberships
-      .filter((v) => v.fromSeq <= seq && (v.toSeq === null || seq < v.toSeq))
-      .map((v) => ({ kind: "membership", key: v.key, rawHash: v.rawHash })),
-    ...store.organs
-      .filter((v) => v.fromSeq <= seq && (v.toSeq === null || seq < v.toSeq))
-      .map((v) => ({ kind: "organ", key: v.key, rawHash: v.rawHash })),
-  ];
-  return computeStateHash(entries);
+  return evidenceStateHash(store, seq);
 }
 
+/** The pins of a run, including the hash of the prepared inputs the run is given. */
 export function pinsFor(
   store: EvidenceStore,
   seq: number,
   continuityCutoff: number,
+  votes: readonly RunVoteInput[] = VOTES,
   parserVersion = "parser-1"
 ): RunPins {
   const continuity = effectiveDecisions(store.continuityJournal, continuityCutoff);
+  return withPreparedInputsHash(
+    {
+      snapshotPins: { [STREAM]: seq, [SCRUTIN_STREAM]: 1 },
+      snapshotStateHashes: {
+        [STREAM]: stateHashAt(store, seq),
+        [SCRUTIN_STREAM]: SCRUTIN_STATE_HASH,
+      },
+      linkDecisionCutoff: 0,
+      continuityDecisionCutoff: continuityCutoff,
+      decisionsHash: hashDecisionsInForce(new Map(), continuity),
+      parserVersion,
+      resolverVersion: RESOLVER_VERSION,
+    },
+    votes,
+    OPEN_BOUND
+  );
+}
+
+/** What an honest assembling layer hands to `executeRun`: the votes and where they come from. */
+export function preparedFor(votes: readonly RunVoteInput[] = VOTES): PreparedInputs {
   return {
-    snapshotPins: { [STREAM]: seq },
-    snapshotStateHashes: { [STREAM]: stateHashAt(store, seq) },
-    linkDecisionCutoff: 0,
-    continuityDecisionCutoff: continuityCutoff,
-    decisionsHash: hashDecisionsInForce(new Map(), continuity),
-    parserVersion,
-    resolverVersion: RESOLVER_VERSION,
+    votes,
+    provenance: {
+      snapshotPins: { [SCRUTIN_STREAM]: 1 },
+      snapshotStateHashes: { [SCRUTIN_STREAM]: SCRUTIN_STATE_HASH },
+      linkDecisionCutoff: 0,
+      linkDecisionsInForce: new Map(),
+    },
   };
 }
 
@@ -228,4 +255,7 @@ export const VOTES: RunVoteInput[] = [
   // Open end, within the bound of the snapshot, then beyond it.
   vote("v19", resolved("PA_T02"), "S19", "2025-01-01", "POUR", null),
   vote("v20", resolved("PA_T02"), "S20", "2027-01-01", "POUR", null),
+  // A valid interval agrees with the vote, but another record that cannot be placed names another
+  // group: the vote stands alone, the corroboration is withheld, and the record is reported.
+  vote("v21", resolved("PA_T15"), "S21", "2023-01-10", "POUR", "PO_G1"),
 ];

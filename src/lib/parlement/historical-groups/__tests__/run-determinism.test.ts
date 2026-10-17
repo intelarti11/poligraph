@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { GOLDEN_OUTPUT_HASHES } from "../__fixtures__/golden";
 import {
   pinsFor,
+  preparedFor,
   specFor,
+  SCRUTIN_STATE_HASH,
+  SCRUTIN_STREAM,
   stateHashAt,
   storeAfter,
   VOTES,
@@ -37,8 +40,8 @@ const pins1 = pinsFor(store1, 1, 0);
 const pins2 = pinsFor(store2, 2, 1);
 
 // Run 1 as it was computed, before snapshot 2 existed.
-const run1 = executeRun(specFor(pins1), store1, VOTES);
-const run2 = executeRun(specFor(pins2), store2, VOTES);
+const run1 = executeRun(specFor(pins1), store1, preparedFor());
+const run2 = executeRun(specFor(pins2), store2, preparedFor());
 
 /** `STATUS:group:level:reason` for each vote, so that a whole run reads as one table. */
 function summary(output: RunOutput): Record<string, string> {
@@ -71,6 +74,8 @@ const EXPECTED_RUN1: Record<string, string> = {
   v18: "ATTESTED_GROUP:PO_G1:BOTH:-",
   v19: "ATTESTED_GROUP:PO_G2:INTERVAL_ONLY:-",
   v20: "INSUFFICIENT:-:-:OPEN_BEYOND_SNAPSHOT",
+  // A valid interval agrees, an indeterminate one could not: the vote stands alone.
+  v21: "ATTESTED_GROUP:PO_G1:SCRUTIN_ONLY:-",
 };
 
 // Run 2 differs from run 1 on four votes, and only those.
@@ -189,6 +194,50 @@ describe("business results of the scenario", () => {
   });
 });
 
+describe("interval evidence that cannot be placed stays visible in the run", () => {
+  const diagnostics = (output: RunOutput, id: string) =>
+    output.results.find((r) => r.voteId === id)?.diagnostics;
+
+  it("reports it on a vote that rests on the published vote alone", () => {
+    // v10: the only record names the group of the vote, but its end is unknown: no threat.
+    expect(diagnostics(run1, "v10")).toEqual([
+      "E2_INDETERMINATE:m09:PO_G1:END_STATE_UNKNOWN:no-threat",
+    ]);
+    expect(diagnostics(run2, "v10")).toEqual(diagnostics(run1, "v10"));
+  });
+
+  it("withholds the corroboration and names both records when one could contradict the vote", () => {
+    // v21: m18 agrees with the vote, m19 (another group, unknown end) could contradict it.
+    expect(summary(run1).v21).toBe("ATTESTED_GROUP:PO_G1:SCRUTIN_ONLY:-");
+    expect(diagnostics(run1, "v21")).toEqual([
+      "E2_CORROBORATION_WITHHELD:m18",
+      "E2_INDETERMINATE:m19:PO_G3:END_STATE_UNKNOWN:threat",
+    ]);
+  });
+
+  it("reports nothing when nothing could not be placed", () => {
+    for (const id of ["v02", "v08", "v18"]) expect(diagnostics(run1, id)).toEqual([]);
+  });
+
+  it("is part of the output: changing a diagnostic changes the hash of the run", () => {
+    // v21 attested BOTH would not be the same run as v21 withheld: the level and the diagnostic
+    // both differ, and the hash follows.
+    const without = executeRun(
+      specFor(
+        pinsFor(
+          store1,
+          1,
+          0,
+          VOTES.filter((v) => v.voteId !== "v21")
+        )
+      ),
+      store1,
+      preparedFor(VOTES.filter((v) => v.voteId !== "v21"))
+    );
+    expect(without.outputHash).not.toBe(run1.outputHash);
+  });
+});
+
 describe("T1: a retroactive correction does not change a run already computed", () => {
   it("snapshot 1 is still read as it was after snapshot 2 has been imported", () => {
     expect(stateHashAt(store2, 1)).toBe(stateHashAt(store1, 1));
@@ -196,7 +245,7 @@ describe("T1: a retroactive correction does not change a run already computed", 
   });
 
   it("replaying the inputs of run 1 on the corrected store gives the same results and the same hash", () => {
-    const replay = executeRun(specFor(pins1), store2, VOTES);
+    const replay = executeRun(specFor(pins1), store2, preparedFor());
     expect(summary(replay)).toEqual(EXPECTED_RUN1);
     expect(replay.results).toEqual(run1.results);
     expect(replay.tallies).toEqual(run1.tallies);
@@ -205,7 +254,7 @@ describe("T1: a retroactive correction does not change a run already computed", 
 
   it("the replay ignores the decision that was added after run 1 (identical, v04 still a conflict)", () => {
     expect(CONTINUITY_JOURNAL).toHaveLength(1);
-    const replay = executeRun(specFor(pins1), store2, VOTES);
+    const replay = executeRun(specFor(pins1), store2, preparedFor());
     expect(summary(replay).v04).toBe("CONFLICT:-:-:SOURCES_DISAGREE");
   });
 });
@@ -237,8 +286,8 @@ describe("T2 to T5: what a new run changes, and nothing more", () => {
   });
 
   it("T5: the continuity decision acts on a run only through its cutoff, and only on the votes it concerns", () => {
-    const withoutDecision = executeRun(specFor(pinsFor(store2, 1, 0)), store2, VOTES);
-    const withDecision = executeRun(specFor(pinsFor(store2, 1, 1)), store2, VOTES);
+    const withoutDecision = executeRun(specFor(pinsFor(store2, 1, 0)), store2, preparedFor());
+    const withDecision = executeRun(specFor(pinsFor(store2, 1, 1)), store2, preparedFor());
     const a = summary(withoutDecision);
     const b = summary(withDecision);
     const changed = Object.keys(a).filter((id) => a[id] !== b[id]);
@@ -255,7 +304,7 @@ describe("T7: the order of the inputs changes nothing", () => {
       organs: [...store2.organs].reverse(),
       continuityJournal: [...store2.continuityJournal].reverse(),
     };
-    const out = executeRun(specFor(pins2), shuffled, [...VOTES].reverse());
+    const out = executeRun(specFor(pins2), shuffled, preparedFor([...VOTES].reverse()));
     expect(out.results).toEqual(run2.results);
     expect(out.tallies).toEqual(run2.tallies);
     expect(out.outputHash).toBe(run2.outputHash);
@@ -274,11 +323,11 @@ describe("T8: another configuration is another run, and the first is untouched",
     expect(computeInputHash(pins2, config)).not.toBe(
       computeInputHash(pins2, defaultRunConfig([16]))
     );
-    const other = executeRun(specFor(pins2, config), store2, VOTES);
+    const other = executeRun(specFor(pins2, config), store2, preparedFor());
     expect(summary(other).v04).toBe("CONFLICT:-:-:SOURCES_DISAGREE");
     expect(other.outputHash).not.toBe(run2.outputHash);
     // Same pins, same evidence: the run that used the default configuration has not moved.
-    expect(executeRun(specFor(pins2), store2, VOTES).outputHash).toBe(run2.outputHash);
+    expect(executeRun(specFor(pins2), store2, preparedFor()).outputHash).toBe(run2.outputHash);
     expect(summary(run2).v04).toBe("ATTESTED_GROUP:PO_G2B:BOTH:-");
   });
 
@@ -297,15 +346,32 @@ describe("T9: a run starts only on released, intact snapshots", () => {
     recordedStateHash: stateHashAt(store2, seq),
     recomputedStateHash: stateHashAt(store2, seq),
   });
+  // The second pinned stream, the one the attestations come from. Every pinned stream must pass.
+  const scrutinStateOf = (status: PinnedSnapshotState["status"]): PinnedSnapshotState => ({
+    stream: SCRUTIN_STREAM,
+    seq: 1,
+    status,
+    recordedStateHash: SCRUTIN_STATE_HASH,
+    recomputedStateHash: SCRUTIN_STATE_HASH,
+  });
 
   it("refuses a snapshot that has no decision, then accepts it once released", () => {
     const held = snapshotStatusOf([]);
-    expect(checkRunnable(pins2, [stateOf(2, held)])).toEqual({
+    expect(checkRunnable(pins2, [stateOf(2, held), scrutinStateOf("RELEASED")])).toEqual({
       ok: false,
       refusals: [{ stream: "AN_AMO30", reason: "NOT_RELEASED", status: "QUARANTINED" }],
     });
     const released = snapshotStatusOf([{ decisionNo: 1, status: "RELEASED" }]);
-    expect(checkRunnable(pins2, [stateOf(2, released)])).toEqual({ ok: true });
+    expect(checkRunnable(pins2, [stateOf(2, released), scrutinStateOf("RELEASED")])).toEqual({
+      ok: true,
+    });
+  });
+
+  it("refuses a run whose attestation stream is not released, even when the evidence is", () => {
+    expect(checkRunnable(pins2, [stateOf(2, "RELEASED"), scrutinStateOf("QUARANTINED")])).toEqual({
+      ok: false,
+      refusals: [{ stream: SCRUTIN_STREAM, reason: "NOT_RELEASED", status: "QUARANTINED" }],
+    });
   });
 
   it("refuses a revoked snapshot, and a revocation invalidates run 2 but not run 1", () => {
@@ -313,21 +379,25 @@ describe("T9: a run starts only on released, intact snapshots", () => {
       { decisionNo: 1, status: "RELEASED" },
       { decisionNo: 2, status: "REVOKED" },
     ]);
-    expect(checkRunnable(pins2, [stateOf(2, revoked)])).toMatchObject({ ok: false });
-    expect(derivedRunStatus([revoked])).toBe("INVALIDATED_BY_REVOCATION");
-    expect(derivedRunStatus(["RELEASED"])).toBe("OK");
-    expect(checkRunnable(pins1, [stateOf(1, "RELEASED")])).toEqual({ ok: true });
+    expect(checkRunnable(pins2, [stateOf(2, revoked), scrutinStateOf("RELEASED")])).toMatchObject({
+      ok: false,
+    });
+    expect(derivedRunStatus([revoked, "RELEASED"])).toBe("INVALIDATED_BY_REVOCATION");
+    expect(derivedRunStatus(["RELEASED", "RELEASED"])).toBe("OK");
+    expect(checkRunnable(pins1, [stateOf(1, "RELEASED"), scrutinStateOf("RELEASED")])).toEqual({
+      ok: true,
+    });
   });
 });
 
 describe("a run does not start from nothing", () => {
   it("refuses a run that pins no snapshot of the evidence stream", () => {
     const pins = { ...pins2, snapshotPins: { OTHER: 1 }, snapshotStateHashes: { OTHER: "x" } };
-    expect(() => executeRun(specFor(pins), store2, VOTES)).toThrow("pins no snapshot");
+    expect(() => executeRun(specFor(pins), store2, preparedFor())).toThrow("pins no snapshot");
   });
 
   it("refuses two votes with the same identifier", () => {
-    expect(() => executeRun(specFor(pins2), store2, [VOTES[0]!, VOTES[0]!])).toThrow(
+    expect(() => executeRun(specFor(pins2), store2, preparedFor([VOTES[0]!, VOTES[0]!]))).toThrow(
       "Duplicate voteId"
     );
   });
@@ -335,7 +405,7 @@ describe("a run does not start from nothing", () => {
   it("refuses an invalid configuration", () => {
     const broken = structuredClone(defaultRunConfig([16])) as RunConfig;
     (broken.continuity as { sameLegislatureOnly: boolean }).sameLegislatureOnly = false;
-    expect(() => executeRun(specFor(pins2, broken), store2, VOTES)).toThrow(
+    expect(() => executeRun(specFor(pins2, broken), store2, preparedFor())).toThrow(
       "Invalid run configuration"
     );
   });
@@ -358,7 +428,7 @@ describe("T14: the reference results fail when the logic changes without a new v
     const moved = VOTES.map((vote) =>
       vote.voteId === "v02" ? { ...vote, position: flipped } : vote
     );
-    const out = executeRun(specFor(pins1), store1, moved);
+    const out = executeRun(specFor(pinsFor(store1, 1, 0, moved)), store1, preparedFor(moved));
     expect(out.outputHash).not.toBe(GOLDEN_OUTPUT_HASHES[RESOLVER_VERSION]?.run1);
   });
 });
