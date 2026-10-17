@@ -2,7 +2,8 @@
  * Imports the official AN referential of parliamentary groups into AnOrgan.
  *
  * Manual, additive and independent from every other sync: it only reads the public AMO30
- * archive and only upserts into AnOrgan. It is not part of the daily sync.
+ * archive and only upserts into AnOrgan, in a single transaction after the whole archive has been
+ * validated. It is not part of the daily sync.
  */
 
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "fs";
@@ -10,7 +11,13 @@ import { tmpdir } from "os";
 import path from "path";
 import { db } from "@/lib/db";
 import { extractZip } from "@/lib/parsing/unzip";
-import { parseAnOrgan, type AnOrganRow, type AnOrganSkipReason } from "@/lib/parlement/an-organes";
+import {
+  isBlockingSkip,
+  parseAnOrgan,
+  validateAnOrganRows,
+  type AnOrganRow,
+  type AnOrganSkipReason,
+} from "@/lib/parlement/an-organes";
 
 /** The 17th legislature archive holds the organs of the 12th to the 17th. */
 export const AN_ORGANES_SOURCE_URL =
@@ -66,16 +73,30 @@ export async function syncAnOrganes(dryRun = false): Promise<AnOrganesSyncStats>
     }
     stats.groupsFound = rows.length;
 
-    if (!dryRun) {
-      for (const row of rows) {
-        const data = { ...row, sourceUrl: AN_ORGANES_SOURCE_URL, fetchedAt };
-        await db.anOrgan.upsert({
-          where: { organeRef: row.organeRef },
-          create: data,
-          update: data,
-        });
-        stats.written++;
+    // Validate the whole archive before the first write: a partial referential must never
+    // replace a complete one, so anything that may hide a group stops the import.
+    if (stats.unreadable > 0) stats.errors.push(`${stats.unreadable} unreadable organ file(s)`);
+    for (const [reason, count] of Object.entries(stats.skipped)) {
+      if (isBlockingSkip(reason as AnOrganSkipReason)) {
+        stats.errors.push(`${count} organ(s) skipped for a blocking reason: ${reason}`);
       }
+    }
+    stats.errors.push(...validateAnOrganRows(rows, AN_ORGANES_LEGISLATURES));
+    if (stats.errors.length > 0) return stats;
+
+    if (!dryRun) {
+      // One transaction: either every group is written or none is.
+      await db.$transaction(
+        rows.map((row) => {
+          const data = { ...row, sourceUrl: AN_ORGANES_SOURCE_URL, fetchedAt };
+          return db.anOrgan.upsert({
+            where: { organeRef: row.organeRef },
+            create: data,
+            update: data,
+          });
+        })
+      );
+      stats.written = rows.length;
     }
   } catch (error) {
     stats.errors.push(error instanceof Error ? error.message : String(error));

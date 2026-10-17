@@ -21,7 +21,22 @@ export type AnOrganSkipReason =
   | "not-an-organ"
   | "not-parliamentary-group"
   | "legislature-out-of-scope"
-  | "missing-label";
+  | "missing-legislature"
+  | "missing-label"
+  | "invalid-date";
+
+/**
+ * Skips that lose nothing: the organ is not a parliamentary group of a wanted legislature.
+ * Any other reason may hide a group that should have been imported.
+ */
+const HARMLESS_SKIPS: readonly AnOrganSkipReason[] = [
+  "not-parliamentary-group",
+  "legislature-out-of-scope",
+];
+
+export function isBlockingSkip(reason: AnOrganSkipReason): boolean {
+  return !HARMLESS_SKIPS.includes(reason);
+}
 
 export type AnOrganParseResult = { row: AnOrganRow } | { skipped: AnOrganSkipReason };
 
@@ -41,12 +56,18 @@ function nonEmptyString(value: unknown): string | null {
   return trimmed === "" ? null : trimmed;
 }
 
-/** The source gives plain calendar dates (YYYY-MM-DD). Anything else is treated as unknown. */
-function parseCalendarDate(value: unknown): Date | null {
+/**
+ * The source gives calendar dates (YYYY-MM-DD). Absent or empty: unknown (`null`). Present but
+ * impossible ("2024-02-31"): invalid, never normalized into another date.
+ */
+function parseCalendarDate(value: unknown): Date | null | "invalid" {
+  if (value === null || value === undefined) return null;
   const text = nonEmptyString(value);
-  if (!text || !/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
+  if (text === null) return typeof value === "string" ? null : "invalid";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return "invalid";
   const date = new Date(`${text}T00:00:00Z`);
-  return Number.isNaN(date.getTime()) ? null : date;
+  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== text) return "invalid";
+  return date;
 }
 
 /**
@@ -59,23 +80,53 @@ export function parseAnOrgan(raw: unknown, legislatures: readonly number[]): AnO
 
   if (organ.codeType !== PARLIAMENTARY_GROUP_CODE) return { skipped: "not-parliamentary-group" };
 
-  const legislature = Number(nonEmptyString(organ.legislature));
-  if (!Number.isInteger(legislature) || !legislatures.includes(legislature)) {
-    return { skipped: "legislature-out-of-scope" };
-  }
+  const legislatureText = nonEmptyString(organ.legislature);
+  const legislature = legislatureText === null ? Number.NaN : Number(legislatureText);
+  if (!Number.isInteger(legislature)) return { skipped: "missing-legislature" };
+  if (!legislatures.includes(legislature)) return { skipped: "legislature-out-of-scope" };
 
   const label = nonEmptyString(organ.libelle);
   if (!label) return { skipped: "missing-label" };
 
   const period = asRecord(organ.viMoDe);
+  const startDate = parseCalendarDate(period?.dateDebut);
+  const endDate = parseCalendarDate(period?.dateFin);
+  if (startDate === "invalid" || endDate === "invalid") return { skipped: "invalid-date" };
+
   return {
     row: {
       organeRef,
       legislature,
       label,
       abbreviation: nonEmptyString(organ.libelleAbrege),
-      startDate: parseCalendarDate(period?.dateDebut),
-      endDate: parseCalendarDate(period?.dateFin),
+      startDate,
+      endDate,
     },
   };
+}
+
+/**
+ * Checks on the whole set of rows, to run before any write: a referential whose gaps are unknown
+ * must not replace the previous one. Returns an empty list when everything is consistent.
+ */
+export function validateAnOrganRows(
+  rows: readonly AnOrganRow[],
+  legislatures: readonly number[]
+): string[] {
+  const issues: string[] = [];
+
+  const seen = new Set<string>();
+  for (const row of rows) {
+    if (seen.has(row.organeRef)) issues.push(`duplicate organeRef: ${row.organeRef}`);
+    seen.add(row.organeRef);
+    if (row.startDate && row.endDate && row.endDate < row.startDate) {
+      issues.push(`end date before start date for ${row.organeRef}`);
+    }
+  }
+  for (const legislature of legislatures) {
+    if (!rows.some((row) => row.legislature === legislature)) {
+      issues.push(`no group for legislature ${legislature}`);
+    }
+  }
+  return issues;
 }
