@@ -20,6 +20,7 @@ const attestedGroup: Resolution = {
   level: "BOTH",
   evidence: [],
   viaLink: null,
+  diagnostics: [],
 };
 
 describe("exclusion", () => {
@@ -32,6 +33,7 @@ describe("exclusion", () => {
         level: "INTERVAL_ONLY",
         evidence: [],
         viaLink: null,
+        diagnostics: [],
         transitional: true,
       })
     ).toBeNull();
@@ -42,7 +44,7 @@ describe("exclusion", () => {
     ["UNKNOWN", { status: "UNKNOWN", reason: "NO_RECORD" }, "NO_RECORD", "NO_RECORD"],
     [
       "CONFLICT",
-      { status: "CONFLICT", kind: "MULTIPLE_ORGANS", candidates: [] },
+      { status: "CONFLICT", kind: "MULTIPLE_ORGANS", candidates: [], diagnostics: [] },
       "CONFLICT",
       "SOURCES_DISAGREE",
     ],
@@ -81,7 +83,10 @@ describe("exclusion", () => {
   it("throws when a reason has no rule, instead of counting the vote somewhere", () => {
     const withoutConflict = RULES.filter((rule) => rule.id !== "SOURCES_DISAGREE");
     expect(() =>
-      excludedBy({ status: "CONFLICT", kind: "SOURCES_DISAGREE", candidates: [] }, withoutConflict)
+      excludedBy(
+        { status: "CONFLICT", kind: "SOURCES_DISAGREE", candidates: [], diagnostics: [] },
+        withoutConflict
+      )
     ).toThrow("No exclusion rule covers the reason CONFLICT");
   });
 

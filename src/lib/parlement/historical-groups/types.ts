@@ -162,6 +162,42 @@ export interface Candidate {
   evidence: EvidenceItem[];
 }
 
+/** Why an interval record cannot be placed on a given day. */
+export type E2UncertainReason =
+  | "UNKNOWN_ORGAN"
+  | "START_DATE_UNKNOWN"
+  | "END_STATE_UNKNOWN"
+  | "OPEN_BEYOND_SNAPSHOT";
+
+/** An interval record that might apply on the day but cannot be placed: neither in nor out. */
+export interface IndeterminateRecord {
+  sourceRecordId: string;
+  groupRef: GroupRef;
+  reason: E2UncertainReason;
+  /**
+   * `true` when the record names a group that is not the attested one and no validated decision
+   * makes them the same group: if it applied, it would contradict the attestation.
+   */
+  couldContradict: boolean;
+}
+
+/**
+ * Left on a result that rests on a published vote while interval evidence (E2) exists that cannot
+ * be placed. The attestation is not invalidated by it, but it must stay visible.
+ */
+export interface E2IndeterminateDiagnostic {
+  kind: "E2_INDETERMINATE";
+  /** Sorted by record reference. */
+  uncertain: IndeterminateRecord[];
+  /**
+   * References of interval records that are valid and agree with the vote, but were not counted as
+   * corroboration because an indeterminate record could contradict the vote. Sorted.
+   */
+  withheldCorroboration: string[];
+}
+
+export type Diagnostic = E2IndeterminateDiagnostic;
+
 /** How strong the proof is. `BOTH` is the only level where two independent sources agree. */
 export type AttestationLevel = "BOTH" | "SCRUTIN_ONLY" | "INTERVAL_ONLY";
 
@@ -183,6 +219,7 @@ export type Resolution =
       level: AttestationLevel;
       evidence: EvidenceItem[];
       viaLink: ViaLink | null;
+      diagnostics: Diagnostic[];
     }
   | {
       status: "ATTESTED_NON_INSCRIT";
@@ -190,6 +227,7 @@ export type Resolution =
       level: AttestationLevel;
       evidence: EvidenceItem[];
       viaLink: ViaLink | null;
+      diagnostics: Diagnostic[];
       /**
        * `true`: the registration ended before the groups of the legislature were formed.
        * `false`: it did not. `null`: cannot be said (no registration record, or no formation date).
@@ -197,7 +235,12 @@ export type Resolution =
       transitional: boolean | null;
     }
   | { status: "UNKNOWN"; reason: "NO_RECORD" }
-  | { status: "CONFLICT"; kind: ConflictKind; candidates: Candidate[] }
+  | {
+      status: "CONFLICT";
+      kind: ConflictKind;
+      candidates: Candidate[];
+      diagnostics: Diagnostic[];
+    }
   | { status: "INSUFFICIENT"; reason: InsufficientReason; evidence: EvidenceItem[] }
   | { status: "UNRESOLVED_IDENTITY"; reason: IdentityGap };
 

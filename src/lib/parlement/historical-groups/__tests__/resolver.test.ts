@@ -119,6 +119,7 @@ describe("attested by interval only", () => {
       groupRef: "PO_G1",
       level: "INTERVAL_ONLY",
       viaLink: null,
+      diagnostics: [],
       evidence: [
         {
           kind: "MEMBERSHIP",
@@ -581,5 +582,286 @@ describe("no fallback of any kind", () => {
       dateSemantics: { ...base.config.dateSemantics, version: "v2" as unknown as "v1" },
     };
     expect(() => resolve({ config })).toThrow("Unknown date semantics");
+  });
+});
+
+describe("a valid vote and interval evidence that cannot be placed (E2 indeterminate)", () => {
+  // The vote lists the person under PO_G1.
+  const vote = () => scrutinOf("PO_G1");
+  const validG1 = membership("valid", "PA_T01", "PO_G1", "2022-06-29", "OPEN");
+  const validG3 = membership("valid-g3", "PA_T01", "PO_G3", "2022-06-29", "OPEN");
+  // Cannot be placed, and names another group: if it applied, it would contradict the vote.
+  const unknownEndG3 = membership("unk-end", "PA_T01", "PO_G3", "2022-06-29", "UNKNOWN");
+  // Cannot be placed, and names the group of the vote: it could only agree with it.
+  const unknownEndG1 = membership("unk-end-g1", "PA_T01", "PO_G1", "2022-06-29", "UNKNOWN");
+  const unknownStartG3 = membership("unk-start", "PA_T01", "PO_G3", null, "2023-06-01");
+  const ghost = membership("ghost", "PA_T01", "PO_GHOST", "2022-06-29", "OPEN");
+
+  const diagnosticsOf = (result: Resolution) =>
+    "diagnostics" in result ? result.diagnostics : undefined;
+
+  it("1. no relevant interval: the vote stands alone, with no uncertainty to report", () => {
+    const ended = membership("old", "PA_T01", "PO_G3", "2022-06-29", "2022-12-01");
+    const result = resolve({ memberships: [ended], scrutin: vote() });
+    expect(result).toMatchObject({
+      status: "ATTESTED_GROUP",
+      groupRef: "PO_G1",
+      level: "SCRUTIN_ONLY",
+      diagnostics: [],
+    });
+  });
+
+  it("2. indeterminate intervals and no valid one: SCRUTIN_ONLY, with the records and reasons reported", () => {
+    const result = resolve({
+      memberships: [unknownStartG3, unknownEndG3, ghost],
+      scrutin: vote(),
+    });
+    expect(result).toMatchObject({
+      status: "ATTESTED_GROUP",
+      groupRef: "PO_G1",
+      level: "SCRUTIN_ONLY",
+    });
+    expect(diagnosticsOf(result)).toEqual([
+      {
+        kind: "E2_INDETERMINATE",
+        uncertain: [
+          {
+            sourceRecordId: "ghost",
+            groupRef: "PO_GHOST",
+            reason: "UNKNOWN_ORGAN",
+            couldContradict: true,
+          },
+          {
+            sourceRecordId: "unk-end",
+            groupRef: "PO_G3",
+            reason: "END_STATE_UNKNOWN",
+            couldContradict: true,
+          },
+          {
+            sourceRecordId: "unk-start",
+            groupRef: "PO_G3",
+            reason: "START_DATE_UNKNOWN",
+            couldContradict: true,
+          },
+        ],
+        withheldCorroboration: [],
+      },
+    ]);
+  });
+
+  it("2. an open record read after the bound of its snapshot is reported with its reason", () => {
+    const result = resolve({
+      civilDate: d("2027-01-01"),
+      memberships: [membership("open", "PA_T01", "PO_G1", "2022-06-29", "OPEN")],
+      scrutin: vote(),
+    });
+    expect(result).toMatchObject({ status: "ATTESTED_GROUP", level: "SCRUTIN_ONLY" });
+    expect(diagnosticsOf(result)).toEqual([
+      {
+        kind: "E2_INDETERMINATE",
+        uncertain: [
+          {
+            sourceRecordId: "open",
+            groupRef: "PO_G1",
+            reason: "OPEN_BEYOND_SNAPSHOT",
+            couldContradict: false,
+          },
+        ],
+        withheldCorroboration: [],
+      },
+    ]);
+  });
+
+  it("2. an indeterminate record of the same group as the vote is reported, and is no threat", () => {
+    const result = resolve({ memberships: [unknownEndG1], scrutin: vote() });
+    expect(result).toMatchObject({ status: "ATTESTED_GROUP", level: "SCRUTIN_ONLY" });
+    expect(diagnosticsOf(result)).toMatchObject([
+      { uncertain: [{ sourceRecordId: "unk-end-g1", couldContradict: false }] },
+    ]);
+  });
+
+  it("3. a valid, identical interval and nothing indeterminate: BOTH, no diagnostic", () => {
+    expect(resolve({ memberships: [validG1], scrutin: vote() })).toMatchObject({
+      status: "ATTESTED_GROUP",
+      level: "BOTH",
+      diagnostics: [],
+    });
+  });
+
+  it("3. a valid interval of the same group under another reference, through a validated decision: BOTH", () => {
+    const g2 = membership("g2", "PA_T01", "PO_G2", "2022-06-29", "OPEN");
+    expect(
+      resolve({
+        memberships: [g2],
+        scrutin: scrutinOf("PO_G2B"),
+        continuity: [CONTINUITY_DECISION],
+      })
+    ).toMatchObject({
+      status: "ATTESTED_GROUP",
+      groupRef: "PO_G2B",
+      level: "BOTH",
+      diagnostics: [],
+    });
+  });
+
+  it("3. an indeterminate record that could only agree does not withhold the corroboration", () => {
+    const result = resolve({ memberships: [validG1, unknownEndG1], scrutin: vote() });
+    expect(result).toMatchObject({ status: "ATTESTED_GROUP", level: "BOTH" });
+    expect(diagnosticsOf(result)).toMatchObject([
+      {
+        uncertain: [{ sourceRecordId: "unk-end-g1", couldContradict: false }],
+        withheldCorroboration: [],
+      },
+    ]);
+  });
+
+  it("3. an indeterminate record of a group made the same by a validated decision is no threat", () => {
+    const g2 = membership("g2", "PA_T01", "PO_G2", "2022-06-29", "OPEN");
+    const g2b = membership("g2b-unknown", "PA_T01", "PO_G2B", "2022-06-29", "UNKNOWN");
+    const result = resolve({
+      memberships: [g2, g2b],
+      scrutin: scrutinOf("PO_G2"),
+      continuity: [CONTINUITY_DECISION],
+    });
+    expect(result).toMatchObject({ status: "ATTESTED_GROUP", groupRef: "PO_G2", level: "BOTH" });
+  });
+
+  it("4. valid and identical, but an indeterminate record could name another group: SCRUTIN_ONLY, never BOTH", () => {
+    const result = resolve({ memberships: [validG1, unknownEndG3], scrutin: vote() });
+    expect(result).toMatchObject({
+      status: "ATTESTED_GROUP",
+      groupRef: "PO_G1",
+      level: "SCRUTIN_ONLY",
+      viaLink: null,
+    });
+    expect(diagnosticsOf(result)).toEqual([
+      {
+        kind: "E2_INDETERMINATE",
+        uncertain: [
+          {
+            sourceRecordId: "unk-end",
+            groupRef: "PO_G3",
+            reason: "END_STATE_UNKNOWN",
+            couldContradict: true,
+          },
+        ],
+        // The agreeing record is not lost: it is named, and withheld.
+        withheldCorroboration: ["valid"],
+      },
+    ]);
+    if (result.status !== "ATTESTED_GROUP") throw new Error("unreachable");
+    expect(result.evidence).toEqual([
+      { kind: "SCRUTIN_ATTESTATION", scrutinId: "S_TEST", publishedOrganRef: "PO_G1" },
+    ]);
+  });
+
+  it("4. an indeterminate record that points at an organ nobody knows is a threat", () => {
+    const result = resolve({ memberships: [validG1, ghost], scrutin: vote() });
+    expect(result).toMatchObject({ status: "ATTESTED_GROUP", level: "SCRUTIN_ONLY" });
+    expect(diagnosticsOf(result)).toMatchObject([
+      {
+        uncertain: [{ groupRef: "PO_GHOST", couldContradict: true }],
+        withheldCorroboration: ["valid"],
+      },
+    ]);
+  });
+
+  it("4. withholds the corroboration of a reconciled group too, and says which records", () => {
+    const g2 = membership("g2", "PA_T01", "PO_G2", "2022-06-29", "OPEN");
+    const result = resolve({
+      memberships: [g2, unknownEndG3],
+      scrutin: scrutinOf("PO_G2B"),
+      continuity: [CONTINUITY_DECISION],
+    });
+    expect(result).toMatchObject({
+      status: "ATTESTED_GROUP",
+      groupRef: "PO_G2B",
+      level: "SCRUTIN_ONLY",
+      viaLink: null,
+    });
+    expect(diagnosticsOf(result)).toMatchObject([{ withheldCorroboration: ["g2"] }]);
+  });
+
+  it("5. a valid interval that names another group is a conflict, indeterminate records or not", () => {
+    const without = resolve({ memberships: [validG3], scrutin: vote() });
+    const withUncertain = resolve({
+      memberships: [validG3, unknownEndG3, unknownStartG3],
+      scrutin: vote(),
+    });
+    expect(without).toMatchObject({
+      status: "CONFLICT",
+      kind: "SOURCES_DISAGREE",
+      diagnostics: [],
+    });
+    expect(withUncertain).toMatchObject({ status: "CONFLICT", kind: "SOURCES_DISAGREE" });
+    expect(diagnosticsOf(withUncertain)).toMatchObject([
+      { uncertain: [{ sourceRecordId: "unk-end" }, { sourceRecordId: "unk-start" }] },
+    ]);
+  });
+
+  it("6. several valid intervals that name different groups are a conflict", () => {
+    const result = resolve({ memberships: [validG1, validG3, unknownEndG1], scrutin: vote() });
+    expect(result).toMatchObject({ status: "CONFLICT", kind: "MULTIPLE_ORGANS" });
+    expect(diagnosticsOf(result)).toMatchObject([
+      { uncertain: [{ sourceRecordId: "unk-end-g1" }] },
+    ]);
+  });
+
+  it("7. an invalid vote stays INSUFFICIENT, whatever the intervals say: no fallback", () => {
+    for (const published of ["PO0", "PO_NOWHERE"]) {
+      for (const memberships of [[validG1], [validG1, unknownEndG3], [unknownEndG3], []]) {
+        const result = resolve({ memberships, scrutin: scrutinOf(published) });
+        expect(result.status).toBe("INSUFFICIENT");
+        expect(result).toMatchObject({ reason: published === "PO0" ? "PO0" : "UNKNOWN_ORGAN" });
+      }
+    }
+  });
+
+  it("8. without a vote, an indeterminate record forbids a certain attribution, valid interval or not", () => {
+    for (const memberships of [
+      [unknownEndG3],
+      [validG1, unknownEndG3],
+      [validG1, unknownEndG1],
+      [validG1, ghost],
+    ]) {
+      expect(resolve({ memberships })).toMatchObject({ status: "INSUFFICIENT" });
+    }
+    expect(resolve({ memberships: [validG1, unknownEndG3] })).toMatchObject({
+      reason: "END_STATE_UNKNOWN",
+    });
+  });
+
+  it("tells apart no corroboration, indeterminate corroboration and an effective contradiction", () => {
+    const none = resolve({ memberships: [], scrutin: vote() });
+    const indeterminate = resolve({ memberships: [unknownEndG3], scrutin: vote() });
+    const contradiction = resolve({ memberships: [validG3], scrutin: vote() });
+    // Same level for the first two, and the vote is kept: but only the second says why.
+    expect(none).toMatchObject({
+      status: "ATTESTED_GROUP",
+      level: "SCRUTIN_ONLY",
+      diagnostics: [],
+    });
+    expect(indeterminate).toMatchObject({ status: "ATTESTED_GROUP", level: "SCRUTIN_ONLY" });
+    expect(diagnosticsOf(indeterminate)).toHaveLength(1);
+    expect(diagnosticsOf(none)).toHaveLength(0);
+    // A real contradiction is not attested at all.
+    expect(contradiction.status).toBe("CONFLICT");
+  });
+
+  it("reports the same diagnostic whatever the order of the records", () => {
+    const records = [unknownStartG3, ghost, validG1, unknownEndG3, unknownEndG1];
+    const one = resolve({ memberships: records, scrutin: vote() });
+    const two = resolve({ memberships: [...records].reverse(), scrutin: vote() });
+    expect(two).toEqual(one);
+  });
+
+  it("keeps an attested non-registration, with its diagnostic, when intervals cannot be placed", () => {
+    const result = resolve({ memberships: [unknownEndG3], scrutin: scrutinOf("PO_NI") });
+    expect(result).toMatchObject({
+      status: "ATTESTED_NON_INSCRIT",
+      level: "SCRUTIN_ONLY",
+      transitional: null,
+    });
+    expect(diagnosticsOf(result)).toHaveLength(1);
   });
 });

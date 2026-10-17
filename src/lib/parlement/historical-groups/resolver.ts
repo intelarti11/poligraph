@@ -5,11 +5,13 @@ import type {
   Chamber,
   CivilDate,
   ContinuityEvidence,
+  Diagnostic,
+  E2UncertainReason,
   EvidenceItem,
   GroupMembershipEvidence,
   GroupRef,
   IdentityOutcome,
-  InsufficientReason,
+  IndeterminateRecord,
   OpenBound,
   OrganEvidence,
   Resolution,
@@ -52,7 +54,7 @@ export interface ResolveInput {
   config: ResolverConfig;
 }
 
-type UncertainReason = Exclude<InsufficientReason, "PO0" | "EDGE_DAY">;
+type UncertainReason = E2UncertainReason;
 
 /** When several records are undecidable, the reason reported is the first of this list. */
 const UNCERTAIN_PRIORITY: readonly UncertainReason[] = [
@@ -142,7 +144,8 @@ function attested(
   level: AttestationLevel,
   evidence: EvidenceItem[],
   viaLink: ViaLink | null,
-  intervalRecords: readonly GroupMembershipEvidence[]
+  intervalRecords: readonly GroupMembershipEvidence[],
+  diagnostics: Diagnostic[] = []
 ): Resolution {
   const organ = input.organs.get(groupRef);
   if (organ?.kind === "NON_INSCRIT") {
@@ -152,10 +155,11 @@ function attested(
       level,
       evidence,
       viaLink,
+      diagnostics,
       transitional: transitionalFor(intervalRecords, input.legislatureGroupsFormedOn),
     };
   }
-  return { status: "ATTESTED_GROUP", groupRef, level, evidence, viaLink };
+  return { status: "ATTESTED_GROUP", groupRef, level, evidence, viaLink, diagnostics };
 }
 
 export function resolveGroupAtDate(input: ResolveInput): Resolution {
@@ -221,13 +225,43 @@ export function resolveGroupAtDate(input: ResolveInput): Resolution {
       return { status: "INSUFFICIENT", reason: "UNKNOWN_ORGAN", evidence: [e1] };
     }
 
+    // Interval records that might apply but cannot be placed (E2 indeterminate). They never
+    // invalidate a valid attestation, and they never disappear: they are reported. One that could
+    // name another group also withholds the corroboration, since it might contradict the vote.
+    const sameGroupAsVote = (other: GroupRef): boolean =>
+      other === published || findReconciliation(published, other, input) !== null;
+    const indeterminate: IndeterminateRecord[] = uncertain
+      .map(({ record, reason }) => ({
+        sourceRecordId: record.sourceRecordId,
+        groupRef: record.groupRef,
+        reason,
+        couldContradict: !sameGroupAsVote(record.groupRef),
+      }))
+      .sort((a, b) => byText(a.sourceRecordId, b.sourceRecordId));
+    const diagnosticsFor = (withheld: readonly GroupMembershipEvidence[]): Diagnostic[] =>
+      indeterminate.length === 0
+        ? []
+        : [
+            {
+              kind: "E2_INDETERMINATE",
+              uncertain: indeterminate,
+              withheldCorroboration: withheld.map((r) => r.sourceRecordId).sort(byText),
+            },
+          ];
+    const couldContradict = indeterminate.some((r) => r.couldContradict);
+
     const seat = scrutin.seatMandate;
     if (
       seat !== null &&
       ((seat.startDate !== null && date < seat.startDate) ||
         (seat.endDate !== null && date > seat.endDate))
     ) {
-      return { status: "CONFLICT", kind: "SEAT_MISMATCH", candidates: [e1Candidate] };
+      return {
+        status: "CONFLICT",
+        kind: "SEAT_MISMATCH",
+        candidates: [e1Candidate],
+        diagnostics: diagnosticsFor([]),
+      };
     }
 
     if (refs.length >= 2) {
@@ -235,23 +269,32 @@ export function resolveGroupAtDate(input: ResolveInput): Resolution {
         status: "CONFLICT",
         kind: "MULTIPLE_ORGANS",
         candidates: [e1Candidate, ...intervalCandidates],
+        diagnostics: diagnosticsFor([]),
       };
     }
     if (refs.length === 1) {
       const ref = refs[0] as GroupRef;
       const records = byRef.get(ref) as GroupMembershipEvidence[];
+      const viaLink = ref === published ? null : findReconciliation(published, ref, input);
+      if (ref !== published && viaLink === null) {
+        return {
+          status: "CONFLICT",
+          kind: "SOURCES_DISAGREE",
+          candidates: [e1Candidate, ...intervalCandidates],
+          diagnostics: diagnosticsFor([]),
+        };
+      }
+      // A valid interval agrees with the vote. It corroborates it only if nothing that cannot be
+      // placed could say otherwise.
+      if (couldContradict) {
+        return attested(input, published, "SCRUTIN_ONLY", [e1], null, [], diagnosticsFor(records));
+      }
       const evidence = [e1, ...membershipItems(records)];
-      if (ref === published) return attested(input, published, "BOTH", evidence, null, records);
-      const viaLink = findReconciliation(published, ref, input);
-      if (viaLink) return attested(input, published, "BOTH", evidence, viaLink, records);
-      return {
-        status: "CONFLICT",
-        kind: "SOURCES_DISAGREE",
-        candidates: [e1Candidate, ...intervalCandidates],
-      };
+      return attested(input, published, "BOTH", evidence, viaLink, records, diagnosticsFor([]));
     }
-    // No interval at all: the attestation stands alone, with its weaker level.
-    return attested(input, published, "SCRUTIN_ONLY", [e1], null, []);
+    // No valid interval: the attestation stands alone, with its weaker level. Records that cannot
+    // be placed are not corroboration, and they are not an absence either: they are reported.
+    return attested(input, published, "SCRUTIN_ONLY", [e1], null, [], diagnosticsFor([]));
   }
 
   // No attestation: intervals only.
@@ -266,7 +309,12 @@ export function resolveGroupAtDate(input: ResolveInput): Resolution {
   }
   if (refs.length === 0) return { status: "UNKNOWN", reason: "NO_RECORD" };
   if (refs.length >= 2) {
-    return { status: "CONFLICT", kind: "MULTIPLE_ORGANS", candidates: intervalCandidates };
+    return {
+      status: "CONFLICT",
+      kind: "MULTIPLE_ORGANS",
+      candidates: intervalCandidates,
+      diagnostics: [],
+    };
   }
   const ref = refs[0] as GroupRef;
   const records = byRef.get(ref) as GroupMembershipEvidence[];
