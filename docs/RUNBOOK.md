@@ -239,6 +239,18 @@ npm run typecheck
 
 La CI valide lint + typecheck + format + tests unitaires : si ces 4 jobs passent sur le PR, la build est sûre.
 
+### 5.1 Avant de publier une version qui affiche des chiffres de couverture
+
+```bash
+# Échec (code 1) si une mesure de couverture des législatures a plus de 30 jours.
+# Lecture seule : ni requête ni import. Actualiser la configuration avant de publier si besoin.
+npm run audit:legislature-coverage-age
+```
+
+Ce contrôle n'est pas dans la CI des PR : la fraîcheur dépend d'une actualisation volontaire de la configuration, et un échec bloquerait des changements sans rapport avec les législatures. Il ne tourne pas non plus en quotidien.
+
+Après la mise en production (déploiement manuel depuis le dashboard Vercel), contrôler à la main avec le layout réel les pages `/parlement/assemblee/legislatures` et `/parlement/assemblee/legislatures/15`, `/16`, `/17` : rendu, liens vers les scrutins filtrés, absence d'erreur serveur. Les tests de la PR ont vérifié le rendu hors layout complet.
+
 ---
 
 ## 6. Désactivation d'urgence
