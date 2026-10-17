@@ -9,7 +9,7 @@ export function organeFile(
   uid: string,
   overrides: {
     codeType?: string;
-    abbreviation?: string;
+    abbreviation?: string | null;
     label?: string;
     legislature?: unknown;
     start?: unknown;
