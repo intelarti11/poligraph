@@ -21,9 +21,11 @@ export interface OfficialSource {
 }
 
 /**
- * Source institutionnelle d'un scrutin, déduite de son URL. Un scrutin dont le lien ne pointe
- * pas vers le site de l'Assemblée nationale ou du Sénat (ancien import NosDéputés, lien absent)
- * n'est pas présenté comme un résultat officiel : l'origine interne d'une donnée ne suffit pas.
+ * Source institutionnelle d'un scrutin, déduite de son URL. C'est un indice de provenance, pas
+ * une garantie que chaque valeur affichée correspond à la publication : le texte de la page dit
+ * « importés depuis la source indiquée ». Un lien qui ne pointe pas vers le site de l'Assemblée
+ * nationale ou du Sénat (ancien import NosDéputés, lien absent) ne donne pas droit à l'intitulé
+ * « officiel » : l'origine interne d'une donnée ne suffit pas.
  */
 export function officialSourceOf(
   sourceUrl: string | null,
@@ -184,16 +186,24 @@ export interface OfficialGroupDisplayRow {
 }
 
 /**
- * Origine d'un masquage : un problème de PoliGraph (import pas encore fait), une anomalie
- * présente dans la source officielle, ou une incohérence dont on ne peut pas dire laquelle des
- * deux est la cause.
+ * Pourquoi un décompte n'est pas affiché. « import » : un préalable que PoliGraph n'a pas encore
+ * importé (établi). « unreliable » : les données disponibles ne permettent pas de l'afficher
+ * fiablement, sans qu'on sache si la cause est la source, l'import ou l'interprétation. Cette
+ * cause n'est jamais attribuée à la source officielle sans preuve.
  */
-export type WithholdOrigin = "import" | "source" | "inconsistent";
+export type WithholdOrigin = "import" | "unreliable";
 
 export type OfficialGroupCountsView =
   | { kind: "not-imported" }
-  | { kind: "withheld"; origin: WithholdOrigin; reason: string }
+  | { kind: "withheld"; origin: WithholdOrigin; reason: string; detail?: string }
   | { kind: "shown"; rows: OfficialGroupDisplayRow[] };
+
+export const UNRELIABLE_REASON =
+  "Le décompte par groupe ne peut pas être affiché de manière fiable avec les données actuellement disponibles dans PoliGraph.";
+
+function unreliable(detail: string): OfficialGroupCountsView {
+  return { kind: "withheld", origin: "unreliable", reason: UNRELIABLE_REASON, detail };
+}
 
 function hasIssues(value: unknown): boolean {
   return Array.isArray(value) && value.length > 0;
@@ -226,11 +236,7 @@ export function officialGroupCountsView(input: {
   if (!snapshot.imported) return { kind: "not-imported" };
 
   if (hasIssues(snapshot.issues) || snapshot.rows.length === 0) {
-    return {
-      kind: "withheld",
-      origin: "source",
-      reason: "La source ne fournit pas de décompte par groupe lisible pour ce scrutin.",
-    };
+    return unreliable("Aucun décompte par groupe lisible n'a été importé pour ce scrutin.");
   }
 
   const counted = snapshot.rows.map((row) => ({
@@ -242,11 +248,9 @@ export function officialGroupCountsView(input: {
       row.abstainCount === null,
   }));
   if (counted.some((entry) => entry.unreadable)) {
-    return {
-      kind: "withheld",
-      origin: "source",
-      reason: "La source donne des valeurs manquantes ou invalides pour au moins un groupe.",
-    };
+    return unreliable(
+      "Au moins un groupe a des valeurs manquantes ou illisibles dans le décompte importé."
+    );
   }
 
   if (organes === null || organes.length === 0) {
@@ -267,23 +271,19 @@ export function officialGroupCountsView(input: {
   for (const { row } of counted) {
     const organ = row.organeRef ? byRef.get(row.organeRef) : undefined;
     if (!row.organeRef || !organ) {
-      return {
-        kind: "withheld",
-        origin: "source",
-        reason:
-          "La source cite un groupe absent du référentiel officiel des organes, dont le nom ne peut donc pas être établi.",
-      };
+      return unreliable(
+        row.organeRef
+          ? `La référence ${row.organeRef} ne figure pas dans le référentiel des organes importé.`
+          : "Un groupe du décompte n'a pas de référence."
+      );
     }
     const outsidePeriod =
       (organ.startDate !== null && day < isoDay(organ.startDate)) ||
       (organ.endDate !== null && day > isoDay(organ.endDate));
     if (outsidePeriod) {
-      return {
-        kind: "withheld",
-        origin: "source",
-        reason:
-          "La source attribue un décompte à un groupe en dehors de sa période d'existence officielle.",
-      };
+      return unreliable(
+        `Le référentiel importé ne place pas ce scrutin dans la période du groupe « ${organ.label} ».`
+      );
     }
 
     // Les trois décomptes sont non nuls : vérifié plus haut.
@@ -311,12 +311,7 @@ export function officialGroupCountsView(input: {
     sumAgainst !== scrutin.votesAgainst ||
     sumAbstain !== scrutin.votesAbstain
   ) {
-    return {
-      kind: "withheld",
-      origin: "inconsistent",
-      reason:
-        "Les décomptes par groupe ne s'additionnent pas au total du scrutin. Ils ne sont pas affichés tant que l'écart n'est pas expliqué.",
-    };
+    return unreliable("Les décomptes par groupe ne s'additionnent pas au total du scrutin.");
   }
 
   display.sort(

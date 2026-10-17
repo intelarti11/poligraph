@@ -164,6 +164,18 @@ describe("page de scrutin : provenance", () => {
     expect(text(container)).toContain("groupe actuel de chaque député");
   });
 
+  it("distingue les décomptes importés de la somme calculée par PoliGraph", async () => {
+    mocks.findScrutin.mockResolvedValue(scrutin());
+
+    const { container } = await renderPage();
+
+    expect(text(container)).toContain("sont importés depuis la source indiquée");
+    expect(text(container)).toContain(
+      "somme, calculée par PoliGraph, des pour, des contre et des abstentions"
+    );
+    expect(text(container)).not.toContain("C'est le total que publie");
+  });
+
   it("ne déclare jamais les votes individuels complets, même avec des compteurs égaux", async () => {
     mocks.findScrutin.mockResolvedValue(
       scrutin({
@@ -204,7 +216,7 @@ describe("page de scrutin : provenance", () => {
     expect(text(container)).toContain("pas une absence de votants");
   });
 
-  it("masque un décompte officiel anormal, explique pourquoi et garde le lien vers la source", async () => {
+  it("masque un décompte douteux, explique pourquoi sans accuser la source et garde le lien", async () => {
     mocks.findScrutin.mockResolvedValue(scrutin());
     mocks.getOfficialGroups.mockResolvedValue(
       officialGroups([
@@ -215,14 +227,17 @@ describe("page de scrutin : provenance", () => {
 
     const { container } = await renderPage();
 
-    expect(text(container)).toContain("non affiché : anomalie dans la source");
+    expect(text(container)).toContain("Décompte officiel par groupe non affiché");
+    expect(text(container)).toContain("ne peut pas être affiché de manière fiable");
+    expect(text(container)).toContain("La référence PO0 ne figure pas");
+    expect(text(container)).not.toMatch(/anomalie dans la source/);
     expect(text(container)).not.toContain(
       "Pour, contre, abstentions et non-votants de chaque groupe"
     );
     expect(container.querySelector(`a[href="${AN_SOURCE}"]`)).not.toBeNull();
   });
 
-  it("distingue un référentiel pas encore importé d'une anomalie de la source", async () => {
+  it("distingue un référentiel pas encore importé d'un décompte non fiable", async () => {
     mocks.findScrutin.mockResolvedValue(scrutin());
     mocks.getOfficialGroups.mockResolvedValue(officialGroups([GOOD_ROW], { organes: [] }));
 

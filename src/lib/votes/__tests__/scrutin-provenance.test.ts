@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  UNRELIABLE_REASON,
   computedPositionsNote,
   officialSourceOf,
   officialGroupCountsView,
@@ -140,7 +141,7 @@ describe("officialGroupCountsView", () => {
     expect(view.rows[1]).toMatchObject({ majorityPosition: "CONTRE", forCount: 100 });
   });
 
-  it("withholds as a source anomaly when the parser reported an issue on a row", () => {
+  it("withholds when the parser reported an issue on a row", () => {
     const rows = validRows();
     rows[0] = row({ issues: ["organeRef: doublon à l'index 3"] });
     const view = officialGroupCountsView({
@@ -148,16 +149,16 @@ describe("officialGroupCountsView", () => {
       organes: ORGANES,
       scrutin: SCRUTIN,
     });
-    expect(view).toMatchObject({ kind: "withheld", origin: "source" });
+    expect(view).toMatchObject({ kind: "withheld", origin: "unreliable" });
   });
 
-  it("withholds as a source anomaly when the snapshot itself has issues", () => {
+  it("withholds when the snapshot itself has issues", () => {
     const view = officialGroupCountsView({
       snapshot: snapshot([], { issues: ["ventilationVotes: objet absent"] }),
       organes: ORGANES,
       scrutin: SCRUTIN,
     });
-    expect(view).toMatchObject({ kind: "withheld", origin: "source" });
+    expect(view).toMatchObject({ kind: "withheld", origin: "unreliable" });
   });
 
   it("never turns a missing count into zero", () => {
@@ -168,10 +169,10 @@ describe("officialGroupCountsView", () => {
       organes: ORGANES,
       scrutin: SCRUTIN,
     });
-    expect(view).toMatchObject({ kind: "withheld", origin: "source" });
+    expect(view).toMatchObject({ kind: "withheld", origin: "unreliable" });
   });
 
-  it("blames the import, not the source, while the referential is not imported", () => {
+  it("names the import as the cause only while the referential is not imported", () => {
     for (const organes of [null, []]) {
       const view = officialGroupCountsView({
         snapshot: snapshot(validRows()),
@@ -182,7 +183,7 @@ describe("officialGroupCountsView", () => {
     }
   });
 
-  it("withholds a group that the official referential does not know (PO0)", () => {
+  it("withholds a group that the imported referential does not know (PO0)", () => {
     const rows = validRows();
     rows[1] = row({
       organeRef: "PO0",
@@ -196,7 +197,7 @@ describe("officialGroupCountsView", () => {
       organes: ORGANES,
       scrutin: SCRUTIN,
     });
-    expect(view).toMatchObject({ kind: "withheld", origin: "source" });
+    expect(view).toMatchObject({ kind: "withheld", origin: "unreliable" });
   });
 
   it("does not use a group label outside the period of that group", () => {
@@ -205,7 +206,7 @@ describe("officialGroupCountsView", () => {
       organes: ORGANES,
       scrutin: { ...SCRUTIN, votingDate: new Date("2025-09-05T00:00:00Z") },
     });
-    expect(view).toMatchObject({ kind: "withheld", origin: "source" });
+    expect(view).toMatchObject({ kind: "withheld", origin: "unreliable" });
   });
 
   it("accepts a scrutin on the first and the last day of a group", () => {
@@ -221,7 +222,7 @@ describe("officialGroupCountsView", () => {
     }
   });
 
-  it("withholds counts that do not add up to the scrutin total, without naming a culprit", () => {
+  it("withholds counts that do not add up to the scrutin total", () => {
     const rows = validRows();
     rows[0] = row({ organeRef: "PO2", forCount: 199, againstCount: 100, abstainCount: 5 });
     const view = officialGroupCountsView({
@@ -229,7 +230,40 @@ describe("officialGroupCountsView", () => {
       organes: ORGANES,
       scrutin: SCRUTIN,
     });
-    expect(view).toMatchObject({ kind: "withheld", origin: "inconsistent" });
+    expect(view).toMatchObject({ kind: "withheld", origin: "unreliable" });
+  });
+});
+
+describe("officialGroupCountsView attribution", () => {
+  it("never blames the official source: the cause is not established", () => {
+    const unknownGroup = [row({ organeRef: "PO0" })];
+    const outsidePeriod = validRows();
+    const cases = [
+      { rows: [row({ issues: ["x"] })], date: SCRUTIN.votingDate },
+      { rows: unknownGroup, date: SCRUTIN.votingDate },
+      { rows: outsidePeriod, date: new Date("2025-09-05T00:00:00Z") },
+      { rows: [row({ forCount: 1 })], date: SCRUTIN.votingDate },
+    ];
+    for (const { rows, date } of cases) {
+      const view = officialGroupCountsView({
+        snapshot: snapshot(rows),
+        organes: ORGANES,
+        scrutin: { ...SCRUTIN, votingDate: date },
+      });
+      expect(view).toMatchObject({ kind: "withheld", reason: UNRELIABLE_REASON });
+      expect(JSON.stringify(view)).not.toMatch(/source|anomalie|officiel/i);
+    }
+  });
+
+  it("gives a factual detail that points at the unknown reference", () => {
+    const view = officialGroupCountsView({
+      snapshot: snapshot([row({ organeRef: "PO0" })]),
+      organes: ORGANES,
+      scrutin: SCRUTIN,
+    });
+    expect(view).toMatchObject({
+      detail: "La référence PO0 ne figure pas dans le référentiel des organes importé.",
+    });
   });
 });
 

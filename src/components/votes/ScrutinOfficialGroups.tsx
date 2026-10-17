@@ -12,8 +12,7 @@ interface ScrutinOfficialGroupsProps {
 
 const WITHHELD_TITLES = {
   import: "Décompte officiel par groupe pas encore disponible",
-  source: "Décompte officiel par groupe non affiché : anomalie dans la source",
-  inconsistent: "Décompte officiel par groupe non affiché : incohérence",
+  unreliable: "Décompte officiel par groupe non affiché",
 } as const;
 
 /**
@@ -39,7 +38,8 @@ export function ScrutinOfficialGroups({ view, source, fetchedAt }: ScrutinOffici
   if (view.kind === "withheld") {
     return (
       <MissingData title={WITHHELD_TITLES[view.origin]} className="mb-8">
-        {view.reason}
+        <p>{view.reason}</p>
+        {view.detail ? <p className="mt-1">{view.detail}</p> : null}
         {sourceLink}
       </MissingData>
     );

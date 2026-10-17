@@ -1,4 +1,3 @@
-import type { Chamber } from "@/generated/prisma";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { SourceLine } from "@/components/ui/SourceLine";
 import type { OfficialSource } from "@/lib/votes/scrutin-provenance";
@@ -9,7 +8,6 @@ interface ScrutinResultCardProps {
   votesFor: number;
   votesAgainst: number;
   votesAbstain: number;
-  chamber: Chamber;
   /** Source institutionnelle, ou `null` quand le lien n'en est pas une. */
   source: OfficialSource | null;
   /** Détecté sur le titre officiel du scrutin. */
@@ -24,7 +22,6 @@ export function ScrutinResultCard({
   votesFor,
   votesAgainst,
   votesAbstain,
-  chamber,
   source,
   isMotionDeCensure,
 }: ScrutinResultCardProps) {
@@ -128,12 +125,12 @@ export function ScrutinResultCard({
         <div className="mt-4 space-y-1 border-t pt-3 text-xs text-muted-foreground">
           <p>
             {source
-              ? "Le titre, la date, le résultat et les totaux viennent de la source. Le thème, le type de scrutin et les synthèses sont produits par PoliGraph."
+              ? "Le titre, la date, le résultat et les trois décomptes sont importés depuis la source indiquée. Le thème, le type de scrutin et les synthèses sont produits par PoliGraph."
               : "Le lien enregistré ne mène pas à un site institutionnel : ces chiffres ne sont pas présentés comme officiels."}
           </p>
           <p>
-            {total} votants : pour, contre et abstentions, hors non-votants.
-            {chamber === "AN" ? " C'est le total que publie l'Assemblée nationale." : ""}
+            {total} votants : somme, calculée par PoliGraph, des pour, des contre et des abstentions
+            (hors non-votants).
           </p>
           {source ? <SourceLine sources={[{ label: source.label, url: source.url }]} /> : null}
         </div>

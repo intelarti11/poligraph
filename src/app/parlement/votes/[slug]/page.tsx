@@ -445,7 +445,6 @@ export default async function ScrutinPage({ params }: PageProps) {
           votesFor={scrutin.votesFor}
           votesAgainst={scrutin.votesAgainst}
           votesAbstain={scrutin.votesAbstain}
-          chamber={scrutin.chamber}
           source={source}
           isMotionDeCensure={isMotionDeCensure}
         />
