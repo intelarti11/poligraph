@@ -56,11 +56,14 @@ export function ScrutinContext({
   }
 
   return (
-    <Tabs defaultValue="en-bref" className="mb-8">
+    <Tabs
+      defaultValue={hasEnBref ? "en-bref" : showEnjeuxTab ? "enjeux" : "votes"}
+      className="mb-8"
+    >
       <TabsList variant="line">
         {hasEnBref && <TabsTrigger value="en-bref">En bref</TabsTrigger>}
         {showEnjeuxTab && <TabsTrigger value="enjeux">Les enjeux</TabsTrigger>}
-        {votesDetailSlot && <TabsTrigger value="votes">Votes détaillés</TabsTrigger>}
+        {votesDetailSlot && <TabsTrigger value="votes">Votes individuels</TabsTrigger>}
       </TabsList>
 
       {hasEnBref && (
