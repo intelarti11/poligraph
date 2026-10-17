@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   computedPositionsNote,
+  officialSourceOf,
   officialGroupCountsView,
   voteCoverageView,
   type AnOrganLabel,
@@ -243,5 +244,31 @@ describe("computedPositionsNote", () => {
   it("names the Senate and its members for a Senate scrutin", () => {
     expect(computedPositionsNote("SENAT")).toContain("chaque sénateur");
     expect(computedPositionsNote("SENAT")).toContain("publiées par le Sénat");
+  });
+});
+
+describe("officialSourceOf", () => {
+  it("recognizes the institution that matches the chamber", () => {
+    expect(officialSourceOf("https://www.assemblee-nationale.fr/dyn/17/scrutins/12", "AN")).toEqual(
+      {
+        label: "Assemblée nationale",
+        url: "https://www.assemblee-nationale.fr/dyn/17/scrutins/12",
+      }
+    );
+    expect(
+      officialSourceOf("https://www.senat.fr/scrutin-public/2023/scr2023-1.html", "SENAT")
+    ).toMatchObject({ label: "Sénat" });
+  });
+
+  it("does not call a third-party or missing source official", () => {
+    expect(officialSourceOf("https://www.nosdeputes.fr/scrutin/1", "AN")).toBeNull();
+    expect(officialSourceOf(null, "AN")).toBeNull();
+    expect(officialSourceOf("pas une url", "AN")).toBeNull();
+  });
+
+  it("rejects a lookalike host and a source of the wrong chamber", () => {
+    expect(officialSourceOf("https://www.assemblee-nationale.fr.evil.example/x", "AN")).toBeNull();
+    expect(officialSourceOf("https://www.senat.fr/x", "AN")).toBeNull();
+    expect(officialSourceOf("http://www.assemblee-nationale.fr/x", "AN")).toBeNull();
   });
 });

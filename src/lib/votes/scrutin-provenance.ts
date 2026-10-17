@@ -12,6 +12,42 @@ import type { Chamber } from "@/generated/prisma";
 import type { DataStatusKind } from "@/lib/parlement/data-status";
 
 // ---------------------------------------------------------------------------
+// Source officielle du résultat
+// ---------------------------------------------------------------------------
+
+export interface OfficialSource {
+  label: string;
+  url: string;
+}
+
+/**
+ * Source institutionnelle d'un scrutin, déduite de son URL. Un scrutin dont le lien ne pointe
+ * pas vers le site de l'Assemblée nationale ou du Sénat (ancien import NosDéputés, lien absent)
+ * n'est pas présenté comme un résultat officiel : l'origine interne d'une donnée ne suffit pas.
+ */
+export function officialSourceOf(
+  sourceUrl: string | null,
+  chamber: Chamber
+): OfficialSource | null {
+  if (!sourceUrl) return null;
+  let host: string;
+  try {
+    const url = new URL(sourceUrl);
+    if (url.protocol !== "https:") return null;
+    host = url.hostname;
+  } catch {
+    return null;
+  }
+  if (chamber === "AN" && host === "www.assemblee-nationale.fr") {
+    return { label: "Assemblée nationale", url: sourceUrl };
+  }
+  if (chamber === "SENAT" && (host === "www.senat.fr" || host === "senat.fr")) {
+    return { label: "Sénat", url: sourceUrl };
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Votes individuels : couverture
 // ---------------------------------------------------------------------------
 
