@@ -78,6 +78,7 @@
     "publish:government-profiles": "tsx --env-file=.env scripts/publish-government-profiles.ts",
     "cache:revalidate": "tsx scripts/revalidate-cache.ts",
     "sync:full": "tsx scripts/sync-full.ts",
+    "sync:an-organes": "tsx scripts/sync-an-organes.ts",
     "sync:scrutins-an": "tsx scripts/sync-scrutins-an.ts",
     "sync:scrutins-an:today": "tsx scripts/sync-scrutins-an.ts --today",
     "sync:scrutins-an:stats": "tsx scripts/sync-scrutins-an.ts --stats",
