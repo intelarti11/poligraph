@@ -1,4 +1,8 @@
-import type { DatasetCoverage, LegislatureCoverage } from "@/lib/parlement/legislature-types";
+import type {
+  DatasetCoverage,
+  DatasetKey,
+  LegislatureCoverage,
+} from "@/lib/parlement/legislature-types";
 
 /**
  * Couverture MESURÉE des données de l'Assemblée nationale dans PoliGraph.
@@ -33,7 +37,7 @@ function absent(
   };
 }
 
-export const AN_LEGISLATURE_COVERAGE: LegislatureCoverage[] = [
+const RAW_COVERAGE: LegislatureCoverage[] = [
   {
     number: 15,
     navigation: { listed: true, absenceNotice: ABSENCE_NOTICE },
@@ -187,3 +191,51 @@ export const AN_LEGISLATURE_COVERAGE: LegislatureCoverage[] = [
     ],
   },
 ];
+
+/**
+ * Précisions affichables au public, par législature et par jeu. Les `note` de la mesure
+ * gardent le vocabulaire de la base ; celles-ci n'en emploient aucun.
+ */
+const PUBLIC_NOTES: Record<number, Partial<Record<DatasetKey, string>>> = {
+  15: {
+    scrutins:
+      "Ces scrutins existent sur le site de l'Assemblée (le premier date du 4 juillet 2017). Ils ne sont pas encore importés dans PoliGraph.",
+    "deputy-mandates":
+      "Mandats importés pour la période, sans total de référence : ce nombre ne dit pas que la liste est complète.",
+  },
+  16: {
+    scrutins:
+      "Le nombre importé correspond au dernier numéro de scrutin que nous avons vérifié, sans total officiel pour le confirmer.",
+    "individual-votes": "151 scrutins importés n'ont aucun vote individuel.",
+    "official-group-counts": "Ces décomptes ne sont importés que pour la 17e législature.",
+    "deputy-mandates":
+      "Mandats importés pour la période, sans total de référence : ce nombre ne dit pas que la liste est complète.",
+    "referenced-groups":
+      "Les groupes de cette législature ne sont pas encore référencés. Un groupe de même sigle dans la 17e n'est pas supposé identique.",
+    "dated-group-membership":
+      "Les périodes d'appartenance des députés à un groupe ne sont pas disponibles.",
+    "computed-group-positions":
+      "Non publiées : elles reposaient sur les groupes actuels des députés, pas sur leurs groupes de l'époque.",
+  },
+  17: {
+    scrutins: "Au moins 42 numéros de scrutin sont absents de la liste importée.",
+    "individual-votes": "Le nombre de votes attendu pour chaque scrutin n'est pas recoupé.",
+    "official-group-counts": "124 scrutins importés n'ont pas de décompte officiel.",
+    "deputy-mandates":
+      "Ce nombre comprend les remplaçants : il ne correspond pas aux 577 sièges à une date donnée.",
+    "referenced-groups":
+      "Groupes actuels. Les groupes dissous ou créés en cours de législature ne sont pas vérifiés.",
+    "dated-group-membership":
+      "Les périodes d'appartenance des députés à un groupe ne sont pas disponibles.",
+    "computed-group-positions":
+      "Calculées à partir du groupe actuel de chaque député : un changement de groupe en cours de législature n'est pas pris en compte.",
+  },
+};
+
+export const AN_LEGISLATURE_COVERAGE: LegislatureCoverage[] = RAW_COVERAGE.map((leg) => ({
+  ...leg,
+  datasets: leg.datasets.map((ds) => ({
+    ...ds,
+    publicNote: PUBLIC_NOTES[leg.number]?.[ds.dataset],
+  })),
+}));

@@ -101,6 +101,8 @@ export const AN_LEGISLATURE_FACTS: LegislatureFacts[] = [
         proposedReading:
           "Trois natures de dates différentes. Le 23 juin des archives ne correspond ni au lendemain de l'expiration des pouvoirs (21 juin) ni à l'ouverture en séance (27 juin) : sa signification n'est pas établie.",
         arbitrated: true,
+        publicNote:
+          "Les archives de l'Assemblée datent le début de la législature du 23 juin 2017. Cette date ne correspond ni à l'expiration des pouvoirs de l'Assemblée précédente ni à la première séance, et nous n'en connaissons pas la portée juridique. La première séance a eu lieu le 27 juin 2017.",
         resolution:
           "Conserver les trois dates distinctes avec leur nature. Le 21 juin reste interne (un seul mandat observé). Le 23 juin est présenté comme « date indiquée par les archives de l'Assemblée », sans signification juridique. Le 27 juin est la première séance.",
       },
@@ -208,6 +210,8 @@ export const AN_LEGISLATURE_FACTS: LegislatureFacts[] = [
         proposedReading:
           "Signature le 9 juin, publication et entrée en vigueur le 10 juin (version consolidée), fin indiquée par les archives le 9 juin.",
         arbitrated: true,
+        publicNote:
+          "Les archives de l'Assemblée indiquent le 9 juin 2024 comme fin de la législature. Le décret de dissolution est daté du 9 juin 2024 ; il a été publié au Journal officiel et est entré en vigueur le 10 juin 2024. Ces dates ne sont pas interchangeables.",
         resolution:
           "Quatre dates de nature différente, jamais interchangeables : fin selon les archives (9 juin), signature du décret (9 juin), publication (10 juin), entrée en vigueur (10 juin).",
       },
@@ -282,6 +286,8 @@ export const AN_LEGISLATURE_FACTS: LegislatureFacts[] = [
         proposedReading:
           "Deux dates observées selon le tour d'élection du député, règle juridique non sourcée.",
         arbitrated: true,
+        publicNote:
+          "La date de début des mandats individuels n'est pas affichée : elle varie selon le tour d'élection de chaque député et sa règle n'est pas encore documentée.",
         resolution:
           "Aucune date unique de début des mandats n'est affichée. Les relevés des 1er et 8 juillet 2024 restent internes (display: internal-only). Le 18 juillet 2024 est présenté comme première séance de la législature.",
       },

@@ -71,7 +71,7 @@ export function CompositionTable({
 
   return (
     <div className={className}>
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto" role="region" aria-label={caption} tabIndex={0}>
         <table className="w-full text-sm">
           <caption className="pb-2 text-left font-medium">{caption}</caption>
           <thead>
