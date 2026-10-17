@@ -34,12 +34,13 @@ export async function writeVotesForScrutin(params: WriteVotesParams): Promise<vo
     throw new Error("writeVotesForScrutin: chamber is required (Phase 5a denormalization)");
   }
 
-  await db.vote.deleteMany({
-    where: { scrutinId: params.scrutinId },
-  });
-
-  if (params.votes.length > 0) {
-    await db.vote.createMany({
+  // One transaction: an interruption between the delete and the insert must not leave
+  // the scrutin without votes.
+  await db.$transaction([
+    db.vote.deleteMany({
+      where: { scrutinId: params.scrutinId },
+    }),
+    db.vote.createMany({
       data: params.votes.map((v) => ({
         scrutinId: params.scrutinId,
         politicianId: v.politicianId,
@@ -49,6 +50,6 @@ export async function writeVotesForScrutin(params: WriteVotesParams): Promise<vo
         scrutinType: params.scrutinType,
       })),
       skipDuplicates: true,
-    });
-  }
+    }),
+  ]);
 }

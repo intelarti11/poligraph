@@ -164,12 +164,14 @@ const getScrutinWithRedirect = cache(async function getScrutinWithRedirect(slugO
   }
 
   // 4. Try by numeric part of externalId (e.g., "5283") - legacy URL
-  // External IDs are like "VTANR5L17V5283" - we match the number part
+  // External IDs are like "VTANR5L17V5283" - we match the number part. The same number
+  // exists in several legislatures: the most recent one wins.
   if (/^\d+$/.test(slugOrId)) {
     scrutin = await db.scrutin.findFirst({
       where: {
         externalId: { endsWith: `V${slugOrId}` },
       },
+      orderBy: { legislature: "desc" },
       include: includeOptions,
     });
     if (scrutin) {
