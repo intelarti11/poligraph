@@ -15,6 +15,7 @@ import { legislatureRobotsMetadata } from "@/lib/seo/legislature-robots";
 import { staleDatasets } from "@/lib/parlement/legislature-config";
 import { formatIsoDateFr } from "@/lib/parlement/format-iso-date";
 import {
+  COVERAGE_LEVEL_LABELS,
   LEGISLATURE_NUMBERS,
   coverageToStatus,
   datasetLevel,
@@ -96,6 +97,7 @@ export default async function LegislaturePage({ params }: PageProps) {
       period: other.period,
       href: ROUTES.legislature(k),
       status: coverageToStatus(datasetLevel(other.coverage, "scrutins")),
+      statusLabel: COVERAGE_LEVEL_LABELS[datasetLevel(other.coverage, "scrutins")],
       statusScope: "Scrutins publics",
     };
   });

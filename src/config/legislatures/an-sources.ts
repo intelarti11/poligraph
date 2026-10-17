@@ -30,7 +30,7 @@ export const AN_SOURCES: InstitutionalSource[] = [
     kind: "loi-organique",
     publisher: "Légifrance",
     label:
-      "Code électoral, article LO 121, version en vigueur depuis le 16 mai 2001 (loi organique n° 2001-419), relue le 2026-10-16",
+      "Code électoral, article LO 121, version en vigueur depuis le 16 mai 2001 (loi organique n° 2001-419), relue le 16 octobre 2026",
     url: "https://www.legifrance.gouv.fr/codes/article_lc/LEGIARTI000006353288",
     consultedAt: "2026-10-16",
     quote:

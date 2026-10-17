@@ -11,6 +11,8 @@ export interface LegislatureOption {
   status: DataStatusKind;
   /** Jeu de données auquel le statut s'applique. */
   statusScope: string;
+  /** Libellé précis du niveau (« Pas encore importé », « Non publié »), sinon celui du statut. */
+  statusLabel?: string;
 }
 
 interface LegislatureSelectorProps {
@@ -58,7 +60,8 @@ export function LegislatureSelector({ options, current, className }: Legislature
                   {option.period}
                   <span className="sr-only">
                     {" "}
-                    · {option.statusScope} : {DATA_STATUS_LABELS[option.status]}
+                    · {option.statusScope} :{" "}
+                    {option.statusLabel ?? DATA_STATUS_LABELS[option.status]}
                   </span>
                 </span>
               </Link>
