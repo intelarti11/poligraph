@@ -135,7 +135,9 @@
      values are reproducible from the tokens above. */
   --brand-on-surface: oklch(0.66 0.2 25);
   --muted-foreground-strong: oklch(0.68 0 0);
-  --brand-foreground: oklch(0.15 0 0);
+  /* Text on a --brand fill. At 0.15 a 12px badge measured 4.49:1 in axe, just under AA's 4.5:1;
+     0.1 gives 4.7:1. Only text on brand fills reads this token. */
+  --brand-foreground: oklch(0.1 0 0);
   --destructive: oklch(0.65 0.2 25);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
