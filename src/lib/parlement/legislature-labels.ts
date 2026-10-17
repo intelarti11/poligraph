@@ -58,7 +58,7 @@ export const DATASET_LABELS: Record<DatasetKey, string> = {
  * réservés à la configuration et à l'audit : il ne s'affiche jamais sur une page citoyenne.
  */
 export const DATASET_DESCRIPTIONS: Record<DatasetKey, string> = {
-  scrutins: "Scrutins publics de l'Assemblée nationale.",
+  scrutins: "Votes organisés en séance à l'Assemblée nationale.",
   "individual-votes": "Position de chaque député sur un scrutin.",
   "official-group-counts": "Décompte par groupe publié par l'Assemblée avec chaque scrutin.",
   "deputy-mandates": "Mandats de député sur la période de la législature.",
@@ -74,6 +74,16 @@ export const COVERAGE_LEVEL_LABELS: Record<CoverageLevel, string> = {
   unverified: "Non vérifié",
   absent: "Pas encore importé",
   withheld: "Non publié",
+};
+
+/**
+ * Infobulle des niveaux qui partagent le statut `pending` : sans cela, « Non publié » hériterait
+ * de « Donnée pas encore importée », ce qui est faux (la donnée existe, sa publication est suspendue).
+ */
+export const COVERAGE_LEVEL_DESCRIPTIONS: Partial<Record<CoverageLevel, string>> = {
+  absent: "PoliGraph ne possède pas encore ces données.",
+  withheld:
+    "PoliGraph possède des données mais ne les affiche pas, leur fiabilité étant insuffisante.",
 };
 
 export function coverageToStatus(level: CoverageLevel): DataStatusKind {

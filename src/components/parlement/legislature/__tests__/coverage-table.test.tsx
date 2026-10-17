@@ -64,6 +64,13 @@ describe("CoverageTable responsive", () => {
     expect(absent.textContent).toContain("Pas encore importé");
     expect(absent.textContent).toContain("Aucun");
     expect(absent.textContent).not.toContain("Non publié");
+    // L'infobulle suit le niveau : « Non publié » ne doit pas dire « pas encore importée ».
+    const withheldTitle = withheld.querySelector("[data-status]")?.getAttribute("title") ?? "";
+    expect(withheldTitle).toMatch(/possède des données mais ne les affiche pas/);
+    expect(withheldTitle).not.toMatch(/pas encore import/i);
+    expect(absent.querySelector("[data-status]")?.getAttribute("title")).toMatch(
+      /ne possède pas encore ces données/
+    );
   });
 
   it("ne dépend d'aucun id fixe : deux tableaux n'ont pas d'identifiants en double", () => {

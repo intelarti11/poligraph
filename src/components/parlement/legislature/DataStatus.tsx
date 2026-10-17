@@ -27,6 +27,8 @@ interface DataStatusProps {
   showScope?: boolean;
   /** Remplace le libellé par défaut quand le contexte demande plus de précision. */
   label?: string;
+  /** Remplace la description du statut dans l'infobulle quand elle ne décrit pas le cas exact. */
+  description?: string;
   className?: string;
 }
 
@@ -39,13 +41,14 @@ export function DataStatus({
   scope,
   showScope = false,
   label,
+  description,
   className,
 }: DataStatusProps) {
   return (
     <Badge
       variant={VARIANTS[status]}
       className={className}
-      title={`${scope} : ${DATA_STATUS_DESCRIPTIONS[status]}`}
+      title={`${scope} : ${description ?? DATA_STATUS_DESCRIPTIONS[status]}`}
       data-status={status}
     >
       <span aria-hidden="true">{GLYPHS[status]}</span>

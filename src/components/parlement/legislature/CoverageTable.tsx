@@ -1,6 +1,7 @@
 import { useId } from "react";
 import { formatIsoDateFr } from "@/lib/parlement/format-iso-date";
 import {
+  COVERAGE_LEVEL_DESCRIPTIONS,
   COVERAGE_LEVEL_LABELS,
   DATASET_DESCRIPTIONS,
   DATASET_LABELS,
@@ -27,6 +28,7 @@ function Status({ ds }: { ds: DatasetCoverage }) {
       status={coverageToStatus(ds.level)}
       scope={DATASET_LABELS[ds.dataset]}
       label={COVERAGE_LEVEL_LABELS[ds.level]}
+      description={COVERAGE_LEVEL_DESCRIPTIONS[ds.level]}
     />
   );
 }
