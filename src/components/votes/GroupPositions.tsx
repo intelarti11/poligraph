@@ -2,10 +2,13 @@ import Link from "next/link";
 import { GROUP_POSITION_LABELS } from "@/config/labels";
 import { ROUTES } from "@/config/routes";
 import type { ScrutinGroupPositionData } from "@/lib/data/groupes";
+import { COMPUTED_POSITIONS_TITLE, computedPositionsNote } from "@/lib/votes/scrutin-provenance";
 import type { GroupPosition } from "@/types";
+import type { Chamber } from "@/generated/prisma";
 
 interface GroupPositionsProps {
   positions: ScrutinGroupPositionData[];
+  chamber: Chamber;
 }
 
 const POSITION_ORDER: GroupPosition[] = ["POUR", "CONTRE", "ABSTENTION"];
@@ -48,7 +51,7 @@ function GroupPill({ gp }: { gp: ScrutinGroupPositionData }) {
   return content;
 }
 
-export function GroupPositions({ positions }: GroupPositionsProps) {
+export function GroupPositions({ positions, chamber }: GroupPositionsProps) {
   if (positions.length === 0) return null;
 
   const byPosition = new Map<GroupPosition, ScrutinGroupPositionData[]>();
@@ -61,7 +64,10 @@ export function GroupPositions({ positions }: GroupPositionsProps) {
 
   return (
     <div className="space-y-4">
-      <h3 className="text-base font-semibold">Positions des groupes parlementaires</h3>
+      <div>
+        <h3 className="text-base font-semibold">{COMPUTED_POSITIONS_TITLE}</h3>
+        <p className="mt-1 text-sm text-muted-foreground">{computedPositionsNote(chamber)}</p>
+      </div>
 
       {/* Desktop: 3 columns */}
       <div className="hidden md:grid md:grid-cols-3 gap-6">
@@ -78,8 +84,12 @@ export function GroupPositions({ positions }: GroupPositionsProps) {
               </div>
               <div
                 className="flex flex-wrap gap-1.5"
-                role="list"
-                aria-label={`Groupes ayant voté ${GROUP_POSITION_LABELS[pos].toLowerCase()}`}
+                role={groups.length > 0 ? "list" : undefined}
+                aria-label={
+                  groups.length > 0
+                    ? `Groupes dont la position calculée est ${GROUP_POSITION_LABELS[pos].toLowerCase()}`
+                    : undefined
+                }
               >
                 {groups.length > 0 ? (
                   groups.map((gp) => (
@@ -128,7 +138,7 @@ export function GroupPositions({ positions }: GroupPositionsProps) {
               <div
                 className="flex flex-wrap gap-1.5"
                 role="list"
-                aria-label={`Groupes ayant voté ${GROUP_POSITION_LABELS[pos].toLowerCase()}`}
+                aria-label={`Groupes dont la position calculée est ${GROUP_POSITION_LABELS[pos].toLowerCase()}`}
               >
                 {groups.map((gp) => (
                   <div key={gp.id} role="listitem">
