@@ -1391,6 +1391,23 @@ model ScrutinOfficialGroupCount {
   @@index([organeRef])
 }
 
+/// Official AN referential of parliamentary groups (organes of type GP), keyed by the AN
+/// `organeRef` found in ScrutinOfficialGroupCount. Holds the label the group had in the
+/// source, with its validity period. Deliberately has no relation to ParliamentaryGroup:
+/// a historical identity is never derived from a current group.
+model AnOrgan {
+  organeRef    String    @id
+  legislature  Int
+  label        String
+  abbreviation String?
+  startDate    DateTime?
+  endDate      DateTime?
+  sourceUrl    String
+  fetchedAt    DateTime
+
+  @@index([legislature])
+}
+
 model Vote {
   id           String     @id @default(cuid())
   scrutinId    String
