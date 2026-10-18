@@ -3,8 +3,7 @@
 -- Référence : docs/audits/parlement-historique-lot5-architecture-v2.md (4), rapport :
 -- docs/audits/parlement-historique-lot5b-schema.md.
 --
--- NON EXÉCUTÉ. À lancer à la main, sur une base isolée d'abord (plan de vérification du rapport),
--- jamais avant accord explicite :
+-- NON EXÉCUTÉ en production ni en préproduction. À lancer à la main, jamais avant accord explicite :
 --   npx prisma db execute --file prisma/migrations/manual/2026-10-18-historical-groups-schema.sql
 -- (utilise DIRECT_URL). Ne jamais `db:push` : le diff supprimerait les contraintes d'exclusion, les
 -- index partiels et les déclencheurs que le modèle Prisma ne peut pas déclarer.
@@ -15,16 +14,18 @@
 --    (contrat SEC-06 du dépôt, scripts/guards/sec-06-security-definer-guard.mjs).
 --  - Aucune table existante n'est lue, modifiée ou supprimée. Seule dépendance : l'extension
 --    btree_gist (contrainte d'exclusion des intervalles de snapshots).
---  - Idempotent, mais `IF NOT EXISTS` ne prouve rien : un objet déjà présent mais différent serait
---    gardé tel quel. Le même texte est donc exécuté deux fois, d'abord dans un schéma de référence
---    jetable (hg_reference), puis dans le schéma réel, et les deux catalogues sont comparés
---    (colonnes, contraintes, index, déclencheurs, fonctions, RLS, droits). Toute différence fait
---    échouer la dernière requête avec la liste des écarts, et la transaction est annulée.
---    Ce qui n'est JAMAIS réparé : tables, colonnes, contraintes, index de même nom (une divergence
---    de structure est une erreur, la correction est une décision humaine, pas un effet de bord).
---    Ce qui est ré-appliqué à chaque exécution, parce que cela ne porte aucune donnée et ne peut
---    que resserrer : fonctions et déclencheurs (CREATE OR REPLACE, ENABLE ALWAYS), RLS, REVOKE,
---    index autonomes absents (un index unique partiel qui échoue sur des doublons échoue bruyamment).
+--  - Sur une installation existante, AUCUNE réparation : toute divergence (colonne, contrainte,
+--    index, déclencheur, fonction, RLS, droits de PUBLIC, anon et authenticated) fait échouer le
+--    script AVANT qu'il ne modifie quoi que ce soit, avec la liste des écarts. Une correction
+--    volontaire est une migration distincte, écrite et relue pour ce cas.
+--  - Comment : le même texte est exécuté deux fois, d'abord dans un schéma de référence jetable
+--    (hg_reference), puis dans le schéma réel. Entre les deux, une requête compare les catalogues et
+--    échoue si le schéma réel existe déjà et diffère de la référence. Après la construction réelle,
+--    une seconde comparaison confirme que le résultat est exactement la référence.
+--  - Trois états sont acceptés : aucune table du lot (installation), les 13 tables identiques à la
+--    référence (ré-exécution sans effet), rien d'autre. Un état partiel est une divergence.
+--  - Si les droits du créateur changent (ALTER DEFAULT PRIVILEGES), la référence et le réel sont
+--    construits par le même rôle : la comparaison reste juste.
 --  - La RLS est posée explicitement, sans politique (fermé à anon et authenticated).
 --  - Les deux copies du texte ci-dessous sont identiques (un test le vérifie). Seule la ligne
 --    SET LOCAL search_path qui les précède les distingue.
@@ -59,57 +60,59 @@ BEGIN
 END;
 $fn$;
 
-CREATE OR REPLACE FUNCTION historical_assert_snapshot_writable(p_stream text, p_seq integer)
-RETURNS void
+CREATE OR REPLACE FUNCTION historical_version_guard()
+RETURNS trigger
 LANGUAGE plpgsql
 SET search_path = pg_catalog, public
 AS $fn$
 DECLARE
+  v_target integer;
   v_latest integer;
   v_integrity text;
 BEGIN
-  SELECT max("seq") INTO v_latest FROM "OfficialSourceSnapshot" WHERE "stream" = p_stream;
-  IF v_latest IS NULL OR p_seq <> v_latest THEN
-    RAISE EXCEPTION 'only the latest snapshot of stream % accepts record writes (asked %, latest %)', p_stream, p_seq, v_latest
+  IF TG_OP = 'INSERT' THEN
+    IF NEW."toSeq" IS NOT NULL THEN
+      RAISE EXCEPTION '% rows are inserted open (toSeq NULL)', TG_TABLE_NAME USING ERRCODE = 'restrict_violation';
+    END IF;
+    v_target := NEW."fromSeq";
+  ELSE
+    IF OLD."toSeq" IS NOT NULL THEN
+      RAISE EXCEPTION 'a closed version of % never changes', TG_TABLE_NAME USING ERRCODE = 'restrict_violation';
+    END IF;
+    IF NEW."toSeq" IS NULL OR (to_jsonb(NEW) - 'toSeq') IS DISTINCT FROM (to_jsonb(OLD) - 'toSeq') THEN
+      RAISE EXCEPTION 'on %, only toSeq may change, and only to be set once', TG_TABLE_NAME USING ERRCODE = 'restrict_violation';
+    END IF;
+    v_target := NEW."toSeq";
+  END IF;
+
+  -- The snapshot written to (fromSeq of a new version, toSeq of a closed one) must be the latest of
+  -- its stream, VERIFIED, and neither released nor revoked.
+  --
+  -- Shared advisory lock on the snapshot until the end of the transaction: a release, a revocation
+  -- or a newer snapshot (all take it exclusively) wait for the writers instead of slipping between
+  -- this check and the write. An advisory lock needs no privilege on the table, unlike FOR SHARE,
+  -- which would force an UPDATE grant on a table that is append-only. The check is inlined for the
+  -- same reason: calling a helper would need EXECUTE on it for every role that writes.
+  PERFORM pg_advisory_xact_lock_shared(hashtextextended(NEW."stream" || ':' || v_target, 0));
+  SELECT max("seq") INTO v_latest FROM "OfficialSourceSnapshot" WHERE "stream" = NEW."stream";
+  IF v_latest IS NULL OR v_target <> v_latest THEN
+    RAISE EXCEPTION 'only the latest snapshot of stream % accepts record writes (asked %, latest %)', NEW."stream", v_target, v_latest
       USING ERRCODE = 'restrict_violation';
   END IF;
-  SELECT "integrity" INTO v_integrity FROM "OfficialSourceSnapshot" WHERE "stream" = p_stream AND "seq" = p_seq;
+  SELECT "integrity" INTO v_integrity FROM "OfficialSourceSnapshot" WHERE "stream" = NEW."stream" AND "seq" = v_target;
   IF v_integrity IS DISTINCT FROM 'VERIFIED' THEN
-    RAISE EXCEPTION 'snapshot %/% is not VERIFIED: it accepts no record', p_stream, p_seq
+    RAISE EXCEPTION 'snapshot %/% is not VERIFIED: it accepts no record', NEW."stream", v_target
       USING ERRCODE = 'restrict_violation';
   END IF;
   IF EXISTS (
     SELECT 1
     FROM "SnapshotDecision" d
     JOIN "OfficialSourceSnapshot" s ON s."id" = d."snapshotId"
-    WHERE s."stream" = p_stream AND s."seq" = p_seq AND d."status" IN ('RELEASED', 'REVOKED')
+    WHERE s."stream" = NEW."stream" AND s."seq" = v_target AND d."status" IN ('RELEASED', 'REVOKED')
   ) THEN
-    RAISE EXCEPTION 'snapshot %/% was released or revoked: its records are frozen', p_stream, p_seq
+    RAISE EXCEPTION 'snapshot %/% was released or revoked: its records are frozen', NEW."stream", v_target
       USING ERRCODE = 'restrict_violation';
   END IF;
-END;
-$fn$;
-
-CREATE OR REPLACE FUNCTION historical_version_guard()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = pg_catalog, public
-AS $fn$
-BEGIN
-  IF TG_OP = 'INSERT' THEN
-    IF NEW."toSeq" IS NOT NULL THEN
-      RAISE EXCEPTION '% rows are inserted open (toSeq NULL)', TG_TABLE_NAME USING ERRCODE = 'restrict_violation';
-    END IF;
-    PERFORM historical_assert_snapshot_writable(NEW."stream", NEW."fromSeq");
-    RETURN NEW;
-  END IF;
-  IF OLD."toSeq" IS NOT NULL THEN
-    RAISE EXCEPTION 'a closed version of % never changes', TG_TABLE_NAME USING ERRCODE = 'restrict_violation';
-  END IF;
-  IF NEW."toSeq" IS NULL OR (to_jsonb(NEW) - 'toSeq') IS DISTINCT FROM (to_jsonb(OLD) - 'toSeq') THEN
-    RAISE EXCEPTION 'on %, only toSeq may change, and only to be set once', TG_TABLE_NAME USING ERRCODE = 'restrict_violation';
-  END IF;
-  PERFORM historical_assert_snapshot_writable(NEW."stream", NEW."toSeq");
   RETURN NEW;
 END;
 $fn$;
@@ -138,6 +141,9 @@ AS $fn$
 DECLARE
   v_expected integer;
 BEGIN
+  -- Exclusive lock on the previous snapshot: its record writers (shared lock) finish first, and no
+  -- record can be written to it after its successor exists.
+  PERFORM pg_advisory_xact_lock(hashtextextended(NEW."stream" || ':' || (NEW."seq" - 1), 0));
   SELECT COALESCE(max("seq"), 0) + 1 INTO v_expected FROM "OfficialSourceSnapshot" WHERE "stream" = NEW."stream";
   IF NEW."seq" <> v_expected THEN
     RAISE EXCEPTION 'snapshot seq of stream % must be % (no gap, no reuse), got %', NEW."stream", v_expected, NEW."seq"
@@ -155,7 +161,13 @@ AS $fn$
 DECLARE
   v_last text;
   v_integrity text;
+  v_stream text;
+  v_seq integer;
 BEGIN
+  -- Exclusive lock on the snapshot: record writers (shared lock) finish before a decision lands,
+  -- and a writer that comes after sees the decision.
+  SELECT "stream", "seq" INTO v_stream, v_seq FROM "OfficialSourceSnapshot" WHERE "id" = NEW."snapshotId";
+  PERFORM pg_advisory_xact_lock(hashtextextended(v_stream || ':' || v_seq, 0));
   SELECT "status" INTO v_last FROM "SnapshotDecision"
     WHERE "snapshotId" = NEW."snapshotId" ORDER BY "decisionNo" DESC LIMIT 1;
   IF v_last = 'REVOKED' THEN
@@ -183,6 +195,8 @@ BEGIN
     END IF;
     RETURN NEW;
   END IF;
+  -- Exclusive lock on the run: waits for the rows being added to it (shared lock).
+  PERFORM pg_advisory_xact_lock(hashtextextended('run:' || OLD."id", 0));
   IF OLD."status" <> 'RUNNING' THEN
     RAISE EXCEPTION 'a finished run never changes' USING ERRCODE = 'restrict_violation';
   END IF;
@@ -205,6 +219,8 @@ AS $fn$
 DECLARE
   v_status text;
 BEGIN
+  -- Shared lock on the run: finishing it (exclusive lock, in the run guard) waits for rows being added.
+  PERFORM pg_advisory_xact_lock_shared(hashtextextended('run:' || NEW."runId", 0));
   SELECT "status" INTO v_status FROM "HistoricalResolutionRun" WHERE "id" = NEW."runId";
   IF v_status IS DISTINCT FROM 'RUNNING' THEN
     RAISE EXCEPTION 'rows are added to a run only while it is RUNNING' USING ERRCODE = 'restrict_violation';
@@ -222,10 +238,12 @@ DECLARE
   v_status text;
   v_decision text;
 BEGIN
+  PERFORM pg_advisory_xact_lock_shared(hashtextextended('run:' || NEW."runId", 0));
   SELECT "status" INTO v_status FROM "HistoricalResolutionRun" WHERE "id" = NEW."runId";
   IF v_status IS DISTINCT FROM 'RUNNING' THEN
     RAISE EXCEPTION 'snapshots are pinned only while the run is RUNNING' USING ERRCODE = 'restrict_violation';
   END IF;
+  PERFORM pg_advisory_xact_lock_shared(hashtextextended(NEW."stream" || ':' || NEW."seq", 0));
   SELECT d."status" INTO v_decision
     FROM "SnapshotDecision" d
     JOIN "OfficialSourceSnapshot" s ON s."id" = d."snapshotId"
@@ -684,7 +702,6 @@ REVOKE ALL ON TABLE "SourceArtifact", "OfficialSourceSnapshot", "SnapshotDecisio
 REVOKE ALL ON SEQUENCE "SnapshotDecision_decisionNo_seq", "OfficialActorLinkDecision_decisionNo_seq", "OrganContinuityDecision_decisionNo_seq" FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION historical_refuse_mutation() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION historical_refuse_truncate() FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION historical_assert_snapshot_writable(text,integer) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION historical_version_guard() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION historical_artifact_guard() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION historical_snapshot_insert_guard() FROM PUBLIC, anon, authenticated;
@@ -692,6 +709,176 @@ REVOKE ALL ON FUNCTION historical_snapshot_decision_guard() FROM PUBLIC, anon, a
 REVOKE ALL ON FUNCTION historical_run_guard() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION historical_run_child_guard() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION historical_pin_guard() FROM PUBLIC, anon, authenticated;
+
+-- hg:precheck
+-- Rien n'a encore été écrit dans le schéma réel. Les définitions sont lues avec un search_path réduit
+-- à pg_catalog, donc toutes qualifiées, puis le nom du schéma est retiré.
+SET LOCAL search_path TO pg_catalog;
+
+CREATE TEMP TABLE hg_catalog_dump (side text NOT NULL, kind text NOT NULL, item text NOT NULL) ON COMMIT DROP;
+
+INSERT INTO hg_catalog_dump
+SELECT 'hg_reference', 'column', c.relname || '|' || a.attname || '|' || format_type(a.atttypid, a.atttypmod)
+       || '|' || a.attnotnull::text || '|' || COALESCE(regexp_replace(pg_get_expr(d.adbin, d.adrelid), '(hg_reference|public)\.', '', 'g'), '')
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'hg_reference'
+JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = a.attnum
+WHERE c.relkind = 'r' AND c.relname = ANY (ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion']::text[]);
+
+INSERT INTO hg_catalog_dump
+SELECT 'hg_reference', 'constraint', c.relname || '|' || k.conname || '|' || k.contype::text || '|'
+       || regexp_replace(pg_get_constraintdef(k.oid), '(hg_reference|public)\.', '', 'g')
+FROM pg_constraint k
+JOIN pg_class c ON c.oid = k.conrelid
+JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'hg_reference'
+WHERE c.relname = ANY (ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion']::text[]);
+
+INSERT INTO hg_catalog_dump
+SELECT 'hg_reference', 'index', i.tablename || '|' || i.indexname || '|'
+       || regexp_replace(i.indexdef, '(hg_reference|public)\.', '', 'g')
+FROM pg_indexes i
+WHERE i.schemaname = 'hg_reference' AND i.tablename = ANY (ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion']::text[]);
+
+INSERT INTO hg_catalog_dump
+SELECT 'hg_reference', 'trigger', c.relname || '|' || t.tgname || '|' || t.tgenabled::text || '|'
+       || regexp_replace(pg_get_triggerdef(t.oid), '(hg_reference|public)\.', '', 'g')
+FROM pg_trigger t
+JOIN pg_class c ON c.oid = t.tgrelid
+JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'hg_reference'
+WHERE NOT t.tgisinternal AND c.relname = ANY (ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion']::text[]);
+
+INSERT INTO hg_catalog_dump
+SELECT 'hg_reference', 'table', c.relname || '|rls=' || c.relrowsecurity::text || '|force=' || c.relforcerowsecurity::text
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'hg_reference'
+WHERE c.relkind = 'r' AND c.relname = ANY (ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion']::text[]);
+
+-- Privileges are compared for PUBLIC, anon and authenticated only. Other grantees come from the
+-- default privileges of the real schema (Supabase gives service_role its own), which the
+-- reference schema does not have: comparing them would make the check fail for no reason.
+INSERT INTO hg_catalog_dump
+SELECT 'hg_reference', 'acl', c.relkind::text || '|' || c.relname || '|' || COALESCE(r.rolname, 'PUBLIC') || '|' || x.privilege_type
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'hg_reference'
+CROSS JOIN LATERAL aclexplode(COALESCE(c.relacl, acldefault((CASE c.relkind WHEN 'S' THEN 's' ELSE 'r' END)::"char", c.relowner))) x
+LEFT JOIN pg_roles r ON r.oid = x.grantee
+WHERE (c.relkind = 'r' AND c.relname = ANY (ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion']::text[])
+       OR c.relkind = 'S' AND c.relname ~ ('^(' || array_to_string(ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion']::text[], '|') || ')_.*_seq$'))
+  AND (x.grantee = 0 OR r.rolname IN ('anon', 'authenticated'));
+
+INSERT INTO hg_catalog_dump
+SELECT 'hg_reference', 'acl', 'f|' || p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')|'
+       || COALESCE(r.rolname, 'PUBLIC') || '|' || x.privilege_type
+FROM pg_proc p
+JOIN pg_namespace n ON n.oid = p.pronamespace AND n.nspname = 'hg_reference'
+CROSS JOIN LATERAL aclexplode(COALESCE(p.proacl, acldefault('f', p.proowner))) x
+LEFT JOIN pg_roles r ON r.oid = x.grantee
+WHERE p.proname LIKE 'historical\_%' AND (x.grantee = 0 OR r.rolname IN ('anon', 'authenticated'));
+
+INSERT INTO hg_catalog_dump
+SELECT 'hg_reference', 'function', p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')|'
+       || md5(p.prosrc) || '|' || COALESCE(p.proconfig::text, '') || '|' || p.prosecdef::text
+FROM pg_proc p
+JOIN pg_namespace n ON n.oid = p.pronamespace AND n.nspname = 'hg_reference'
+WHERE p.proname LIKE 'historical\_%';
+
+INSERT INTO hg_catalog_dump
+SELECT 'public_before', 'column', c.relname || '|' || a.attname || '|' || format_type(a.atttypid, a.atttypmod)
+       || '|' || a.attnotnull::text || '|' || COALESCE(regexp_replace(pg_get_expr(d.adbin, d.adrelid), '(hg_reference|public)\.', '', 'g'), '')
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
+JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
+LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = a.attnum
+WHERE c.relkind = 'r' AND c.relname = ANY (ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion']::text[]);
+
+INSERT INTO hg_catalog_dump
+SELECT 'public_before', 'constraint', c.relname || '|' || k.conname || '|' || k.contype::text || '|'
+       || regexp_replace(pg_get_constraintdef(k.oid), '(hg_reference|public)\.', '', 'g')
+FROM pg_constraint k
+JOIN pg_class c ON c.oid = k.conrelid
+JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
+WHERE c.relname = ANY (ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion']::text[]);
+
+INSERT INTO hg_catalog_dump
+SELECT 'public_before', 'index', i.tablename || '|' || i.indexname || '|'
+       || regexp_replace(i.indexdef, '(hg_reference|public)\.', '', 'g')
+FROM pg_indexes i
+WHERE i.schemaname = 'public' AND i.tablename = ANY (ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion']::text[]);
+
+INSERT INTO hg_catalog_dump
+SELECT 'public_before', 'trigger', c.relname || '|' || t.tgname || '|' || t.tgenabled::text || '|'
+       || regexp_replace(pg_get_triggerdef(t.oid), '(hg_reference|public)\.', '', 'g')
+FROM pg_trigger t
+JOIN pg_class c ON c.oid = t.tgrelid
+JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
+WHERE NOT t.tgisinternal AND c.relname = ANY (ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion']::text[]);
+
+INSERT INTO hg_catalog_dump
+SELECT 'public_before', 'table', c.relname || '|rls=' || c.relrowsecurity::text || '|force=' || c.relforcerowsecurity::text
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
+WHERE c.relkind = 'r' AND c.relname = ANY (ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion']::text[]);
+
+-- Privileges are compared for PUBLIC, anon and authenticated only. Other grantees come from the
+-- default privileges of the real schema (Supabase gives service_role its own), which the
+-- reference schema does not have: comparing them would make the check fail for no reason.
+INSERT INTO hg_catalog_dump
+SELECT 'public_before', 'acl', c.relkind::text || '|' || c.relname || '|' || COALESCE(r.rolname, 'PUBLIC') || '|' || x.privilege_type
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
+CROSS JOIN LATERAL aclexplode(COALESCE(c.relacl, acldefault((CASE c.relkind WHEN 'S' THEN 's' ELSE 'r' END)::"char", c.relowner))) x
+LEFT JOIN pg_roles r ON r.oid = x.grantee
+WHERE (c.relkind = 'r' AND c.relname = ANY (ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion']::text[])
+       OR c.relkind = 'S' AND c.relname ~ ('^(' || array_to_string(ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion']::text[], '|') || ')_.*_seq$'))
+  AND (x.grantee = 0 OR r.rolname IN ('anon', 'authenticated'));
+
+INSERT INTO hg_catalog_dump
+SELECT 'public_before', 'acl', 'f|' || p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')|'
+       || COALESCE(r.rolname, 'PUBLIC') || '|' || x.privilege_type
+FROM pg_proc p
+JOIN pg_namespace n ON n.oid = p.pronamespace AND n.nspname = 'public'
+CROSS JOIN LATERAL aclexplode(COALESCE(p.proacl, acldefault('f', p.proowner))) x
+LEFT JOIN pg_roles r ON r.oid = x.grantee
+WHERE p.proname LIKE 'historical\_%' AND (x.grantee = 0 OR r.rolname IN ('anon', 'authenticated'));
+
+INSERT INTO hg_catalog_dump
+SELECT 'public_before', 'function', p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')|'
+       || md5(p.prosrc) || '|' || COALESCE(p.proconfig::text, '') || '|' || p.prosecdef::text
+FROM pg_proc p
+JOIN pg_namespace n ON n.oid = p.pronamespace AND n.nspname = 'public'
+WHERE p.proname LIKE 'historical\_%';
+
+-- Installation existante : aucun état partiel, et un état complet doit être exactement la référence.
+-- Installation neuve : les fonctions déjà présentes doivent être celles de la référence.
+-- Sans écart, string_agg vaut NULL et le CAST ne fait rien. Avec un écart, le CAST échoue et son
+-- message porte la liste des écarts. C'est volontaire : pas de bloc DO.
+WITH existing AS (
+  SELECT count(*)::int AS n
+  FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
+  WHERE c.relkind = 'r' AND c.relname = ANY (ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion']::text[])
+),
+diffs AS (
+  (SELECT 'only in the reference build'::text AS side, kind, item FROM hg_catalog_dump WHERE side = 'hg_reference'
+   EXCEPT SELECT 'only in the reference build', kind, item FROM hg_catalog_dump WHERE side = 'public_before')
+  UNION ALL
+  (SELECT 'only in the real schema', kind, item FROM hg_catalog_dump WHERE side = 'public_before'
+   EXCEPT SELECT 'only in the real schema', kind, item FROM hg_catalog_dump WHERE side = 'hg_reference')
+)
+SELECT CAST(
+  'The existing historical groups schema differs from the expected definition. Nothing was changed.'
+  || E'\n' || left(string_agg(problem, E'\n' ORDER BY problem), 4000)
+  AS integer)
+FROM (
+  SELECT 'partial installation: ' || n || ' of 13 tables exist' AS problem FROM existing WHERE n NOT IN (0, 13)
+  UNION ALL
+  SELECT side || ' ' || kind || ': ' || item FROM diffs, existing WHERE existing.n = 13
+  UNION ALL
+  SELECT side || ' ' || kind || ': ' || item FROM diffs, existing
+  WHERE existing.n = 0 AND side = 'only in the real schema' AND (kind = 'function' OR (kind = 'acl' AND item LIKE 'f|%'))
+) problems;
+
 
 -- hg:real-build
 SET LOCAL search_path TO public, pg_catalog;
@@ -716,57 +903,59 @@ BEGIN
 END;
 $fn$;
 
-CREATE OR REPLACE FUNCTION historical_assert_snapshot_writable(p_stream text, p_seq integer)
-RETURNS void
+CREATE OR REPLACE FUNCTION historical_version_guard()
+RETURNS trigger
 LANGUAGE plpgsql
 SET search_path = pg_catalog, public
 AS $fn$
 DECLARE
+  v_target integer;
   v_latest integer;
   v_integrity text;
 BEGIN
-  SELECT max("seq") INTO v_latest FROM "OfficialSourceSnapshot" WHERE "stream" = p_stream;
-  IF v_latest IS NULL OR p_seq <> v_latest THEN
-    RAISE EXCEPTION 'only the latest snapshot of stream % accepts record writes (asked %, latest %)', p_stream, p_seq, v_latest
+  IF TG_OP = 'INSERT' THEN
+    IF NEW."toSeq" IS NOT NULL THEN
+      RAISE EXCEPTION '% rows are inserted open (toSeq NULL)', TG_TABLE_NAME USING ERRCODE = 'restrict_violation';
+    END IF;
+    v_target := NEW."fromSeq";
+  ELSE
+    IF OLD."toSeq" IS NOT NULL THEN
+      RAISE EXCEPTION 'a closed version of % never changes', TG_TABLE_NAME USING ERRCODE = 'restrict_violation';
+    END IF;
+    IF NEW."toSeq" IS NULL OR (to_jsonb(NEW) - 'toSeq') IS DISTINCT FROM (to_jsonb(OLD) - 'toSeq') THEN
+      RAISE EXCEPTION 'on %, only toSeq may change, and only to be set once', TG_TABLE_NAME USING ERRCODE = 'restrict_violation';
+    END IF;
+    v_target := NEW."toSeq";
+  END IF;
+
+  -- The snapshot written to (fromSeq of a new version, toSeq of a closed one) must be the latest of
+  -- its stream, VERIFIED, and neither released nor revoked.
+  --
+  -- Shared advisory lock on the snapshot until the end of the transaction: a release, a revocation
+  -- or a newer snapshot (all take it exclusively) wait for the writers instead of slipping between
+  -- this check and the write. An advisory lock needs no privilege on the table, unlike FOR SHARE,
+  -- which would force an UPDATE grant on a table that is append-only. The check is inlined for the
+  -- same reason: calling a helper would need EXECUTE on it for every role that writes.
+  PERFORM pg_advisory_xact_lock_shared(hashtextextended(NEW."stream" || ':' || v_target, 0));
+  SELECT max("seq") INTO v_latest FROM "OfficialSourceSnapshot" WHERE "stream" = NEW."stream";
+  IF v_latest IS NULL OR v_target <> v_latest THEN
+    RAISE EXCEPTION 'only the latest snapshot of stream % accepts record writes (asked %, latest %)', NEW."stream", v_target, v_latest
       USING ERRCODE = 'restrict_violation';
   END IF;
-  SELECT "integrity" INTO v_integrity FROM "OfficialSourceSnapshot" WHERE "stream" = p_stream AND "seq" = p_seq;
+  SELECT "integrity" INTO v_integrity FROM "OfficialSourceSnapshot" WHERE "stream" = NEW."stream" AND "seq" = v_target;
   IF v_integrity IS DISTINCT FROM 'VERIFIED' THEN
-    RAISE EXCEPTION 'snapshot %/% is not VERIFIED: it accepts no record', p_stream, p_seq
+    RAISE EXCEPTION 'snapshot %/% is not VERIFIED: it accepts no record', NEW."stream", v_target
       USING ERRCODE = 'restrict_violation';
   END IF;
   IF EXISTS (
     SELECT 1
     FROM "SnapshotDecision" d
     JOIN "OfficialSourceSnapshot" s ON s."id" = d."snapshotId"
-    WHERE s."stream" = p_stream AND s."seq" = p_seq AND d."status" IN ('RELEASED', 'REVOKED')
+    WHERE s."stream" = NEW."stream" AND s."seq" = v_target AND d."status" IN ('RELEASED', 'REVOKED')
   ) THEN
-    RAISE EXCEPTION 'snapshot %/% was released or revoked: its records are frozen', p_stream, p_seq
+    RAISE EXCEPTION 'snapshot %/% was released or revoked: its records are frozen', NEW."stream", v_target
       USING ERRCODE = 'restrict_violation';
   END IF;
-END;
-$fn$;
-
-CREATE OR REPLACE FUNCTION historical_version_guard()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = pg_catalog, public
-AS $fn$
-BEGIN
-  IF TG_OP = 'INSERT' THEN
-    IF NEW."toSeq" IS NOT NULL THEN
-      RAISE EXCEPTION '% rows are inserted open (toSeq NULL)', TG_TABLE_NAME USING ERRCODE = 'restrict_violation';
-    END IF;
-    PERFORM historical_assert_snapshot_writable(NEW."stream", NEW."fromSeq");
-    RETURN NEW;
-  END IF;
-  IF OLD."toSeq" IS NOT NULL THEN
-    RAISE EXCEPTION 'a closed version of % never changes', TG_TABLE_NAME USING ERRCODE = 'restrict_violation';
-  END IF;
-  IF NEW."toSeq" IS NULL OR (to_jsonb(NEW) - 'toSeq') IS DISTINCT FROM (to_jsonb(OLD) - 'toSeq') THEN
-    RAISE EXCEPTION 'on %, only toSeq may change, and only to be set once', TG_TABLE_NAME USING ERRCODE = 'restrict_violation';
-  END IF;
-  PERFORM historical_assert_snapshot_writable(NEW."stream", NEW."toSeq");
   RETURN NEW;
 END;
 $fn$;
@@ -795,6 +984,9 @@ AS $fn$
 DECLARE
   v_expected integer;
 BEGIN
+  -- Exclusive lock on the previous snapshot: its record writers (shared lock) finish first, and no
+  -- record can be written to it after its successor exists.
+  PERFORM pg_advisory_xact_lock(hashtextextended(NEW."stream" || ':' || (NEW."seq" - 1), 0));
   SELECT COALESCE(max("seq"), 0) + 1 INTO v_expected FROM "OfficialSourceSnapshot" WHERE "stream" = NEW."stream";
   IF NEW."seq" <> v_expected THEN
     RAISE EXCEPTION 'snapshot seq of stream % must be % (no gap, no reuse), got %', NEW."stream", v_expected, NEW."seq"
@@ -812,7 +1004,13 @@ AS $fn$
 DECLARE
   v_last text;
   v_integrity text;
+  v_stream text;
+  v_seq integer;
 BEGIN
+  -- Exclusive lock on the snapshot: record writers (shared lock) finish before a decision lands,
+  -- and a writer that comes after sees the decision.
+  SELECT "stream", "seq" INTO v_stream, v_seq FROM "OfficialSourceSnapshot" WHERE "id" = NEW."snapshotId";
+  PERFORM pg_advisory_xact_lock(hashtextextended(v_stream || ':' || v_seq, 0));
   SELECT "status" INTO v_last FROM "SnapshotDecision"
     WHERE "snapshotId" = NEW."snapshotId" ORDER BY "decisionNo" DESC LIMIT 1;
   IF v_last = 'REVOKED' THEN
@@ -840,6 +1038,8 @@ BEGIN
     END IF;
     RETURN NEW;
   END IF;
+  -- Exclusive lock on the run: waits for the rows being added to it (shared lock).
+  PERFORM pg_advisory_xact_lock(hashtextextended('run:' || OLD."id", 0));
   IF OLD."status" <> 'RUNNING' THEN
     RAISE EXCEPTION 'a finished run never changes' USING ERRCODE = 'restrict_violation';
   END IF;
@@ -862,6 +1062,8 @@ AS $fn$
 DECLARE
   v_status text;
 BEGIN
+  -- Shared lock on the run: finishing it (exclusive lock, in the run guard) waits for rows being added.
+  PERFORM pg_advisory_xact_lock_shared(hashtextextended('run:' || NEW."runId", 0));
   SELECT "status" INTO v_status FROM "HistoricalResolutionRun" WHERE "id" = NEW."runId";
   IF v_status IS DISTINCT FROM 'RUNNING' THEN
     RAISE EXCEPTION 'rows are added to a run only while it is RUNNING' USING ERRCODE = 'restrict_violation';
@@ -879,10 +1081,12 @@ DECLARE
   v_status text;
   v_decision text;
 BEGIN
+  PERFORM pg_advisory_xact_lock_shared(hashtextextended('run:' || NEW."runId", 0));
   SELECT "status" INTO v_status FROM "HistoricalResolutionRun" WHERE "id" = NEW."runId";
   IF v_status IS DISTINCT FROM 'RUNNING' THEN
     RAISE EXCEPTION 'snapshots are pinned only while the run is RUNNING' USING ERRCODE = 'restrict_violation';
   END IF;
+  PERFORM pg_advisory_xact_lock_shared(hashtextextended(NEW."stream" || ':' || NEW."seq", 0));
   SELECT d."status" INTO v_decision
     FROM "SnapshotDecision" d
     JOIN "OfficialSourceSnapshot" s ON s."id" = d."snapshotId"
@@ -1341,7 +1545,6 @@ REVOKE ALL ON TABLE "SourceArtifact", "OfficialSourceSnapshot", "SnapshotDecisio
 REVOKE ALL ON SEQUENCE "SnapshotDecision_decisionNo_seq", "OfficialActorLinkDecision_decisionNo_seq", "OrganContinuityDecision_decisionNo_seq" FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION historical_refuse_mutation() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION historical_refuse_truncate() FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION historical_assert_snapshot_writable(text,integer) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION historical_version_guard() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION historical_artifact_guard() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION historical_snapshot_insert_guard() FROM PUBLIC, anon, authenticated;
@@ -1350,82 +1553,13 @@ REVOKE ALL ON FUNCTION historical_run_guard() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION historical_run_child_guard() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION historical_pin_guard() FROM PUBLIC, anon, authenticated;
 
--- hg:compare
--- Catalogue du schéma réel contre catalogue du schéma de référence. Les définitions sont lues avec
--- un search_path réduit à pg_catalog, donc toutes qualifiées, puis le nom du schéma est retiré.
+-- hg:postcheck
+-- Le schéma réel doit maintenant être exactement la référence, sans exception.
 SET LOCAL search_path TO pg_catalog;
 
-CREATE TEMP TABLE hg_catalog_dump (side text NOT NULL, kind text NOT NULL, item text NOT NULL) ON COMMIT DROP;
-
 INSERT INTO hg_catalog_dump
-SELECT 'hg_reference', 'column', c.relname || '|' || a.attname || '|' || format_type(a.atttypid, a.atttypmod)
-       || '|' || a.attnotnull || '|' || COALESCE(regexp_replace(pg_get_expr(d.adbin, d.adrelid), '(hg_reference|public)\.', '', 'g'), '')
-FROM pg_class c
-JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'hg_reference'
-JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
-LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = a.attnum
-WHERE c.relkind = 'r' AND c.relname = ANY (ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion']::text[]);
-
-INSERT INTO hg_catalog_dump
-SELECT 'hg_reference', 'constraint', c.relname || '|' || k.conname || '|' || k.contype || '|'
-       || regexp_replace(pg_get_constraintdef(k.oid), '(hg_reference|public)\.', '', 'g')
-FROM pg_constraint k
-JOIN pg_class c ON c.oid = k.conrelid
-JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'hg_reference'
-WHERE c.relname = ANY (ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion']::text[]);
-
-INSERT INTO hg_catalog_dump
-SELECT 'hg_reference', 'index', i.tablename || '|' || i.indexname || '|'
-       || regexp_replace(i.indexdef, '(hg_reference|public)\.', '', 'g')
-FROM pg_indexes i
-WHERE i.schemaname = 'hg_reference' AND i.tablename = ANY (ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion']::text[]);
-
-INSERT INTO hg_catalog_dump
-SELECT 'hg_reference', 'trigger', c.relname || '|' || t.tgname || '|' || t.tgenabled || '|'
-       || regexp_replace(pg_get_triggerdef(t.oid), '(hg_reference|public)\.', '', 'g')
-FROM pg_trigger t
-JOIN pg_class c ON c.oid = t.tgrelid
-JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'hg_reference'
-WHERE NOT t.tgisinternal AND c.relname = ANY (ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion']::text[]);
-
-INSERT INTO hg_catalog_dump
-SELECT 'hg_reference', 'table', c.relname || '|rls=' || c.relrowsecurity || '|force=' || c.relforcerowsecurity
-FROM pg_class c
-JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'hg_reference'
-WHERE c.relkind = 'r' AND c.relname = ANY (ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion']::text[]);
-
--- Privileges are compared for PUBLIC, anon and authenticated only. Other grantees come from the
--- default privileges of the real schema (Supabase gives service_role its own), which the
--- reference schema does not have: comparing them would make the check fail for no reason.
-INSERT INTO hg_catalog_dump
-SELECT 'hg_reference', 'acl', c.relkind || '|' || c.relname || '|' || COALESCE(r.rolname, 'PUBLIC') || '|' || x.privilege_type
-FROM pg_class c
-JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'hg_reference'
-CROSS JOIN LATERAL aclexplode(COALESCE(c.relacl, acldefault(CASE c.relkind WHEN 'S' THEN 's' ELSE 'r' END, c.relowner))) x
-LEFT JOIN pg_roles r ON r.oid = x.grantee
-WHERE (c.relkind = 'r' AND c.relname = ANY (ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion']::text[])
-       OR c.relkind = 'S' AND c.relname ~ ('^(' || array_to_string(ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion']::text[], '|') || ')_.*_seq$'))
-  AND (x.grantee = 0 OR r.rolname IN ('anon', 'authenticated'));
-
-INSERT INTO hg_catalog_dump
-SELECT 'hg_reference', 'acl', 'f|' || p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')|'
-       || COALESCE(r.rolname, 'PUBLIC') || '|' || x.privilege_type
-FROM pg_proc p
-JOIN pg_namespace n ON n.oid = p.pronamespace AND n.nspname = 'hg_reference'
-CROSS JOIN LATERAL aclexplode(COALESCE(p.proacl, acldefault('f', p.proowner))) x
-LEFT JOIN pg_roles r ON r.oid = x.grantee
-WHERE p.proname LIKE 'historical\_%' AND (x.grantee = 0 OR r.rolname IN ('anon', 'authenticated'));
-
-INSERT INTO hg_catalog_dump
-SELECT 'hg_reference', 'function', p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')|'
-       || md5(p.prosrc) || '|' || COALESCE(p.proconfig::text, '') || '|' || p.prosecdef
-FROM pg_proc p
-JOIN pg_namespace n ON n.oid = p.pronamespace AND n.nspname = 'hg_reference'
-WHERE p.proname LIKE 'historical\_%';
-
-INSERT INTO hg_catalog_dump
-SELECT 'public', 'column', c.relname || '|' || a.attname || '|' || format_type(a.atttypid, a.atttypmod)
-       || '|' || a.attnotnull || '|' || COALESCE(regexp_replace(pg_get_expr(d.adbin, d.adrelid), '(hg_reference|public)\.', '', 'g'), '')
+SELECT 'public_after', 'column', c.relname || '|' || a.attname || '|' || format_type(a.atttypid, a.atttypmod)
+       || '|' || a.attnotnull::text || '|' || COALESCE(regexp_replace(pg_get_expr(d.adbin, d.adrelid), '(hg_reference|public)\.', '', 'g'), '')
 FROM pg_class c
 JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
 JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
@@ -1433,7 +1567,7 @@ LEFT JOIN pg_attrdef d ON d.adrelid = c.oid AND d.adnum = a.attnum
 WHERE c.relkind = 'r' AND c.relname = ANY (ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion']::text[]);
 
 INSERT INTO hg_catalog_dump
-SELECT 'public', 'constraint', c.relname || '|' || k.conname || '|' || k.contype || '|'
+SELECT 'public_after', 'constraint', c.relname || '|' || k.conname || '|' || k.contype::text || '|'
        || regexp_replace(pg_get_constraintdef(k.oid), '(hg_reference|public)\.', '', 'g')
 FROM pg_constraint k
 JOIN pg_class c ON c.oid = k.conrelid
@@ -1441,13 +1575,13 @@ JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
 WHERE c.relname = ANY (ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion']::text[]);
 
 INSERT INTO hg_catalog_dump
-SELECT 'public', 'index', i.tablename || '|' || i.indexname || '|'
+SELECT 'public_after', 'index', i.tablename || '|' || i.indexname || '|'
        || regexp_replace(i.indexdef, '(hg_reference|public)\.', '', 'g')
 FROM pg_indexes i
 WHERE i.schemaname = 'public' AND i.tablename = ANY (ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion']::text[]);
 
 INSERT INTO hg_catalog_dump
-SELECT 'public', 'trigger', c.relname || '|' || t.tgname || '|' || t.tgenabled || '|'
+SELECT 'public_after', 'trigger', c.relname || '|' || t.tgname || '|' || t.tgenabled::text || '|'
        || regexp_replace(pg_get_triggerdef(t.oid), '(hg_reference|public)\.', '', 'g')
 FROM pg_trigger t
 JOIN pg_class c ON c.oid = t.tgrelid
@@ -1455,7 +1589,7 @@ JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
 WHERE NOT t.tgisinternal AND c.relname = ANY (ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion']::text[]);
 
 INSERT INTO hg_catalog_dump
-SELECT 'public', 'table', c.relname || '|rls=' || c.relrowsecurity || '|force=' || c.relforcerowsecurity
+SELECT 'public_after', 'table', c.relname || '|rls=' || c.relrowsecurity::text || '|force=' || c.relforcerowsecurity::text
 FROM pg_class c
 JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
 WHERE c.relkind = 'r' AND c.relname = ANY (ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion']::text[]);
@@ -1464,17 +1598,17 @@ WHERE c.relkind = 'r' AND c.relname = ANY (ARRAY['SourceArtifact', 'OfficialSour
 -- default privileges of the real schema (Supabase gives service_role its own), which the
 -- reference schema does not have: comparing them would make the check fail for no reason.
 INSERT INTO hg_catalog_dump
-SELECT 'public', 'acl', c.relkind || '|' || c.relname || '|' || COALESCE(r.rolname, 'PUBLIC') || '|' || x.privilege_type
+SELECT 'public_after', 'acl', c.relkind::text || '|' || c.relname || '|' || COALESCE(r.rolname, 'PUBLIC') || '|' || x.privilege_type
 FROM pg_class c
 JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
-CROSS JOIN LATERAL aclexplode(COALESCE(c.relacl, acldefault(CASE c.relkind WHEN 'S' THEN 's' ELSE 'r' END, c.relowner))) x
+CROSS JOIN LATERAL aclexplode(COALESCE(c.relacl, acldefault((CASE c.relkind WHEN 'S' THEN 's' ELSE 'r' END)::"char", c.relowner))) x
 LEFT JOIN pg_roles r ON r.oid = x.grantee
 WHERE (c.relkind = 'r' AND c.relname = ANY (ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion']::text[])
        OR c.relkind = 'S' AND c.relname ~ ('^(' || array_to_string(ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion']::text[], '|') || ')_.*_seq$'))
   AND (x.grantee = 0 OR r.rolname IN ('anon', 'authenticated'));
 
 INSERT INTO hg_catalog_dump
-SELECT 'public', 'acl', 'f|' || p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')|'
+SELECT 'public_after', 'acl', 'f|' || p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')|'
        || COALESCE(r.rolname, 'PUBLIC') || '|' || x.privilege_type
 FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace AND n.nspname = 'public'
@@ -1483,23 +1617,21 @@ LEFT JOIN pg_roles r ON r.oid = x.grantee
 WHERE p.proname LIKE 'historical\_%' AND (x.grantee = 0 OR r.rolname IN ('anon', 'authenticated'));
 
 INSERT INTO hg_catalog_dump
-SELECT 'public', 'function', p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')|'
-       || md5(p.prosrc) || '|' || COALESCE(p.proconfig::text, '') || '|' || p.prosecdef
+SELECT 'public_after', 'function', p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')|'
+       || md5(p.prosrc) || '|' || COALESCE(p.proconfig::text, '') || '|' || p.prosecdef::text
 FROM pg_proc p
 JOIN pg_namespace n ON n.oid = p.pronamespace AND n.nspname = 'public'
 WHERE p.proname LIKE 'historical\_%';
 
--- Dernière requête : sans écart, string_agg vaut NULL et le CAST ne fait rien. Avec un écart, le
--- CAST échoue et son message porte la liste des écarts. C'est volontaire : pas de bloc DO.
 SELECT CAST(
-  'The existing historical groups schema differs from the expected definition. Nothing was changed.'
+  'The historical groups schema built here differs from the expected definition. Nothing was changed.'
   || E'\n' || left(string_agg(side || ' ' || kind || ': ' || item, E'\n' ORDER BY kind, item), 4000)
   AS integer)
 FROM (
   (SELECT 'only in the reference build'::text AS side, kind, item FROM hg_catalog_dump WHERE side = 'hg_reference'
-   EXCEPT SELECT 'only in the reference build', kind, item FROM hg_catalog_dump WHERE side = 'public')
+   EXCEPT SELECT 'only in the reference build', kind, item FROM hg_catalog_dump WHERE side = 'public_after')
   UNION ALL
-  (SELECT 'only in the real schema', kind, item FROM hg_catalog_dump WHERE side = 'public'
+  (SELECT 'only in the real schema', kind, item FROM hg_catalog_dump WHERE side = 'public_after'
    EXCEPT SELECT 'only in the real schema', kind, item FROM hg_catalog_dump WHERE side = 'hg_reference')
 ) differences;
 
