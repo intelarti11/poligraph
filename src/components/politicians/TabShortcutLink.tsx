@@ -5,9 +5,8 @@ import type { ReactNode } from "react";
 import { revealProfileTabs } from "./profile-tabs-anchor";
 
 /**
- * Shortcut to one of the profile tabs. Selecting the tab is the job of `?tab=`
- * in the href; this only makes sure the visitor ends up looking at the panel
- * that just opened, which `scroll={false}` alone never did.
+ * Tab bodies are already mounted in the profile's client boundary. Native
+ * history updates useSearchParams without fetching the same document again.
  */
 export function TabShortcutLink({
   href,
@@ -28,7 +27,15 @@ export function TabShortcutLink({
       prefetch={false}
       scroll={false}
       className={className}
-      onClick={opensTab ? () => revealProfileTabs() : undefined}
+      onNavigate={(event) => {
+        if (!opensTab) return;
+        const target = new URL(href, window.location.href);
+        if (target.pathname !== window.location.pathname) return;
+
+        event.preventDefault();
+        window.history.pushState(null, "", `${target.pathname}${target.search}${target.hash}`);
+        revealProfileTabs();
+      }}
     >
       {children}
     </Link>

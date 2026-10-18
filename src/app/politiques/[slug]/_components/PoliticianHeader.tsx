@@ -63,7 +63,7 @@ export function PoliticianHeader({ politician, currentGroup }: PoliticianHeaderP
   const feminine = politician.civility === "Mme";
 
   return (
-    <div className="flex items-start gap-6 mb-8">
+    <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6 mb-8">
       <PoliticianAvatar
         photoUrl={politician.photoUrl}
         blobPhotoUrl={politician.blobPhotoUrl}
@@ -71,9 +71,9 @@ export function PoliticianHeader({ politician, currentGroup }: PoliticianHeaderP
         lastName={politician.lastName}
         size="lg"
       />
-      <div className="min-w-0">
-        <div className="flex items-center gap-3 mb-2">
-          <h1 className="text-3xl font-display font-extrabold tracking-tight">
+      <div className="min-w-0 w-full sm:flex-1">
+        <div className="flex flex-wrap items-center gap-3 mb-2">
+          <h1 className="min-w-0 break-words text-3xl font-display font-extrabold tracking-tight">
             {politician.fullName}
           </h1>
           <FollowButton slug={politician.slug} />
@@ -81,9 +81,12 @@ export function PoliticianHeader({ politician, currentGroup }: PoliticianHeaderP
 
         <div className="flex flex-wrap items-center gap-2">
           {currentParty && (
-            <Link href={currentParty.slug ? `/partis/${currentParty.slug}` : "/partis"}>
+            <Link
+              href={currentParty.slug ? `/partis/${currentParty.slug}` : "/partis"}
+              className="min-w-0 max-w-full"
+            >
               <Badge
-                className="text-sm hover:opacity-80 transition-opacity cursor-pointer whitespace-normal text-center"
+                className="block max-w-full text-sm hover:opacity-80 transition-opacity cursor-pointer whitespace-normal break-words"
                 style={{
                   backgroundColor: currentParty.color ? `${currentParty.color}20` : undefined,
                   color: currentParty.color
@@ -100,7 +103,7 @@ export function PoliticianHeader({ politician, currentGroup }: PoliticianHeaderP
           {currentGroup && (
             <Badge
               variant="outline"
-              className="text-sm"
+              className="block max-w-full text-sm whitespace-normal break-words"
               style={{
                 borderColor: currentGroup.color || undefined,
                 color: currentGroup.color
@@ -114,7 +117,11 @@ export function PoliticianHeader({ politician, currentGroup }: PoliticianHeaderP
           )}
 
           {activeRoles.map((entry) => (
-            <Badge key={entry.id} variant="outline" className="text-sm">
+            <Badge
+              key={entry.id}
+              variant="outline"
+              className="block max-w-full text-sm whitespace-normal break-words"
+            >
               {feminizePartyRole(PARTY_ROLE_LABELS[entry.role], politician.civility)}
               {entry.party.shortName !== currentParty?.shortName && ` · ${entry.party.shortName}`}
             </Badge>
