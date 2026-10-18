@@ -60,19 +60,20 @@ const idents = (list: string) => [...list.matchAll(/"(\w+)"/g)].map((m) => m[1] 
 const REFERENCE_MARK =
   "-- hg:reference-build\nSET LOCAL search_path TO hg_reference, pg_catalog;\n";
 const REAL_MARK = "-- hg:real-build\nSET LOCAL search_path TO public, pg_catalog;\n";
-const COMPARE_MARK = "-- hg:compare\n";
+const PRECHECK_MARK = "-- hg:precheck\n";
+const POSTCHECK_MARK = "-- hg:postcheck\n";
 
 /** The DDL text built in the reference schema, before the real build. */
 export function referenceBuildOf(sql: string): string {
   const start = sql.indexOf(REFERENCE_MARK);
-  const end = sql.indexOf(`\n${REAL_MARK.split("\n")[0]}`);
+  const end = sql.indexOf(`\n${PRECHECK_MARK.split("\n")[0]}`);
   return start === -1 || end === -1 ? "" : sql.slice(start + REFERENCE_MARK.length, end);
 }
 
 /** The DDL text built in the real schema. It is what the tables, triggers and indexes are read from. */
 export function ddlOf(sql: string): string {
   const start = sql.indexOf(REAL_MARK);
-  const end = sql.indexOf(`\n${COMPARE_MARK}`);
+  const end = sql.indexOf(`\n${POSTCHECK_MARK}`);
   return start === -1 || end === -1 ? "" : sql.slice(start + REAL_MARK.length, end);
 }
 
@@ -284,10 +285,39 @@ export function violations(sql: string, schema: string): string[] {
     )
   )
     out.push("no divergence error");
-  const compare = sql.slice(sql.indexOf(COMPARE_MARK));
-  for (const kind of ["column", "constraint", "index", "trigger", "table", "acl", "function"]) {
-    if (!compare.includes(`'${kind}'`)) out.push(`the catalog comparison does not cover ${kind}s`);
+  // Order: the reference is built, then the real schema is compared BEFORE anything is written to
+  // it, then built, then compared again. A check placed after the build could not stop a repair.
+  const at = (mark: string) => sql.indexOf(mark.split("\n")[0] as string);
+  if (
+    !(
+      at(REFERENCE_MARK) < at(PRECHECK_MARK) &&
+      at(PRECHECK_MARK) < at(REAL_MARK) &&
+      at(REAL_MARK) < at(POSTCHECK_MARK)
+    )
+  ) {
+    out.push("the comparison before the real build is missing or out of order");
   }
+  const precheck = sql.slice(at(PRECHECK_MARK), at(REAL_MARK));
+  const postcheck = sql.slice(at(POSTCHECK_MARK));
+  if (
+    !/CAST\(\s*'The existing historical groups schema differs from the expected definition/.test(
+      precheck
+    )
+  )
+    out.push("no divergence error before the real build");
+  if (!/CAST\(\s*'The historical groups schema built here differs/.test(postcheck))
+    out.push("no divergence error after the real build");
+  if (!precheck.includes("partial installation")) out.push("a partial installation is not refused");
+  for (const kind of ["column", "constraint", "index", "trigger", "table", "acl", "function"]) {
+    if (!precheck.includes(`'${kind}'`)) out.push(`the catalog comparison does not cover ${kind}s`);
+  }
+  // No repair: nothing in the pre-check section writes to the real schema.
+  if (
+    /\b(CREATE|ALTER|DROP)\s+(TABLE|INDEX|FUNCTION|TRIGGER)\b/i.test(
+      precheck.replace(/CREATE TEMP TABLE hg_catalog_dump/, "")
+    )
+  )
+    out.push("the comparison section changes the schema");
   // The repository's SEC-06 contract: plain SQL, no DO block, no dynamic SQL, no SECURITY DEFINER.
   const plain = executableText(sql);
   if (/\bDO\s+\$/i.test(plain) || /\bDO\s+'/i.test(plain))
@@ -696,10 +726,13 @@ describe("lot 5B schema: static conformance", () => {
     const rollback = read(ROLLBACK_PATH);
     const tables = parseTables(ddlOf(SQL)).map((t) => t.name);
     for (const name of tables) {
-      expect(rollback, `${name} is checked`).toContain(`WHERE EXISTS (SELECT 1 FROM "${name}");`);
+      expect(rollback, `${name} is checked`).toContain(`FROM "${name}";\n`);
+      expect(rollback, `${name} check is not a constant`).toContain(
+        `CAST(string_agg('${name} holds rows`
+      );
     }
     // Every check comes before the first DROP, inside the one transaction.
-    expect(rollback.lastIndexOf("WHERE EXISTS")).toBeLessThan(rollback.indexOf("DROP TABLE"));
+    expect(rollback.lastIndexOf("CAST(string_agg(")).toBeLessThan(rollback.indexOf("DROP TABLE"));
     expect(rollback).toMatch(/^BEGIN;$/m);
     const code = executableText(rollback);
     expect(code).not.toMatch(/CASCADE/i);
@@ -831,7 +864,7 @@ describe("the conformance check can fail", () => {
         "The existing historical groups schema differs from the expected definition. Nothing was changed.'\n  ||",
         "Something else.'\n  ||"
       ).join("\n")
-    ).toContain("no divergence error");
+    ).toContain("no divergence error before the real build");
   });
 
   it("names a Politician key in the evidence, and a decision a script could validate", () => {
