@@ -1,3 +1,5 @@
+import type { ComponentProps } from "react";
+import type Link from "next/link";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { PoliticianSummary } from "@/components/politicians/PoliticianSummary";
@@ -7,13 +9,21 @@ import { mountTabsAnchor } from "./helpers";
 
 // Plain anchor: jsdom has no navigation, and the click has to reach our handler.
 vi.mock("next/link", () => ({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  default: ({ children, href, onClick, ...props }: any) => (
+  default: ({
+    children,
+    href,
+    onClick,
+    onNavigate,
+    prefetch: _prefetch,
+    scroll: _scroll,
+    ...props
+  }: ComponentProps<typeof Link>) => (
     <a
-      href={href}
-      onClick={(e: React.MouseEvent) => {
+      href={String(href)}
+      onClick={(e: React.MouseEvent<HTMLAnchorElement>) => {
         e.preventDefault();
         onClick?.(e);
+        onNavigate?.({ preventDefault: () => e.preventDefault() });
       }}
       {...props}
     >
@@ -57,6 +67,7 @@ describe("PoliticianSummary", () => {
   });
 
   it("brings the tabs into view when a shortcut is clicked", () => {
+    window.history.replaceState(null, "", "/politiques/x");
     const anchor = mountTabsAnchor();
     render(
       <PoliticianSummary
@@ -73,6 +84,7 @@ describe("PoliticianSummary", () => {
   });
 
   it("leaves in-page anchor shortcuts to the browser", () => {
+    window.history.replaceState(null, "", "/politiques/x");
     const anchor = mountTabsAnchor();
     render(
       <PoliticianSummary
