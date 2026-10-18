@@ -67,6 +67,15 @@ const ALLOWED_INTERNAL_IMPORTS: Record<string, readonly string[]> = {
   // The rows are the parsers' output turned into table rows and hashed: no resolver, no publication.
   "rows.ts": ["./canonical", "./count-check", "./parse-amo30", "./parse-scrutin", "./types"],
   "record-counts.ts": ["./rows"],
+  // The assembly turns stored rows into run inputs: no resolver, no publication, no database.
+  "run-assembly.ts": [
+    "./canonical",
+    "./parse-amo30",
+    "./rows",
+    "./run-execution",
+    "./types",
+    "./versioning",
+  ],
 };
 
 function specifiersOf(source: ts.SourceFile): string[] {
@@ -170,6 +179,7 @@ describe("historical groups: the module respects its contract", () => {
       "record-counts.ts",
       "resolver.ts",
       "rows.ts",
+      "run-assembly.ts",
       "run-contract.ts",
       "run-execution.ts",
       "source-shape.ts",
