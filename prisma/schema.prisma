@@ -4211,3 +4211,258 @@ model ConseilMembre {
   @@unique([niveau, rowKey])
   @@index([niveau, territoryCode])
 }
+
+// ============================================
+// HISTORICAL PARLIAMENTARY AFFILIATIONS (lot 5B)
+// ============================================
+// Official evidence of the Assemblée nationale and the Sénat, versioned by snapshot intervals.
+// Deliberately NO relation to Politician, ParliamentaryGroup, AnOrgan, Mandate or Vote: a
+// historical affiliation is established from the official files alone (see the architecture
+// document, docs/audits/parlement-historique-lot5-architecture-v2.md).
+//
+// The SQL in prisma/migrations/manual/2026-10-18-historical-groups-schema.sql is the source of
+// truth. It carries what Prisma cannot declare: exclusion constraints on snapshot intervals,
+// partial unique indexes, CHECK constraints, append-only triggers, RLS. NEVER `db push` these
+// tables: the diff would drop those objects. Status and kind columns are TEXT with CHECK
+// constraints on purpose (no PostgreSQL enum to alter). Key columns are versioned (primary keys
+// end with fromSeq): a reference by business key (an actor, an organ, a seat mandate) cannot be a
+// foreign key, it stays under the importer's responsibility (see the 5B report).
+
+model SourceArtifact {
+  sha256                 String                   @id
+  byteSize               BigInt
+  mediaType              String
+  storageKind            String
+  storageRef             String
+  storedAt               DateTime                 @db.Timestamptz(3)
+  storedBy               String
+  lastVerifiedAt         DateTime?                @db.Timestamptz(3)
+  officialSourceSnapshot OfficialSourceSnapshot[]
+}
+
+model OfficialSourceSnapshot {
+  id                                  String                     @id
+  stream                              String
+  seq                                 Int
+  artifactSha256                      String
+  url                                 String
+  fetchedAt                           DateTime                   @db.Timestamptz(3)
+  sourceAsOf                          DateTime?                  @db.Timestamptz(3)
+  integrity                           String
+  parserVersion                       String
+  stateHash                           String
+  recordCounts                        Json
+  importedBy                          String
+  importedAt                          DateTime                   @default(now()) @db.Timestamptz(3)
+  artifact                            SourceArtifact             @relation(fields: [artifactSha256], references: [sha256], map: "OfficialSourceSnapshot_artifactSha256_fkey", onDelete: Restrict, onUpdate: Restrict)
+  snapshotDecision                    SnapshotDecision[]
+  officialActorFromSnapshot           OfficialActor[]            @relation("OfficialActorFromSnapshot")
+  officialActorToSnapshot             OfficialActor[]            @relation("OfficialActorToSnapshot")
+  officialOrganRecordFromSnapshot     OfficialOrganRecord[]      @relation("OfficialOrganRecordFromSnapshot")
+  officialOrganRecordToSnapshot       OfficialOrganRecord[]      @relation("OfficialOrganRecordToSnapshot")
+  groupMembershipRecordFromSnapshot   GroupMembershipRecord[]    @relation("GroupMembershipRecordFromSnapshot")
+  groupMembershipRecordToSnapshot     GroupMembershipRecord[]    @relation("GroupMembershipRecordToSnapshot")
+  seatMandateRecordFromSnapshot       SeatMandateRecord[]        @relation("SeatMandateRecordFromSnapshot")
+  seatMandateRecordToSnapshot         SeatMandateRecord[]        @relation("SeatMandateRecordToSnapshot")
+  scrutinVoterAttestationFromSnapshot ScrutinVoterAttestation[]  @relation("ScrutinVoterAttestationFromSnapshot")
+  scrutinVoterAttestationToSnapshot   ScrutinVoterAttestation[]  @relation("ScrutinVoterAttestationToSnapshot")
+  historicalRunSnapshotPinSnapshot    HistoricalRunSnapshotPin[] @relation("HistoricalRunSnapshotPinSnapshot")
+
+  @@unique([stream, seq], map: "OfficialSourceSnapshot_stream_seq_key")
+  @@unique([stream, artifactSha256, parserVersion], map: "OfficialSourceSnapshot_stream_artifactSha256_parserVersion_key")
+  @@unique([stream, seq, stateHash], map: "OfficialSourceSnapshot_stream_seq_stateHash_key")
+}
+
+model SnapshotDecision {
+  decisionNo    BigInt                 @id @default(autoincrement())
+  snapshotId    String
+  status        String
+  reason        String
+  decidedBy     String
+  decidedByKind String
+  decidedAt     DateTime               @default(now()) @db.Timestamptz(3)
+  snapshot      OfficialSourceSnapshot @relation(fields: [snapshotId], references: [id], map: "SnapshotDecision_snapshotId_fkey", onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([snapshotId, decisionNo], map: "SnapshotDecision_snapshotId_decisionNo_idx")
+}
+
+model OfficialActor {
+  stream       String
+  officialId   String
+  fromSeq      Int
+  toSeq        Int?
+  sourceMember String
+  rawHash      String
+  fromSnapshot OfficialSourceSnapshot  @relation("OfficialActorFromSnapshot", fields: [stream, fromSeq], references: [stream, seq], map: "OfficialActor_fromSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+  toSnapshot   OfficialSourceSnapshot? @relation("OfficialActorToSnapshot", fields: [stream, toSeq], references: [stream, seq], map: "OfficialActor_toSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([stream, officialId, fromSeq])
+}
+
+model OfficialOrganRecord {
+  stream       String
+  organeRef    String
+  fromSeq      Int
+  toSeq        Int?
+  codeType     String
+  legislature  Int?
+  label        String
+  abbreviation String?
+  startDate    DateTime?               @db.Date
+  endDate      DateTime?               @db.Date
+  sourceMember String
+  rawHash      String
+  fromSnapshot OfficialSourceSnapshot  @relation("OfficialOrganRecordFromSnapshot", fields: [stream, fromSeq], references: [stream, seq], map: "OfficialOrganRecord_fromSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+  toSnapshot   OfficialSourceSnapshot? @relation("OfficialOrganRecordToSnapshot", fields: [stream, toSeq], references: [stream, seq], map: "OfficialOrganRecord_toSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([stream, organeRef, fromSeq])
+  @@index([stream, legislature, startDate], map: "OfficialOrganRecord_stream_legislature_startDate_idx")
+}
+
+model GroupMembershipRecord {
+  stream          String
+  sourceRecordId  String
+  fromSeq         Int
+  toSeq           Int?
+  officialId      String
+  chamber         String
+  groupRef        String
+  legislature     Int?
+  qualityCode     String?
+  isPrincipal     Boolean?
+  precedence      Int?
+  startDate       DateTime?               @db.Date
+  startState      String
+  endDate         DateTime?               @db.Date
+  endState        String
+  publicationDate DateTime?               @db.Date
+  sourceMember    String
+  rawHash         String
+  fromSnapshot    OfficialSourceSnapshot  @relation("GroupMembershipRecordFromSnapshot", fields: [stream, fromSeq], references: [stream, seq], map: "GroupMembershipRecord_fromSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+  toSnapshot      OfficialSourceSnapshot? @relation("GroupMembershipRecordToSnapshot", fields: [stream, toSeq], references: [stream, seq], map: "GroupMembershipRecord_toSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([stream, sourceRecordId, fromSeq])
+  @@index([stream, officialId, startDate], map: "GroupMembershipRecord_stream_officialId_startDate_idx")
+  @@index([stream, groupRef, startDate], map: "GroupMembershipRecord_stream_groupRef_startDate_idx")
+}
+
+model SeatMandateRecord {
+  stream         String
+  sourceRecordId String
+  fromSeq        Int
+  toSeq          Int?
+  officialId     String
+  legislature    Int?
+  startDate      DateTime?               @db.Date
+  startState     String
+  endDate        DateTime?               @db.Date
+  endState       String
+  sourceMember   String
+  rawHash        String
+  fromSnapshot   OfficialSourceSnapshot  @relation("SeatMandateRecordFromSnapshot", fields: [stream, fromSeq], references: [stream, seq], map: "SeatMandateRecord_fromSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+  toSnapshot     OfficialSourceSnapshot? @relation("SeatMandateRecordToSnapshot", fields: [stream, toSeq], references: [stream, seq], map: "SeatMandateRecord_toSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([stream, sourceRecordId, fromSeq])
+  @@index([stream, officialId, startDate], map: "SeatMandateRecord_stream_officialId_startDate_idx")
+}
+
+model ScrutinVoterAttestation {
+  stream            String
+  scrutinExternalId String
+  officialId        String
+  fromSeq           Int
+  toSeq             Int?
+  scrutinDate       DateTime                @db.Date
+  legislature       Int
+  publishedOrganRef String
+  publishedPosition String
+  byDelegation      Boolean?
+  seatMandateRef    String?
+  memberHash        String
+  sourceMember      String
+  rawHash           String
+  fromSnapshot      OfficialSourceSnapshot  @relation("ScrutinVoterAttestationFromSnapshot", fields: [stream, fromSeq], references: [stream, seq], map: "ScrutinVoterAttestation_fromSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+  toSnapshot        OfficialSourceSnapshot? @relation("ScrutinVoterAttestationToSnapshot", fields: [stream, toSeq], references: [stream, seq], map: "ScrutinVoterAttestation_toSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([stream, scrutinExternalId, officialId, fromSeq])
+  @@index([stream, scrutinExternalId], map: "ScrutinVoterAttestation_stream_scrutinExternalId_idx")
+  @@index([stream, officialId, scrutinDate], map: "ScrutinVoterAttestation_stream_officialId_scrutinDate_idx")
+  @@index([stream, publishedOrganRef, scrutinDate], map: "ScrutinVoterAttestation_stream_organRef_date_idx")
+}
+
+model OfficialActorLinkDecision {
+  decisionNo    BigInt   @id @default(autoincrement())
+  chamber       String
+  officialId    String
+  politicianId  String?
+  status        String
+  evidence      String
+  decidedBy     String
+  decidedByKind String
+  decidedAt     DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([chamber, officialId, decisionNo], map: "OfficialActorLinkDecision_chamber_officialId_decisionNo_idx")
+}
+
+model OrganContinuityDecision {
+  decisionNo    BigInt   @id @default(autoincrement())
+  fromOrganRef  String
+  toOrganRef    String
+  relation      String
+  status        String
+  evidence      String
+  evidenceUrl   String?
+  decidedBy     String
+  decidedByKind String
+  decidedAt     DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([fromOrganRef, toOrganRef, decisionNo], map: "OrganContinuityDecision_fromOrganRef_toOrganRef_decisionNo_idx")
+}
+
+model HistoricalResolutionRun {
+  id                       String                     @id
+  inputHash                String                     @unique(map: "HistoricalResolutionRun_inputHash_key")
+  status                   String
+  linkDecisionCutoff       BigInt
+  continuityDecisionCutoff BigInt
+  decisionsHash            String
+  preparedInputsHash       String
+  parserVersion            String
+  resolverVersion          String
+  dateSemanticsVersion     String
+  exclusionRulesVersion    String
+  configHash               String
+  config                   Json
+  codeVersion              String
+  outputHash               String?
+  statusCounts             Json?
+  startedBy                String
+  startedAt                DateTime                   @db.Timestamptz(3)
+  finishedAt               DateTime?                  @db.Timestamptz(3)
+  historicalRunSnapshotPin HistoricalRunSnapshotPin[]
+  runExclusion             RunExclusion[]
+}
+
+model HistoricalRunSnapshotPin {
+  runId     String
+  stream    String
+  seq       Int
+  stateHash String
+  run       HistoricalResolutionRun @relation(fields: [runId], references: [id], map: "HistoricalRunSnapshotPin_runId_fkey", onDelete: Restrict, onUpdate: Restrict)
+  snapshot  OfficialSourceSnapshot  @relation("HistoricalRunSnapshotPinSnapshot", fields: [stream, seq, stateHash], references: [stream, seq, stateHash], map: "HistoricalRunSnapshotPin_snapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([runId, stream])
+}
+
+model RunExclusion {
+  runId             String
+  scrutinExternalId String
+  officialId        String
+  status            String
+  reason            String
+  evidence          Json
+  run               HistoricalResolutionRun @relation(fields: [runId], references: [id], map: "RunExclusion_runId_fkey", onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([runId, scrutinExternalId, officialId])
+  @@index([runId, reason], map: "RunExclusion_runId_reason_idx")
+}
