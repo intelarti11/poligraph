@@ -1,6 +1,6 @@
 import { checkPublicUrl } from "@/lib/api/fetch-public-photo";
 import { USER_AGENT } from "@/config/site";
-import type { ScdlSource } from "@/config/scdl-sources";
+import { isCouncilActType, type ScdlSource } from "@/config/scdl-sources";
 import { parseScdlFile, type RejectReason, type ScdlCandidate } from "./scdl-deliberations-parse";
 
 /**
@@ -36,6 +36,8 @@ export interface ScdlReport {
   candidates: number;
   rejectsByReason: Partial<Record<RejectReason, number>>;
   duplicates: number;
+  /** Rows left out because their `TYPE_ACTE` is not a council deliberation. */
+  excludedByActType: number;
   dateRange: [string, string] | null;
   /** Share of candidates (0 to 100) with each optional field filled. */
   fill: { votes: number; documentUrl: number; matiere: number; siret: number };
@@ -102,6 +104,7 @@ export async function reportScdlSource(source: ScdlSource): Promise<ScdlReport> 
     candidates: 0,
     rejectsByReason: {},
     duplicates: 0,
+    excludedByActType: 0,
     dateRange: null,
     fill: { votes: 0, documentUrl: 0, matiere: 0, siret: 0 },
     outcomeHints: {},
@@ -113,6 +116,7 @@ export async function reportScdlSource(source: ScdlSource): Promise<ScdlReport> 
 
   const all: ScdlCandidate[] = [];
   const authorityRows = new Map<string, number>();
+  const actTypeRows = new Map<string, number>();
 
   for (const resource of dataset.resources) {
     const title = resource.title ?? "(sans titre)";
@@ -150,6 +154,12 @@ export async function reportScdlSource(source: ScdlSource): Promise<ScdlReport> 
       }
       report.duplicates += parsed.duplicates;
       for (const c of parsed.candidates) {
+        // Counted before the filter: the excluded types stay visible to audit it.
+        if (c.actType) actTypeRows.set(c.actType, (actTypeRows.get(c.actType) ?? 0) + 1);
+        if (!isCouncilActType(source, c.actType)) {
+          report.excludedByActType++;
+          continue;
+        }
         all.push(c);
         authorityRows.set(c.authorityName, (authorityRows.get(c.authorityName) ?? 0) + 1);
       }
@@ -196,9 +206,7 @@ export async function reportScdlSource(source: ScdlSource): Promise<ScdlReport> 
     .map(([code, m]) => ({ code, ...m }))
     .sort((a, b) => b.rows - a.rows)
     .slice(0, 20);
-  const types = new Map<string, number>();
-  for (const c of all) if (c.actType) types.set(c.actType, (types.get(c.actType) ?? 0) + 1);
-  report.actTypes = [...types.entries()]
+  report.actTypes = [...actTypeRows.entries()]
     .map(([type, rows]) => ({ type, rows }))
     .sort((a, b) => b.rows - a.rows);
   report.sample = all.slice(0, 3);
