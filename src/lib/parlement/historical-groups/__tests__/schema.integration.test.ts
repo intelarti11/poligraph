@@ -300,7 +300,7 @@ describeDb("historical groups schema on a disposable PostgreSQL", () => {
         () => null,
         (e: Error) => e
       );
-      expect(refused?.message).toContain("SourceArtifact holds 1 rows");
+      expect(refused?.message).toContain("SourceArtifact holds rows");
       expect((await q(`SELECT 1 FROM "SourceArtifact"`)).rowCount).toBe(1);
       await reset();
       await apply();

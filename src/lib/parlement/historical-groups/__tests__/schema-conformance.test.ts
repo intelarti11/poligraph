@@ -57,9 +57,23 @@ interface Trigger {
 
 const idents = (list: string) => [...list.matchAll(/"(\w+)"/g)].map((m) => m[1] as string);
 
-/** The DDL text executed twice by the script, between the `$hg_ddl$` markers. */
+const REFERENCE_MARK =
+  "-- hg:reference-build\nSET LOCAL search_path TO hg_reference, pg_catalog;\n";
+const REAL_MARK = "-- hg:real-build\nSET LOCAL search_path TO public, pg_catalog;\n";
+const COMPARE_MARK = "-- hg:compare\n";
+
+/** The DDL text built in the reference schema, before the real build. */
+export function referenceBuildOf(sql: string): string {
+  const start = sql.indexOf(REFERENCE_MARK);
+  const end = sql.indexOf(`\n${REAL_MARK.split("\n")[0]}`);
+  return start === -1 || end === -1 ? "" : sql.slice(start + REFERENCE_MARK.length, end);
+}
+
+/** The DDL text built in the real schema. It is what the tables, triggers and indexes are read from. */
 export function ddlOf(sql: string): string {
-  return sql.split("$hg_ddl$")[1] ?? "";
+  const start = sql.indexOf(REAL_MARK);
+  const end = sql.indexOf(`\n${COMPARE_MARK}`);
+  return start === -1 || end === -1 ? "" : sql.slice(start + REAL_MARK.length, end);
 }
 
 export function parseTables(ddl: string): Table[] {
@@ -261,14 +275,26 @@ export function violations(sql: string, schema: string): string[] {
   // Transaction and divergence guard: IF NOT EXISTS is not a guarantee, the comparison is.
   if (!/^BEGIN;$/m.test(sql) || !/^COMMIT;$/m.test(sql))
     out.push("script is not wrapped in one transaction");
-  if (!sql.includes("CREATE SCHEMA hg_reference")) out.push("no reference schema is built");
-  if ((sql.match(/EXECUTE v_ddl;/g) ?? []).length !== 2)
-    out.push("the DDL is not executed twice (reference, then real)");
-  if (!/RAISE EXCEPTION 'The existing historical groups schema differs/.test(sql))
+  if (!sql.includes("CREATE SCHEMA hg_reference;")) out.push("no reference schema is built");
+  if (ddl === "" || ddl !== referenceBuildOf(sql))
+    out.push("the reference build and the real build are not the same text");
+  if (
+    !/CAST\(\s*'The existing historical groups schema differs from the expected definition/.test(
+      sql
+    )
+  )
     out.push("no divergence error");
+  const compare = sql.slice(sql.indexOf(COMPARE_MARK));
   for (const kind of ["column", "constraint", "index", "trigger", "table", "acl", "function"]) {
-    if (!sql.includes(`'${kind}'`)) out.push(`the catalog comparison does not cover ${kind}s`);
+    if (!compare.includes(`'${kind}'`)) out.push(`the catalog comparison does not cover ${kind}s`);
   }
+  // The repository's SEC-06 contract: plain SQL, no DO block, no dynamic SQL, no SECURITY DEFINER.
+  const plain = executableText(sql);
+  if (/\bDO\s+\$/i.test(plain) || /\bDO\s+'/i.test(plain))
+    out.push("a DO block (forbidden by the SEC-06 source guard)");
+  if (/\bEXECUTE\b(?!\s+FUNCTION\b)/i.test(plain))
+    out.push("dynamic SQL (forbidden by the SEC-06 source guard)");
+  if (/\bSECURITY\s+DEFINER\b/i.test(plain)) out.push("SECURITY DEFINER (forbidden by SEC-06)");
 
   // Identifier length: PostgreSQL truncates beyond 63 bytes without a word.
   for (const id of new Set(sql.match(/"[A-Za-z0-9_]+"/g) ?? [])) {
@@ -666,18 +692,22 @@ describe("lot 5B schema: static conformance", () => {
       expect(sqlText).toContain(`'${value}'`);
   });
 
-  it("has a rollback that refuses to drop a table that holds a row, and never uses CASCADE", () => {
+  it("has a rollback that stops before any DROP when a table holds a row, in plain SQL, with no CASCADE", () => {
     const rollback = read(ROLLBACK_PATH);
-    expect(rollback).toContain("RAISE EXCEPTION");
-    expect(rollback).toMatch(/v_count > 0/);
-    expect(executableText(rollback)).not.toMatch(/CASCADE/i);
-    expect(executableText(rollback)).not.toMatch(/DROP EXTENSION/i);
-    const dropped = [...rollback.matchAll(/^DROP TABLE IF EXISTS "(\w+)";$/gm)].map((m) => m[1]);
-    expect([...dropped].sort()).toEqual(
-      parseTables(ddlOf(SQL))
-        .map((t) => t.name)
-        .sort()
-    );
+    const tables = parseTables(ddlOf(SQL)).map((t) => t.name);
+    for (const name of tables) {
+      expect(rollback, `${name} is checked`).toContain(`WHERE EXISTS (SELECT 1 FROM "${name}");`);
+    }
+    // Every check comes before the first DROP, inside the one transaction.
+    expect(rollback.lastIndexOf("WHERE EXISTS")).toBeLessThan(rollback.indexOf("DROP TABLE"));
+    expect(rollback).toMatch(/^BEGIN;$/m);
+    const code = executableText(rollback);
+    expect(code).not.toMatch(/CASCADE/i);
+    expect(code).not.toMatch(/DROP EXTENSION/i);
+    expect(code).not.toMatch(/\bDO\s+\$/i);
+    expect(code).not.toMatch(/\bEXECUTE\b/i);
+    const dropped = [...rollback.matchAll(/^DROP TABLE "(\w+)";$/gm)].map((m) => m[1]);
+    expect([...dropped].sort()).toEqual([...tables].sort());
     // Children before parents: a pin or an exclusion goes before its run.
     expect(dropped.indexOf("RunExclusion")).toBeLessThan(
       dropped.indexOf("HistoricalResolutionRun")
@@ -689,14 +719,48 @@ describe("lot 5B schema: static conformance", () => {
       dropped.indexOf("SourceArtifact")
     );
   });
+
+  it("builds the reference schema and the real schema from the same text", () => {
+    expect(ddlOf(SQL)).not.toBe("");
+    expect(ddlOf(SQL)).toBe(referenceBuildOf(SQL));
+    expect(parseTables(referenceBuildOf(SQL))).toEqual(parseTables(ddlOf(SQL)));
+  });
+
+  it("respects the SEC-06 source contract of the repository: no DO block, no dynamic SQL", () => {
+    for (const path of [SQL_PATH, ROLLBACK_PATH]) {
+      const code = executableText(read(path));
+      expect(code, path).not.toMatch(/\bDO\s+\$/i);
+      expect(code, path).not.toMatch(/\bEXECUTE\b(?!\s+FUNCTION\b)/i);
+      expect(code, path).not.toMatch(/\bSECURITY\s+DEFINER\b/i);
+    }
+  });
 });
 
 describe("the conformance check can fail", () => {
   const damaged = (from: string | RegExp, to: string) => {
-    const result = SQL.replace(from, to);
+    // Both copies of the DDL (reference and real) carry the damage, as a real edit of the generator would.
+    const result =
+      typeof from === "string"
+        ? SQL.split(from).join(to)
+        : SQL.replace(new RegExp(from.source, `${from.flags}g`), to);
     expect(result, "the damage must change the SQL").not.toBe(SQL);
     return violations(result, SCHEMA);
   };
+
+  it("names a reference build that is not the real build, a DO block and dynamic SQL", () => {
+    const onlyReference = SQL.replace(
+      '"GroupMembershipRecord_no_overlap" EXCLUDE',
+      '"GroupMembershipRecord_other" EXCLUDE'
+    );
+    expect(onlyReference).not.toBe(SQL);
+    expect(violations(onlyReference, SCHEMA).join("\n")).toContain("not the same text");
+    expect(
+      damaged(/\nCOMMIT;\n$/, "\nDO $x$ BEGIN PERFORM 1; END $x$;\nCOMMIT;\n").join("\n")
+    ).toContain("a DO block");
+    expect(damaged(/\nCOMMIT;\n$/, "\nEXECUTE 'select 1';\nCOMMIT;\n").join("\n")).toContain(
+      "dynamic SQL"
+    );
+  });
 
   it("names a missing exclusion constraint", () => {
     const found = damaged(/    CONSTRAINT "GroupMembershipRecord_no_overlap" EXCLUDE[^\n]*\n/, "");
@@ -764,8 +828,8 @@ describe("the conformance check can fail", () => {
     );
     expect(
       damaged(
-        "RAISE EXCEPTION 'The existing historical groups schema differs",
-        "RAISE NOTICE 'The existing historical groups schema differs"
+        "The existing historical groups schema differs from the expected definition. Nothing was changed.'\n  ||",
+        "Something else.'\n  ||"
       ).join("\n")
     ).toContain("no divergence error");
   });
