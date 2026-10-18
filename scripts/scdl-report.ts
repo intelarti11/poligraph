@@ -26,7 +26,9 @@ async function main() {
     for (const f of r.files.filter((f) => f.status !== "lu" || !f.conforming).slice(0, 5)) {
       console.log(`    - ${f.title.slice(0, 60)} | ${f.status} | ${f.detail ?? ""}`);
     }
-    console.log(`  lignes retenues : ${r.candidates} | doublons : ${r.duplicates}`);
+    console.log(
+      `  lignes retenues : ${r.candidates} | doublons : ${r.duplicates} | hors délibérations : ${r.excludedByActType}`
+    );
     console.log(`  rejets : ${JSON.stringify(r.rejectsByReason)}`);
     console.log(`  période : ${r.dateRange ? r.dateRange.join(" au ") : "-"}`);
     console.log(

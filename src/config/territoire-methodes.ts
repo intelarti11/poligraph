@@ -47,10 +47,13 @@ export const REPERE_METHODES: readonly RepereMethode[] = [
     calcul:
       "Poligraph reprend les effectifs par tranche de la base communale de l'INSEE (la tranche des 75 ans et plus est la somme des 75 à 89 ans et des 90 ans et plus) et divise chacun par le total. Un lot dont les six tranches ne totalisent pas 100 %, à 0,1 point près, n'est pas publié.",
     limites:
-      "Les effectifs du recensement sont des estimations. Sur une petite commune, une tranche peut varier d'un millésime à l'autre sans que la population ait vraiment changé. Le fichier est établi dans les limites communales du 1er janvier 2025 : Poligraph ne repère pas une commune dont le territoire a changé depuis tout en gardant son code.",
+      "Les effectifs du recensement sont des estimations. Sur une petite commune, une tranche peut varier d'un millésime à l'autre sans que la population ait vraiment changé. Le fichier est établi dans les limites communales du 1er janvier 2025 : Poligraph ne repère pas une commune dont le territoire a changé depuis tout en gardant son code. Une tranche affichée « 0,0 % » correspond à un effectif nul ou inférieur à 0,05 % de la population : dans une très petite commune, c'est souvent une tranche vide.",
     neDitPas:
       "Une tranche d'âge n'est ni un atout ni un handicap, et cette répartition ne dit rien de l'action des élus de la commune.",
-    historique: [{ date: "2026-10-13", text: "Première version de la méthode." }],
+    historique: [
+      { date: "2026-10-13", text: "Première version de la méthode." },
+      { date: "2026-10-18", text: "Précision sur l'affichage « 0,0 % »." },
+    ],
   },
   {
     slug: "eau-du-robinet",
@@ -59,12 +62,16 @@ export const REPERE_METHODES: readonly RepereMethode[] = [
     montre: `Pour chaque unité de distribution qui dessert la commune, le nombre d'analyses de nitrates réalisées sur douze mois dans le cadre du contrôle sanitaire des agences régionales de santé, et combien d'entre elles dépassent la limite de qualité de ${EAU_NITRATES_LIMIT_MG_L} mg/L.`,
     calcul: `Poligraph compte les analyses du fichier du ministère, validées par les agences régionales de santé, sur les douze mois qui se terminent à la date du dernier prélèvement du fichier, et non à la date du jour : le fichier est publié avec un décalage d'un à deux mois. Une valeur indiquée « inférieure à » compte comme une analyse sous la limite. Un résultat qui ne peut pas être placé face à la limite n'est pas compté. Sous ${EAU_MIN_ANALYSES} analyses, rien n'est affiché. Chaque unité est présentée séparément : Poligraph ne fait aucune moyenne entre unités.`,
     limites:
-      "Une unité de distribution peut desservir une partie seulement d'une commune, ou plusieurs communes : le chiffre décrit l'unité, pas toute la commune. Les analyses sont celles du contrôle sanitaire, pas toutes les mesures faites sur le réseau. Certains prélèvements ont été faits sur une installation en amont : le ministère les rapporte à l'unité, et l'agence régionale de santé décide localement s'ils la représentent. Le fichier peut être incomplet pour les mois les plus récents, et pour les outre-mer qui y sont ajoutés progressivement. Seuls les nitrates sont repris à ce stade.",
+      "Une unité de distribution peut desservir une partie seulement d'une commune, ou plusieurs communes : le chiffre décrit l'unité, pas toute la commune. Les analyses sont celles du contrôle sanitaire, pas toutes les mesures faites sur le réseau. Certains prélèvements ont été faits sur une installation en amont : le ministère les rapporte à l'unité, et l'agence régionale de santé décide localement s'ils la représentent. Le fichier peut être incomplet pour les mois les plus récents, et pour les outre-mer qui y sont ajoutés progressivement. Seuls les nitrates sont repris à ce stade. Le producteur actualise régulièrement le fichier, mais Poligraph l'importe à la main : le chiffre affiché peut donc être plus ancien que la dernière analyse publiée, et la période qu'il couvre est indiquée avec chaque valeur.",
     neDitPas: `${EAU_LIMIT_SENTENCE} Ce chiffre ne dit rien des autres paramètres de l'eau, ni de l'action des élus de la commune.`,
     historique: [
       {
         date: "2026-10-14",
         text: "Première version de la méthode, nitrates seuls.",
+      },
+      {
+        date: "2026-10-18",
+        text: "Précision sur le rythme de mise à jour : import manuel, période indiquée avec chaque valeur.",
       },
     ],
   },

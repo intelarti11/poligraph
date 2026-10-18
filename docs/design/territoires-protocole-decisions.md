@@ -1,6 +1,6 @@
 # Territoires : protocole de sélection et de saisie des décisions
 
-Date : 14 octobre 2026. Statut : **version 2.1, arrêtée par la rédaction (v2 le 13 octobre 2026, Kourou ajoutée le 14)**. Publiée
+Date : 14 octobre 2026 (§8 mis à jour le 18 octobre). Statut : **version 2.1, arrêtée par la rédaction (v2 le 13 octobre 2026, Kourou ajoutée le 14)**. Publiée
 sur `/methodologie/decisions-territoires`. Les points encore ouverts (mapping des sources) sont
 listés au §8 et bloquent la collecte, pas le protocole.
 
@@ -217,5 +217,12 @@ dépubliée.
 - [x] Équilibre politique des treize contrôlé et consigné (§2).
 - [x] Liste des matières du socle arrêtée (§3).
 - [x] Fréquence de revérification fixée (§6).
-- [ ] Table de correspondance « jeu ouvert vers institution » complétée pour les treize (Kourou : pas de jeu ouvert, saisie depuis les PDF).
+- [ ] Table de correspondance « jeu ouvert vers institution » (`src/config/scdl-sources.ts`), état au
+      18 octobre 2026. Faite pour trois communes : Taugon, La Possession et Brest. Pour Brest, le jeu
+      mêle délibérations, décisions et arrêtés : seules les délibérations (`TYPE_ACTE`) sont retenues,
+      18 859 lignes sur 58 553 ; « Ville de Brest » se rattache au conseil municipal (29019) et
+      « Brest métropole » au conseil communautaire (SIREN 242900314, vérifié sur geo.api.gouv.fr) ;
+      le CCAS reste hors périmètre. Kourou : pas de jeu ouvert, saisie depuis les PDF. Restent à
+      relever pour neuf communes : Bouloc, Boé, Neuville-sur-Saône, Cogolin, Rillieux-la-Pape,
+      Saint-Herblain, Villejuif, Antibes et Saint-Étienne (jeu, valeurs de `COLL_NOM`, types d'acte).
 - [x] Protocole publié sur le site, avec sa date (page `/methodologie/decisions-territoires`).

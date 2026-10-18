@@ -6,7 +6,7 @@
  * nothing is loaded whole. Writes a DRAFT batch and nothing else; a person reads it and
  * publishes it from the admin page. The licence comes from the registry.
  */
-import { createWriteStream, existsSync, mkdirSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, renameSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -62,27 +62,56 @@ export interface EauImportResult {
   rowsWritten: number;
 }
 
-async function resourceUrls(): Promise<Map<number, string>> {
+interface ZipResource {
+  url: string;
+  /** Last update announced by the producer, ISO string; null when the API omits it. */
+  lastModified: string | null;
+}
+
+async function resourceUrls(): Promise<Map<number, ZipResource>> {
   const res = await fetch(DATASET_API, { headers: { "User-Agent": USER_AGENT } });
   if (!res.ok) throw new Error(`data.gouv.fr : HTTP ${res.status}`);
-  const json = (await res.json()) as { resources: { title: string; url: string }[] };
-  const out = new Map<number, string>();
+  const json = (await res.json()) as {
+    resources: { title: string; url: string; last_modified?: string | null }[];
+  };
+  const out = new Map<number, ZipResource>();
   for (const r of json.resources) {
     const m = /^dis-(\d{4})\.zip$/.exec(r.title);
-    if (m) out.set(Number(m[1]), r.url);
+    if (m) out.set(Number(m[1]), { url: r.url, lastModified: r.last_modified ?? null });
   }
   return out;
 }
 
-async function ensureZip(year: number, urls: Map<number, string>, dir: string): Promise<string> {
+/**
+ * The producer refreshes the current year's file every month, so a zip is reused only when it was
+ * downloaded after the producer's last update. Without a date from the API, a cached zip is kept.
+ */
+export function isCachedZipFresh(cachedAtMs: number, producerLastModified: string | null): boolean {
+  if (!producerLastModified) return true;
+  const updated = Date.parse(producerLastModified);
+  return Number.isNaN(updated) || cachedAtMs >= updated;
+}
+
+async function ensureZip(
+  year: number,
+  urls: Map<number, ZipResource>,
+  dir: string
+): Promise<string> {
   mkdirSync(dir, { recursive: true });
   const dest = join(dir, `dis-${year}.zip`);
-  if (existsSync(dest)) return dest;
-  const url = urls.get(year);
-  if (!url) throw new Error(`Fichier ${year} absent du jeu de données`);
-  const res = await fetch(url, { headers: { "User-Agent": USER_AGENT } });
+  const resource = urls.get(year);
+  if (
+    existsSync(dest) &&
+    isCachedZipFresh(statSync(dest).mtimeMs, resource?.lastModified ?? null)
+  ) {
+    return dest;
+  }
+  if (!resource) throw new Error(`Fichier ${year} absent du jeu de données`);
+  const res = await fetch(resource.url, { headers: { "User-Agent": USER_AGENT } });
   if (!res.ok || !res.body) throw new Error(`Téléchargement ${year} : HTTP ${res.status}`);
-  await pipeline(Readable.fromWeb(res.body as never), createWriteStream(dest));
+  const partial = `${dest}.part`;
+  await pipeline(Readable.fromWeb(res.body as never), createWriteStream(partial));
+  renameSync(partial, dest);
   return dest;
 }
 

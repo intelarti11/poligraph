@@ -9,7 +9,10 @@ export interface ScdlAuthority {
   /** Exact `COLL_NOM` as published. */
   name: string;
   /** Council this name stands for; `null` for a body outside the notice model (CCAS, syndicat). */
-  institution: { kind: "CONSEIL_MUNICIPAL"; communeId: string } | null;
+  institution:
+    | { kind: "CONSEIL_MUNICIPAL"; communeId: string }
+    | { kind: "CONSEIL_COMMUNAUTAIRE"; sirenEpci: string }
+    | null;
 }
 
 export interface ScdlSource {
@@ -19,6 +22,12 @@ export interface ScdlSource {
   datasetId: string;
   /** Only the resources whose title contains this text (case-insensitive). */
   resourceTitleContains?: string;
+  /**
+   * `TYPE_ACTE` values kept, compared without case or accent. A mixed file also carries mayor's
+   * orders and delegated decisions, which are not decisions of a council: leave unset for a file
+   * that only holds deliberations.
+   */
+  actTypes?: readonly string[];
   authorities: ScdlAuthority[];
 }
 
@@ -59,6 +68,29 @@ export const SCDL_SOURCES: readonly ScdlSource[] = [
     key: "brest",
     label: "Brest (29), actes de la ville et de la métropole",
     datasetId: "642adf35abc66f0c6e497485",
-    authorities: [],
+    actTypes: ["Délibération"],
+    authorities: [
+      {
+        name: "Ville de Brest",
+        institution: { kind: "CONSEIL_MUNICIPAL", communeId: "29019" },
+      },
+      {
+        name: "Brest métropole",
+        institution: { kind: "CONSEIL_COMMUNAUTAIRE", sirenEpci: "242900314" },
+      },
+    ],
   },
 ];
+
+const fold = (s: string) =>
+  s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+/** Whether a row of this source is a council deliberation: no filter means every row is one. */
+export function isCouncilActType(source: ScdlSource, actType: string | null): boolean {
+  if (!source.actTypes) return true;
+  return actType !== null && source.actTypes.some((t) => fold(t) === fold(actType));
+}

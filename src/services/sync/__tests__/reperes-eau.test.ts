@@ -23,7 +23,7 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
-import { syncReperesEau } from "@/services/sync/reperes-eau";
+import { isCachedZipFresh, syncReperesEau } from "@/services/sync/reperes-eau";
 
 const PLV_HEADER =
   "cddept,cdreseau,inseecommuneprinc,nomcommuneprinc,referenceprel,dateprel,cdreseauamont,pourcentdebit";
@@ -208,5 +208,59 @@ describe("import des nitrates", () => {
     h.repereCount.mockResolvedValueOnce(5);
     await expect(syncReperesEau({ dryRun: false, cacheDir: setup() })).rejects.toThrow(/déjà/);
     expect(h.importCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe("cache des archives", () => {
+  const stubDataset = (lastModified: string | null) =>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        body: null,
+        status: 200,
+        json: async () => ({
+          resources: [
+            {
+              title: "dis-2026.zip",
+              url: "https://example.test/2026",
+              last_modified: lastModified,
+            },
+            {
+              title: "dis-2025.zip",
+              url: "https://example.test/2025",
+              last_modified: lastModified,
+            },
+          ],
+        }),
+      }))
+    );
+
+  it("garde un zip téléchargé après la mise à jour du producteur", () => {
+    expect(isCachedZipFresh(Date.parse("2026-10-13T10:00:00Z"), "2026-10-05T11:31:52Z")).toBe(true);
+  });
+
+  it("refuse un zip antérieur à la mise à jour du producteur", () => {
+    expect(isCachedZipFresh(Date.parse("2026-10-05T10:00:00Z"), "2026-10-13T00:00:00Z")).toBe(
+      false
+    );
+  });
+
+  it("garde le zip quand le producteur n'annonce aucune date", () => {
+    expect(isCachedZipFresh(0, null)).toBe(true);
+    expect(isCachedZipFresh(0, "pas une date")).toBe(true);
+  });
+
+  it("retélécharge un zip périmé au lieu de le relire", async () => {
+    stubDataset("2999-01-01T00:00:00Z");
+    await expect(syncReperesEau({ dryRun: true, cacheDir: setup() })).rejects.toThrow(
+      /Téléchargement 2026/
+    );
+  });
+
+  it("relit un zip plus récent que la mise à jour du producteur", async () => {
+    stubDataset("2000-01-01T00:00:00Z");
+    const r = await syncReperesEau({ dryRun: true, cacheDir: setup() });
+    expect(r.report.years).toEqual([2025, 2026]);
   });
 });

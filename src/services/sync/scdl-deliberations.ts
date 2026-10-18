@@ -1,6 +1,6 @@
 import { checkPublicUrl } from "@/lib/api/fetch-public-photo";
 import { USER_AGENT } from "@/config/site";
-import type { ScdlSource } from "@/config/scdl-sources";
+import { isCouncilActType, type ScdlSource } from "@/config/scdl-sources";
 import { parseScdlFile, type RejectReason, type ScdlCandidate } from "./scdl-deliberations-parse";
 
 /**
@@ -36,6 +36,8 @@ export interface ScdlReport {
   candidates: number;
   rejectsByReason: Partial<Record<RejectReason, number>>;
   duplicates: number;
+  /** Rows left out because their `TYPE_ACTE` is not a council deliberation. */
+  excludedByActType: number;
   dateRange: [string, string] | null;
   /** Share of candidates (0 to 100) with each optional field filled. */
   fill: { votes: number; documentUrl: number; matiere: number; siret: number };
@@ -102,6 +104,7 @@ export async function reportScdlSource(source: ScdlSource): Promise<ScdlReport> 
     candidates: 0,
     rejectsByReason: {},
     duplicates: 0,
+    excludedByActType: 0,
     dateRange: null,
     fill: { votes: 0, documentUrl: 0, matiere: 0, siret: 0 },
     outcomeHints: {},
@@ -150,6 +153,10 @@ export async function reportScdlSource(source: ScdlSource): Promise<ScdlReport> 
       }
       report.duplicates += parsed.duplicates;
       for (const c of parsed.candidates) {
+        if (!isCouncilActType(source, c.actType)) {
+          report.excludedByActType++;
+          continue;
+        }
         all.push(c);
         authorityRows.set(c.authorityName, (authorityRows.get(c.authorityName) ?? 0) + 1);
       }
