@@ -574,6 +574,8 @@ export function violations(sql: string, schema: string): string[] {
 
 const SQL = read(SQL_PATH);
 const SCHEMA = read("prisma/schema.prisma");
+const COUNT_CHECK_PATH = "prisma/migrations/manual/2026-10-19-historical-groups-count-check.sql";
+const COUNT_CHECK_SQL = read(COUNT_CHECK_PATH);
 
 describe("lot 5B schema: static conformance", () => {
   it("respects every rule on the committed SQL", () => {
@@ -651,7 +653,11 @@ describe("lot 5B schema: static conformance", () => {
 
   it("leaves the existing Prisma models alone: the lot adds models and removes nothing", () => {
     const models = [...parsePrismaModels(SCHEMA).keys()];
-    const lot = parseTables(ddlOf(SQL)).map((t) => t.name);
+    const lot = [
+      ...parseTables(ddlOf(SQL)).map((t) => t.name),
+      // The lot 5C-0 tables belong to the same family, and point at the same snapshot table.
+      ...parseTables(ddlOf(COUNT_CHECK_SQL)).map((t) => t.name),
+    ];
     for (const name of lot) expect(models).toContain(name);
     for (const model of models) {
       if (lot.includes(model)) continue;
@@ -879,5 +885,415 @@ describe("the conformance check can fail", () => {
         "\n"
       )
     ).toContain("OrganContinuityDecision: a script could write a validating decision");
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// Lot 5C-0: the count-coherence tables, on top of the lot 5B schema.
+// ---------------------------------------------------------------------------------------------
+
+const COUNT_TABLES = ["ScrutinCountCheck", "ScrutinGroupCountCheck"] as const;
+const SECTION = (name: string) => `-- hg:${name}\n`;
+const REFERENCE_5C = "SET LOCAL search_path TO hg_reference, public, pg_catalog;\n";
+
+function referenceBuild5c(sql: string): string {
+  const start = sql.indexOf(SECTION("reference-build"));
+  const end = sql.indexOf(`\n${SECTION("precheck").trim()}`);
+  if (start === -1 || end === -1) return "";
+  const body = sql.slice(start + SECTION("reference-build").length);
+  const cut = body.indexOf(REFERENCE_5C);
+  return cut === -1
+    ? ""
+    : body.slice(cut + REFERENCE_5C.length, end - start - SECTION("reference-build").length);
+}
+
+export function violations5c(sql: string, schema: string, baseSql: string): string[] {
+  const out: string[] = [];
+  const ddl = ddlOf(sql);
+  const tables = parseTables(ddl);
+  const baseTables = parseTables(ddlOf(baseSql));
+  const baseFunctions = new Set(
+    [...ddlOf(baseSql).matchAll(/CREATE OR REPLACE FUNCTION (\w+)\(/g)].map((m) => m[1])
+  );
+  const indexes = parseIndexes(ddl);
+  const triggers = parseTriggers(ddl);
+  // With the newline: a marker that only starts like the right one does not count.
+  const at = (name: string) => sql.indexOf(SECTION(name));
+  const plain = executableText(sql);
+
+  if (!/^BEGIN;$/m.test(sql) || !/^COMMIT;$/m.test(sql))
+    out.push("script is not wrapped in one transaction");
+  const order = ["prerequisites", "reference-build", "precheck", "real-build", "postcheck"].map(at);
+  if (order.some((n) => n === -1) || order.some((n, i) => i > 0 && (order[i - 1] as number) >= n)) {
+    out.push(
+      "the sections are missing or out of order (prerequisites, reference, pre-check, build, post-check)"
+    );
+  }
+  const prerequisites = sql.slice(at("prerequisites"), at("reference-build"));
+  if (
+    !/CAST\(\s*'The prerequisites of the count-check schema are missing/.test(prerequisites) ||
+    !prerequisites.includes("string_agg(")
+  ) {
+    out.push(
+      "no prerequisite check (it must aggregate, or the cast is folded into a constant and always fails)"
+    );
+  }
+  for (const needed of [
+    "13 tables",
+    "historical_version_guard",
+    "historical_refuse_mutation",
+    "historical_refuse_truncate",
+    "btree_gist",
+  ]) {
+    if (!prerequisites.includes(needed)) out.push(`the prerequisites do not check ${needed}`);
+  }
+  if (at("prerequisites") > sql.indexOf("CREATE SCHEMA hg_reference"))
+    out.push("the prerequisites come after the reference schema is built");
+  const precheck = sql.slice(at("precheck"), at("real-build"));
+  if (!/CAST\(\s*'The count-check schema differs from the expected definition/.test(precheck))
+    out.push("no divergence error before the build");
+  if (!precheck.includes("partial installation")) out.push("a partial installation is not refused");
+  if (!/CAST\(\s*'The count-check schema built here differs/.test(sql.slice(at("postcheck"))))
+    out.push("no divergence error after the build");
+  for (const kind of ["column", "constraint", "index", "trigger", "table", "acl"]) {
+    if (!precheck.includes(`'${kind}'`)) out.push(`the catalog comparison does not cover ${kind}s`);
+  }
+  if (ddl === "" || ddl !== referenceBuild5c(sql))
+    out.push("the reference build and the real build are not the same text");
+
+  if (/\bDO\s+\$/i.test(plain) || /\bEXECUTE\b(?!\s+FUNCTION\b)/i.test(plain))
+    out.push("a DO block or dynamic SQL (SEC-06)");
+  if (/\bSECURITY\s+DEFINER\b/i.test(plain)) out.push("SECURITY DEFINER (SEC-06)");
+  if (/\bGRANT\b/i.test(plain)) out.push("a GRANT");
+  if (/CREATE\s+(OR\s+REPLACE\s+)?FUNCTION/i.test(plain))
+    out.push("a function: the guards belong to the lot 5B and are reused");
+  for (const forbidden of [
+    /\bDELETE\s+FROM\b/i,
+    /\bTRUNCATE\s+TABLE\b/i,
+    /\bUPDATE\s+"?\w+"?\s+SET\b/i,
+    /\bDROP\s+(TABLE|INDEX|COLUMN|TRIGGER|FUNCTION|TYPE|EXTENSION)\b/i,
+    /\bINSERT\s+INTO\s+"/i,
+  ]) {
+    if (forbidden.test(plain)) out.push(`forbidden statement: ${forbidden.source}`);
+  }
+  if ((plain.match(/DROP SCHEMA/g) ?? []).length !== 2)
+    out.push("DROP SCHEMA must appear exactly twice, on hg_reference only");
+  for (const alter of plain.matchAll(/ALTER\s+TABLE\s+"(\w+)"\s+(\w+)/gi)) {
+    if (!(COUNT_TABLES as readonly string[]).includes(alter[1] as string))
+      out.push(`ALTER TABLE on a table of another lot: ${alter[1]}`);
+    if (!/^ENABLE$/i.test(alter[2] as string)) out.push(`ALTER TABLE ${alter[1]} ${alter[2]}`);
+  }
+  for (const id of new Set(sql.match(/"[A-Za-z0-9_]+"/g) ?? [])) {
+    if (Buffer.byteLength(id) - 2 > 63) out.push(`identifier longer than 63 bytes: ${id}`);
+  }
+  for (const model of parsePrismaModels(schema).keys()) {
+    const ours = (COUNT_TABLES as readonly string[]).includes(model);
+    const base = baseTables.some((t) => t.name === model);
+    if (!ours && !base && new RegExp(`"${model}"`).test(sql))
+      out.push(`the SQL names the existing model ${model}`);
+  }
+  if (tables.map((t) => t.name).join() !== COUNT_TABLES.join())
+    out.push("the tables are not exactly the two of the lot");
+
+  for (const table of tables) {
+    const has = (c: string, notNull?: boolean) => {
+      const found = table.columns.find((x) => x.name === c);
+      return found !== undefined && (notNull === undefined || found.notNull === notNull);
+    };
+    for (const c of [
+      "stream",
+      "fromSeq",
+      "rawHash",
+      "sourceMember",
+      "memberHash",
+      "scrutinExternalId",
+      "legislature",
+    ]) {
+      if (c !== "legislature" && !has(c, true))
+        out.push(`${table.name}: ${c} must exist and be NOT NULL`);
+    }
+    if (!has("toSeq", false)) out.push(`${table.name}: toSeq must exist and be nullable`);
+    for (const forbidden of table.columns.filter((c) =>
+      /politician|^name$|^nom$|prenom|lastName|firstName/i.test(c.name)
+    )) {
+      out.push(`${table.name}: column ${forbidden.name} could carry a person's name or key`);
+    }
+    const pk = table.constraints.find((c) => c.kind === "PRIMARY KEY");
+    if (!pk || pk.columns[0] !== "stream" || pk.columns.at(-1) !== "fromSeq")
+      out.push(`${table.name}: the key must be (stream, identity, fromSeq)`);
+    const identity = (pk?.columns ?? []).slice(1, -1);
+    for (const column of ["fromSeq", "toSeq"]) {
+      const fk = table.constraints.find(
+        (c) => c.kind === "FOREIGN KEY" && c.columns.join() === `stream,${column}`
+      );
+      if (
+        !fk ||
+        fk.references?.table !== "OfficialSourceSnapshot" ||
+        fk.references.columns.join() !== "stream,seq"
+      ) {
+        out.push(`${table.name}: no foreign key (stream, ${column}) to the snapshot`);
+        continue;
+      }
+      const target = baseTables.find((t) => t.name === "OfficialSourceSnapshot");
+      const backed = target?.constraints.some(
+        (c) =>
+          (c.kind === "PRIMARY KEY" || c.kind === "UNIQUE") && c.columns.join() === "stream,seq"
+      );
+      if (!backed)
+        out.push(`${table.name}: the snapshot has no UNIQUE (stream, seq) for this foreign key`);
+      if (!/ON DELETE RESTRICT ON UPDATE RESTRICT/.test(fk.text))
+        out.push(`${table.name}: ${column} foreign key is not RESTRICT`);
+    }
+    if (
+      table.constraints.some(
+        (c) => c.kind === "FOREIGN KEY" && c.references?.table !== "OfficialSourceSnapshot"
+      )
+    )
+      out.push(`${table.name}: a foreign key to something other than the snapshot`);
+    const exclusion = table.constraints.find((c) => c.kind === "EXCLUDE");
+    const wanted = ["stream", ...identity].map((c) => `"${c}" WITH =`).join(", ");
+    if (
+      !exclusion ||
+      !exclusion.text.includes("USING gist") ||
+      !exclusion.text.includes(wanted) ||
+      !exclusion.text.includes(`int4range("fromSeq", "toSeq", '[)') WITH &&`)
+    )
+      out.push(`${table.name}: no exclusion constraint on (stream, identity, [fromSeq, toSeq))`);
+    const active = indexes.find(
+      (i) => i.table === table.name && i.unique && i.where === `"toSeq" IS NULL`
+    );
+    if (!active || active.columns.join() !== ["stream", ...identity].join())
+      out.push(`${table.name}: no partial unique index on the active version`);
+    if (
+      !table.constraints.some(
+        (c) => c.kind === "CHECK" && /"toSeq" IS NULL OR "toSeq" > "fromSeq"/.test(c.text)
+      )
+    )
+      out.push(`${table.name}: no CHECK toSeq > fromSeq`);
+    if (
+      !table.constraints.some(
+        (c) => c.kind === "CHECK" && /"rawHash" ~ '\^\[0-9a-f\]\{64\}\$'/.test(c.text)
+      )
+    )
+      out.push(`${table.name}: rawHash format is not checked`);
+    const derived = table.constraints.find((c) => c.kind === "CHECK" && /_derived$/.test(c.name));
+    if (
+      !derived ||
+      !/CASE/.test(derived.text) ||
+      !/COUNT_MISMATCH/.test(derived.text) ||
+      !/UNVERIFIABLE/.test(derived.text) ||
+      !/COHERENT/.test(derived.text)
+    ) {
+      out.push(
+        `${table.name}: the coherence status is not derived from the stored numbers by a CHECK`
+      );
+    }
+    for (const position of ["Pour", "Contre", "Abstention", "NonVotant"]) {
+      for (const family of ["nominal", "official", "diff"]) {
+        if (!has(`${family}${position}`))
+          out.push(`${table.name}: ${family}${position} is missing`);
+      }
+      if (
+        !table.constraints.some(
+          (c) => c.kind === "CHECK" && c.name.endsWith(`diff${position}_consistent`)
+        )
+      )
+        out.push(`${table.name}: diff${position} is not tied to nominal minus official`);
+    }
+    for (const family of ["nominal"])
+      for (const position of ["Pour", "Contre", "Abstention", "NonVotant"])
+        if (!has(`${family}${position}`, true))
+          out.push(`${table.name}: nominal${position} must be NOT NULL`);
+    for (const position of ["Pour", "Contre", "Abstention", "NonVotant"])
+      if (!has(`official${position}`, false))
+        out.push(
+          `${table.name}: official${position} must be nullable (an absent official count is kept as absent)`
+        );
+    const mine = triggers.filter((t) => t.table === table.name);
+    for (const [timing, fn] of [
+      ["BEFORE INSERT OR UPDATE", "historical_version_guard"],
+      ["BEFORE DELETE", "historical_refuse_mutation"],
+      ["BEFORE TRUNCATE", "historical_refuse_truncate"],
+    ] as const) {
+      const found = mine.find((t) => t.timing === timing && t.fn === fn);
+      if (!found) out.push(`${table.name}: no ${fn} on ${timing}`);
+      else if (!found.always) out.push(`${table.name}: ${fn} is not ENABLE ALWAYS`);
+      if (!baseFunctions.has(fn)) out.push(`${fn} does not exist in the lot 5B`);
+    }
+    if (!new RegExp(`ALTER TABLE "${table.name}" ENABLE ROW LEVEL SECURITY;`).test(ddl))
+      out.push(`${table.name}: RLS not enabled`);
+    if (
+      !new RegExp(
+        `REVOKE ALL ON TABLE[^;]*"${table.name}"[^;]*FROM PUBLIC, anon, authenticated;`
+      ).test(ddl)
+    )
+      out.push(`${table.name}: privileges are not revoked`);
+  }
+  const group = tables.find((t) => t.name === "ScrutinGroupCountCheck");
+  const groupKey = group?.constraints.find((c) => c.kind === "PRIMARY KEY")?.columns.join();
+  if (groupKey !== "stream,scrutinExternalId,organRef,organOrdinal,fromSeq")
+    out.push(
+      "a group is identified by (scrutin, organ, ordinal): the placeholder organ repeats inside a scrutin"
+    );
+  return out;
+}
+
+describe("lot 5C-0 count-check schema: static conformance", () => {
+  it("respects every rule on the committed SQL", () => {
+    expect(violations5c(COUNT_CHECK_SQL, SCHEMA, SQL)).toEqual([]);
+  });
+
+  it("agrees with the Prisma models: columns, key, uniques, indexes and foreign keys", () => {
+    const models = parsePrismaModels(SCHEMA);
+    const indexes = parseIndexes(ddlOf(COUNT_CHECK_SQL));
+    const problems: string[] = [];
+    for (const table of parseTables(ddlOf(COUNT_CHECK_SQL))) {
+      const model = models.get(table.name);
+      if (!model) {
+        problems.push(`${table.name}: no Prisma model`);
+        continue;
+      }
+      const sqlColumns = table.columns.map((c) => `${c.name}:${c.type}:${c.notNull}`).join("|");
+      const prismaColumns = model.columns.map((c) => `${c.name}:${c.type}:${c.notNull}`).join("|");
+      if (sqlColumns !== prismaColumns) problems.push(`${table.name}: columns differ`);
+      const pk = table.constraints.find((c) => c.kind === "PRIMARY KEY");
+      if (pk?.columns.join() !== model.id.join())
+        problems.push(`${table.name}: primary key differs`);
+      const sqlIndexes = indexes
+        .filter((i) => i.table === table.name && !i.where)
+        .map((i) => `${i.name}(${i.columns})`)
+        .sort();
+      if (
+        sqlIndexes.join() !==
+        model.indexes
+          .map((i) => `${i.name}(${i.columns})`)
+          .sort()
+          .join()
+      )
+        problems.push(`${table.name}: indexes differ`);
+      const sqlFks = table.constraints
+        .filter((c) => c.kind === "FOREIGN KEY")
+        .map((c) => `${c.name}(${c.columns})`)
+        .sort();
+      if (
+        sqlFks.join() !==
+        model.relations
+          .map((r) => `${r.name}(${r.columns})`)
+          .sort()
+          .join()
+      )
+        problems.push(`${table.name}: foreign keys differ`);
+    }
+    expect(problems).toEqual([]);
+  });
+
+  it("only adds to the lot 5B models: the snapshot gains four inverse relation fields and nothing is removed", () => {
+    const block = /^model OfficialSourceSnapshot \{\n([\s\S]*?)\n\}/m.exec(SCHEMA)?.[1] ?? "";
+    for (const field of [
+      "scrutinCountCheckFromSnapshot",
+      "scrutinCountCheckToSnapshot",
+      "scrutinGroupCountCheckFromSnapshot",
+      "scrutinGroupCountCheckToSnapshot",
+    ]) {
+      expect(block).toContain(field);
+    }
+    for (const required of [
+      "historicalRunSnapshotPinSnapshot",
+      "groupMembershipRecordFromSnapshot",
+      "artifact ",
+    ])
+      expect(block).toContain(required);
+  });
+
+  it("builds the reference and the real schema from the same text", () => {
+    expect(ddlOf(COUNT_CHECK_SQL)).not.toBe("");
+    expect(ddlOf(COUNT_CHECK_SQL)).toBe(referenceBuild5c(COUNT_CHECK_SQL));
+  });
+
+  it("leaves the lot 5B script untouched: it is the same file as before, and still passes its own rules", () => {
+    expect(violations(SQL, SCHEMA)).toEqual([]);
+  });
+
+  describe("the check can fail", () => {
+    const damaged = (from: string | RegExp, to: string) => {
+      const result =
+        typeof from === "string"
+          ? COUNT_CHECK_SQL.split(from).join(to)
+          : COUNT_CHECK_SQL.replace(new RegExp(from.source, `${from.flags}g`), to);
+      expect(result, "the damage must change the SQL").not.toBe(COUNT_CHECK_SQL);
+      return violations5c(result, SCHEMA, SQL).join("\n");
+    };
+
+    it("names a missing exclusion constraint and a missing partial unique index", () => {
+      expect(
+        damaged(/    CONSTRAINT "ScrutinCountCheck_no_overlap" EXCLUDE[^\n]*\n/, "")
+      ).toContain("ScrutinCountCheck: no exclusion constraint");
+      expect(
+        damaged(/CREATE UNIQUE INDEX IF NOT EXISTS "ScrutinGroupCountCheck_active_key"[^\n]*\n/, "")
+      ).toContain("ScrutinGroupCountCheck: no partial unique index");
+    });
+
+    it("names a status that is not derived from the numbers", () => {
+      expect(
+        damaged(
+          /    CONSTRAINT "ScrutinCountCheck_countCoherence_derived" CHECK[\s\S]*?\n(?=    CONSTRAINT)/,
+          ""
+        )
+      ).toContain("the coherence status is not derived");
+    });
+
+    it("names a group identity that forgets the ordinal", () => {
+      expect(
+        damaged(
+          'PRIMARY KEY ("stream", "scrutinExternalId", "organRef", "organOrdinal", "fromSeq")',
+          'PRIMARY KEY ("stream", "scrutinExternalId", "organRef", "fromSeq")'
+        )
+      ).toContain("identified by (scrutin, organ, ordinal)");
+    });
+
+    it("names the prerequisites that were dropped or moved after the construction", () => {
+      expect(damaged("'historical_refuse_truncate'", "'historical_other'")).toContain(
+        "the prerequisites do not check historical_refuse_truncate"
+      );
+      expect(damaged(/-- hg:prerequisites\n/, "-- hg:prerequisites-removed\n")).toContain(
+        "the sections are missing or out of order"
+      );
+    });
+
+    it("names a function, a DO block, a grant and a statement on a table of the lot 5B", () => {
+      expect(
+        damaged(
+          /\nCOMMIT;\n$/,
+          "\nCREATE FUNCTION historical_x() RETURNS int LANGUAGE sql AS 'SELECT 1';\nCOMMIT;\n"
+        )
+      ).toContain("a function");
+      expect(damaged(/\nCOMMIT;\n$/, "\nDO $x$ BEGIN PERFORM 1; END $x$;\nCOMMIT;\n")).toContain(
+        "a DO block or dynamic SQL"
+      );
+      expect(
+        damaged(/\nCOMMIT;\n$/, '\nGRANT SELECT ON "ScrutinCountCheck" TO anon;\nCOMMIT;\n')
+      ).toContain("a GRANT");
+      expect(
+        damaged(/\nCOMMIT;\n$/, '\nALTER TABLE "SnapshotDecision" ADD COLUMN x TEXT;\nCOMMIT;\n')
+      ).toContain("ALTER TABLE on a table of another lot");
+    });
+
+    it("names a column that could carry a person's name or key", () => {
+      expect(
+        damaged(
+          '    "groupCount" INTEGER NOT NULL,',
+          '    "groupCount" INTEGER NOT NULL,\n    "politicianId" TEXT,'
+        )
+      ).toContain("could carry a person's name or key");
+    });
+
+    it("names a reference build that is not the real build", () => {
+      const only = COUNT_CHECK_SQL.replace(
+        '"ScrutinCountCheck_stream_countCoherence_idx"',
+        '"ScrutinCountCheck_other_idx"'
+      );
+      expect(only).not.toBe(COUNT_CHECK_SQL);
+      expect(violations5c(only, SCHEMA, SQL).join("\n")).toContain("not the same text");
+    });
   });
 });
