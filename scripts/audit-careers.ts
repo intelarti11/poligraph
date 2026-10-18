@@ -19,6 +19,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import { config } from "dotenv";
 import * as fs from "fs";
+import { findOverlappingParliamentaryMandates } from "../src/lib/mandates/overlaps";
 
 config();
 
@@ -50,6 +51,21 @@ async function auditCareers(): Promise<Issue[]> {
 
   for (const p of politicians) {
     const name = `${p.firstName} ${p.lastName}`;
+
+    for (const { first, second } of findOverlappingParliamentaryMandates(p.mandates)) {
+      const endLabel = (mandate: typeof first) => {
+        if (mandate.isCurrent) return "en cours";
+        if (!mandate.endDate) return "fin inconnue";
+        return new Date(mandate.endDate).toISOString().slice(0, 10);
+      };
+      issues.push({
+        type: "OVERLAPPING_PARLIAMENTARY_MANDATES",
+        severity: "warning",
+        politicianId: p.id,
+        politicianName: name,
+        details: `${first.type} ${new Date(first.startDate).toISOString().slice(0, 10)} – ${endLabel(first)} chevauche ${second.type} ${new Date(second.startDate).toISOString().slice(0, 10)} – ${endLabel(second)}`,
+      });
+    }
 
     // Check: No mandates
     if (p.mandates.length === 0) {

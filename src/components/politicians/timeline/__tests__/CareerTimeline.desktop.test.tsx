@@ -42,6 +42,66 @@ function renderDesktop() {
 }
 
 describe("CareerTimeline (desktop)", () => {
+  it("signale les périodes parlementaires qui se chevauchent", () => {
+    const olderSenateTerm = mandate({
+      id: "jadot-2020",
+      type: "SENATEUR",
+      externalId: "senat-21093M",
+      startDate: new Date("2020-10-01T00:00:00.000Z"),
+      endDate: new Date("2026-02-15T00:00:00.000Z"),
+      isCurrent: false,
+    });
+    const currentSenateTerm = mandate({
+      id: "jadot-2023",
+      type: "SENATEUR",
+      externalId: "senat-21093M",
+      startDate: new Date("2023-10-01T00:00:00.000Z"),
+      isCurrent: true,
+    });
+
+    render(
+      <CareerTimeline
+        mandates={[olderSenateTerm, currentSenateTerm]}
+        partyHistory={[]}
+        affairs={[]}
+        deathDate={null}
+      />
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent("Dates de mandat à vérifier");
+    expect(screen.getByRole("status")).toHaveTextContent("2020");
+    expect(screen.getByRole("status")).toHaveTextContent("2023");
+  });
+
+  it("ne signale pas des mandats successifs qui partagent le même identifiant", () => {
+    const previousSenateTerm = mandate({
+      id: "senate-previous",
+      type: "SENATEUR",
+      externalId: "senat-21093M",
+      startDate: new Date("2020-10-01T00:00:00.000Z"),
+      endDate: new Date("2026-10-01T00:00:00.000Z"),
+      isCurrent: false,
+    });
+    const nextSenateTerm = mandate({
+      id: "senate-next",
+      type: "SENATEUR",
+      externalId: "senat-21093M",
+      startDate: new Date("2026-10-01T00:00:00.000Z"),
+      isCurrent: true,
+    });
+
+    render(
+      <CareerTimeline
+        mandates={[previousSenateTerm, nextSenateTerm]}
+        partyHistory={[]}
+        affairs={[]}
+        deathDate={null}
+      />
+    );
+
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
   it("names the group in the accessible label of a mandate bar", () => {
     renderDesktop();
 

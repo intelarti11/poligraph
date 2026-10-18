@@ -11,6 +11,7 @@ import { LEFT_MARGIN, RIGHT_MARGIN } from "./types";
 import { computeDuration, computeOverlapOffsets, mandateAffiliation } from "./utils";
 import { DesktopTimeline } from "./DesktopTimeline";
 import { MobileTimeline } from "./MobileTimeline";
+import { MandateOverlapNotice } from "./MandateOverlapNotice";
 
 export function CareerTimeline({
   mandates,
@@ -233,33 +234,39 @@ export function CareerTimeline({
   // ─── Desktop: Horizontal Timeline ──────────────────────────────────
   if (isDesktop) {
     return (
-      <DesktopTimeline
-        containerRef={containerRef}
-        renderWidth={renderWidth}
-        tooltip={tooltip}
-        xScale={xScale}
-        yearMarkers={yearMarkers}
-        mandates={mandates}
-        mandateRows={mandateRows}
-        timelineAffairs={timelineAffairs}
-        partyHistory={partyHistory}
-        deathDate={deathDate}
-        minDate={minDate}
-        maxDate={maxDate}
-        onMandateHover={handleMandateHover}
-        onAffairHover={handleAffairHover}
-        onHideTooltip={hideTooltip}
-      />
+      <div className="space-y-4">
+        <MandateOverlapNotice mandates={mandates} />
+        <DesktopTimeline
+          containerRef={containerRef}
+          renderWidth={renderWidth}
+          tooltip={tooltip}
+          xScale={xScale}
+          yearMarkers={yearMarkers}
+          mandates={mandates}
+          mandateRows={mandateRows}
+          timelineAffairs={timelineAffairs}
+          partyHistory={partyHistory}
+          deathDate={deathDate}
+          minDate={minDate}
+          maxDate={maxDate}
+          onMandateHover={handleMandateHover}
+          onAffairHover={handleAffairHover}
+          onHideTooltip={hideTooltip}
+        />
+      </div>
     );
   }
 
   // ─── Mobile: Vertical Timeline ─────────────────────────────────────
   return (
-    <MobileTimeline
-      mandates={mandates}
-      partyHistory={partyHistory}
-      timelineAffairs={timelineAffairs}
-      deathDate={deathDate}
-    />
+    <div className="space-y-4">
+      <MandateOverlapNotice mandates={mandates} />
+      <MobileTimeline
+        mandates={mandates}
+        partyHistory={partyHistory}
+        timelineAffairs={timelineAffairs}
+        deathDate={deathDate}
+      />
+    </div>
   );
 }
