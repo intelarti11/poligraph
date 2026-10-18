@@ -1,21 +1,22 @@
 # Lot 5B : schéma des affiliations historiques, rapport et plan de vérification
 
-Statut : **SQL et modèles Prisma écrits, rien n'a été exécuté, sur aucune base.** Ni production, ni
-préproduction, ni base locale jetable. Les validations ci-dessous sont statiques. Aucune migration ne
-sera lancée sans votre accord sur le plan de la section 6.
+Statut : **SQL et modèles Prisma écrits, exécutés sur une base locale jetable uniquement** (étapes 1
+à 7 du plan, rapport dans `parlement-historique-lot5b-execution.md`). Rien n'a été exécuté sur la
+préproduction ni la production, et rien ne le sera sans un accord explicite. Les sections 1 à 8
+ci-dessous sont le rapport initial, mis à jour là où l'exécution l'a changé.
 
 Référence : `docs/audits/parlement-historique-lot5-architecture-v2.md` (section 4), phase 5A fusionnée
 (PR #1129 et #1130).
 
 ## 1. Ce que la PR contient
 
-| Fichier                                                                     | Rôle                                                                                                                                                                                                      |
-| --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `prisma/migrations/manual/2026-10-18-historical-groups-schema.sql`          | Le schéma : 13 tables, 10 fonctions, 37 déclencheurs, 5 contraintes d'exclusion, 104 contraintes `CHECK`, 15 clés étrangères. Une transaction, SQL simple, le texte du schéma y figure deux fois (voir 5) |
-| `prisma/migrations/manual/2026-10-18-historical-groups-schema-rollback.sql` | Retour arrière, refusé dès qu'une table contient une ligne                                                                                                                                                |
-| `prisma/schema.prisma`                                                      | 13 modèles ajoutés à la fin, 255 lignes ajoutées, aucune modifiée                                                                                                                                         |
-| `__tests__/schema-conformance.test.ts`                                      | 19 tests statiques, dont 9 qui abîment le SQL pour vérifier que le contrôle échoue                                                                                                                        |
-| `__tests__/schema.integration.test.ts`                                      | 49 tests sur une base jetable. **Non exécutés**, ignorés sans variable d'environnement, hors CI                                                                                                           |
+| Fichier                                                                     | Rôle                                                                                                                                                                                                     |
+| --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `prisma/migrations/manual/2026-10-18-historical-groups-schema.sql`          | Le schéma : 13 tables, 9 fonctions, 37 déclencheurs, 5 contraintes d'exclusion, 104 contraintes `CHECK`, 15 clés étrangères. Une transaction, SQL simple, le texte du schéma y figure deux fois (voir 5) |
+| `prisma/migrations/manual/2026-10-18-historical-groups-schema-rollback.sql` | Retour arrière, refusé dès qu'une table contient une ligne                                                                                                                                               |
+| `prisma/schema.prisma`                                                      | 13 modèles ajoutés à la fin, 255 lignes ajoutées, aucune modifiée                                                                                                                                        |
+| `__tests__/schema-conformance.test.ts`                                      | 19 tests statiques, dont 9 qui abîment le SQL pour vérifier que le contrôle échoue                                                                                                                       |
+| `__tests__/schema.integration.test.ts`                                      | 78 tests sur une base jetable, passés sur le conteneur local. Ignorés sans variable d'environnement, hors CI                                                                                             |
 
 Aucune table, synchronisation, route ou statistique existante n'est touchée. Aucune activation.
 
@@ -65,7 +66,7 @@ Chaque ligne a un mécanisme précis. La colonne de droite dit où l'invariant e
 | Deux versions d'une identité ne se recouvrent à aucun snapshot                                                        | `EXCLUDE USING gist (stream =, identité =, int4range(fromSeq, toSeq, '[)') &&)`, intervalles ouverts à droite | statique, intégration |
 | Une version existe pour un snapshot qui existe                                                                        | Clés étrangères composites `(stream, fromSeq)` et `(stream, toSeq)` vers `(stream, seq)`                      | statique, intégration |
 | Un snapshot a une clé qui s'ordonne sans trou                                                                         | Déclencheur : `seq` = dernier + 1 par flux                                                                    | intégration           |
-| Un instantané ne reçoit d'enregistrements que s'il est le dernier du flux, `VERIFIED`, jamais `RELEASED` ni `REVOKED` | `historical_assert_snapshot_writable`, appelé par chaque garde de version                                     | intégration           |
+| Un instantané ne reçoit d'enregistrements que s'il est le dernier du flux, `VERIFIED`, jamais `RELEASED` ni `REVOKED` | `historical_version_guard`, contrôle intégré et verrou consultatif partagé                                    | intégration           |
 | Une version s'insère ouverte                                                                                          | Garde d'insertion                                                                                             | intégration           |
 | Seul `toSeq` change, une fois, vers le dernier instantané                                                             | Garde de mise à jour : le reste de la ligne, comparé en JSON, doit être identique                             | intégration           |
 | Aucun `DELETE`, aucun `TRUNCATE` sur aucune table du lot                                                              | Déclencheurs ligne et instruction, tous `ENABLE ALWAYS`                                                       | statique, intégration |
@@ -148,8 +149,8 @@ Le propriétaire des tables peut tout défaire : `DROP TRIGGER`, `ALTER TABLE ..
 `DROP TABLE`. `ENABLE ALWAYS` résiste à `session_replication_role = replica`, pas à un propriétaire
 qui supprime la garde. L'application se connecte avec ce rôle. Les gardes protègent contre une
 erreur de code, pas contre un opérateur qui contourne volontairement. Le script de comparaison
-détecte l'absence ou la désactivation d'un déclencheur à la prochaine exécution (il le rétablit,
-voir 5), ce qui n'est pas une protection en continu.
+détecte l'absence ou la désactivation d'un déclencheur à la prochaine exécution et refuse de
+continuer (voir 5), ce qui n'est pas une protection en continu.
 
 ## 5. L'idempotence, et ce que `IF NOT EXISTS` ne garantit pas
 
@@ -190,17 +191,20 @@ Les droits des autres rôles ne sont pas comparés : sur Supabase, `service_role
 les droits par défaut du schéma `public`, que le schéma de référence n'a pas. Les comparer ferait
 échouer le contrôle sans raison.
 
-**Jamais réparé : la dernière requête échoue et la transaction est annulée** : table, colonne (ajoutée, retirée, type changé),
-contrainte (absente ou différente), index de même nom mais de définition différente, déclencheur ou
-index en trop.
+**Aucune réparation, jamais (décision B du 18 octobre).** Sur une installation existante, toute
+divergence de structure, de fonction, de déclencheur, de droit ou de RLS fait échouer le script
+**avant** qu'il n'écrive quoi que ce soit. Le script a trois temps :
 
-**Ré-appliqué à chaque exécution**, parce que cela ne porte aucune donnée et ne peut que resserrer :
-les fonctions et déclencheurs (`CREATE OR REPLACE`, `ENABLE ALWAYS`), la RLS, les `REVOKE`, un index
-autonome absent. Si les données empêchent de recréer un index unique partiel, l'exécution échoue.
+1. le schéma de référence est construit, puis les catalogues sont comparés **avant** toute écriture
+   dans le schéma réel ;
+2. sont acceptés : aucune table du lot (installation neuve, où les fonctions déjà présentes doivent
+   être celles de la référence) ou les 13 tables exactement identiques à la référence. Un état
+   partiel est une divergence ;
+3. après la construction, une seconde comparaison confirme que le résultat est exactement la référence.
 
-C'est un choix, pas un oubli : un déclencheur désactivé à la main est rétabli par une ré-exécution
-au lieu de bloquer, alors qu'une colonne en trop bloque. Si vous préférez que toute divergence
-bloque, y compris pour le code, la comparaison pourrait précéder les `CREATE OR REPLACE` (décision B).
+Sur un état identique, les instructions de la construction réelle (`CREATE OR REPLACE` d'une fonction
+au texte identique, `IF NOT EXISTS`) ne changent rien. Une correction volontaire est une migration
+distincte.
 
 Tout est dans une transaction : si la comparaison échoue, rien n'est posé, le schéma de référence
 non plus. Un schéma `hg_reference` laissé par une interruption manuelle serait supprimé au début du
@@ -245,8 +249,8 @@ la comparaison se corrige dans le générateur, pas à la main.
 ### Étape 3. Tests d'intégration
 
 `npx vitest run src/lib/parlement/historical-groups/__tests__/schema.integration.test.ts` avec la
-variable d'URL. Attendu : 49 tests passent. **Aucun de ces tests n'a jamais tourné** : un échec peut
-venir du test autant du SQL. On corrige l'un ou l'autre, jamais l'assertion pour la faire passer.
+variable d'URL. Attendu : tous passent (78 au dernier passage). Un échec peut venir du test autant du SQL : on
+corrige l'un ou l'autre, jamais l'assertion pour la faire passer.
 
 ### Étape 4. Parité Prisma
 
@@ -298,7 +302,7 @@ geste manuel depuis le dashboard Vercel, et ce lot ne contient aucun code applic
 | `prisma migrate diff --from-empty`, comparaison avec le SQL, 13 tables    | 0 différence (colonnes, types, défauts, index, clés étrangères, uniques)                                      |
 | Analyse syntaxique PostgreSQL (`libpg-query`, grammaire de PostgreSQL 17) | le fichier entier passe, y compris la comparaison de catalogues et la requête finale (tout est du SQL simple) |
 | Gardes sources du dépôt, lancées en local                                 | `sec-06-security-definer-guard` et `sec-03-public-grants-guard` passent                                       |
-| Corps PL/pgSQL des 10 fonctions de garde                                  | **non analysés** : l'analyseur disponible ne lit pas PL/pgSQL. Relus à la main                                |
+| Corps PL/pgSQL des fonctions de garde                                     | **non analysés** : l'analyseur disponible ne lit pas PL/pgSQL. Relus à la main                                |
 | Longueur des identifiants                                                 | tous inférieurs ou égaux à 63 octets (contrôle à la génération et test)                                       |
 | `vitest` du module                                                        | voir le message de la PR                                                                                      |
 | ESLint, TypeScript                                                        | voir le message de la PR                                                                                      |
@@ -311,12 +315,18 @@ PostgreSQL renvoie (`pg_get_constraintdef`, défauts de colonne), que je n'ai pa
 
 ## 8. Décisions à prendre
 
-| #   | Question                                                                                              | Position                                                                            |
-| --- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| A   | Accepter la dépendance à `btree_gist` pour l'exclusion des intervalles                                | Oui. L'alternative (un déclencheur de recouvrement) est plus fragile en concurrence |
-| B   | Les fonctions, déclencheurs, RLS et droits sont-ils ré-appliqués, ou toute divergence bloque-t-elle ? | Ré-appliqués : ils ne portent pas de données et ne font que resserrer               |
-| C   | Noms et prénoms absents d'`OfficialActor`                                                             | Absents, à ajouter par `ALTER` additif si 5D en a besoin                            |
-| D   | Épingles de run en lignes plutôt qu'en JSON                                                           | En lignes                                                                           |
-| E   | Statuts en `TEXT` et `CHECK` plutôt qu'en énumérations                                                | `TEXT` et `CHECK`                                                                   |
-| F   | `ScrutinOrganPosition` laissée à 5F                                                                   | Oui                                                                                 |
-| G   | Garde par ligne pour les 2,4 millions d'attestations                                                  | À mesurer à l'étape 6                                                               |
+| #   | Question                                                                               | Position                                                                            |
+| --- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| A   | Accepter la dépendance à `btree_gist` pour l'exclusion des intervalles                 | Oui. L'alternative (un déclencheur de recouvrement) est plus fragile en concurrence |
+| B   | Réparer le code (fonctions, déclencheurs, RLS, droits) à la ré-exécution, ou bloquer ? | **Décidé : bloquer, aucune réparation.** Une correction est une migration distincte |
+| C   | Noms et prénoms absents d'`OfficialActor`                                              | Absents, à ajouter par `ALTER` additif si 5D en a besoin                            |
+| D   | Épingles de run en lignes plutôt qu'en JSON                                            | En lignes                                                                           |
+| E   | Statuts en `TEXT` et `CHECK` plutôt qu'en énumérations                                 | `TEXT` et `CHECK`                                                                   |
+| F   | `ScrutinOrganPosition` laissée à 5F                                                    | Oui                                                                                 |
+| G   | Garde par ligne pour les 2,4 millions d'attestations                                   | À mesurer à l'étape 6                                                               |
+
+## 9. Exécution sur base locale jetable
+
+Le plan des étapes 1 à 7 a été exécuté le 18 octobre sur un conteneur local dédié, avec votre accord.
+Résultats, erreurs découvertes, corrections apportées et mesures : `parlement-historique-lot5b-execution.md`.
+Les étapes 8 (préproduction) et 9 (production) n'ont pas été lancées et ne sont pas autorisées.
