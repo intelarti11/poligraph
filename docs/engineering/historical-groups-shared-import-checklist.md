@@ -63,9 +63,9 @@ Limitations constatées chez le fournisseur le 2026-10-18 (relevées par poigné
 en lecture seule, sans connexion des rôles du lot) :
 
 - L'hôte de connexion directe n'a **qu'un enregistrement IPv6** (pas d'IPv4 sans option payante, à
-  confirmer dans le dashboard). Depuis la machine de développement, il est **injoignable** (réseau
-  inaccessible, `errno 101`) bien qu'une route IPv6 par défaut existe. L'import direct exige donc une
-  machine qui joint l'IPv6 du projet, ou l'option IPv4.
+  confirmer dans le dashboard). Il n'est joignable que depuis une machine dont la session a une
+  connectivité IPv6 de bout en bout (adresse globale et route par défaut IPv6). À vérifier sur la machine
+  qui lancera l'import, avant tout le reste. Sans IPv6, l'option IPv4 du projet est nécessaire.
 - L'URL `DIRECT_URL` du projet passe en réalité par le **pooleur en mode session** (certificat
   `*.pooler`, utilisateur de la forme `role.projet`). Ce mode garde la session, mais il ne répond pas à
   « connexion directe ». La garde le refuse (hôte de pooleur, utilisateur à point). L'accepter serait un
