@@ -20,18 +20,23 @@ const LOT_STATUS_LABELS = {
 
 interface SampleRow {
   territoryCode: string;
+  communeName: string | null;
   indicatorKey: string;
   value: number | null;
   unit: string;
+  sampleSize: number | null;
   state: string;
 }
 
 /** A stable pseudo-random sample: the same lot shows the same rows at every reload. */
 async function sampleOf(lotId: string): Promise<SampleRow[]> {
   return db.$queryRaw<SampleRow[]>(Prisma.sql`
-    SELECT "territoryCode", "indicatorKey", "value", "unit", "state"::text AS "state"
-    FROM "TerritoireRepere" WHERE "importId" = ${lotId}
-    ORDER BY md5("id") LIMIT ${SAMPLE_SIZE}
+    SELECT r."territoryCode", c."name" AS "communeName", r."indicatorKey", r."value", r."unit",
+           r."sampleSize", r."state"::text AS "state"
+    FROM "TerritoireRepere" r
+    LEFT JOIN "Commune" c ON c."id" = r."territoryCode" AND r."territoryType" = 'COM'
+    WHERE r."importId" = ${lotId}
+    ORDER BY md5(r."id") LIMIT ${SAMPLE_SIZE}
   `);
 }
 
@@ -133,14 +138,21 @@ export default async function AdminReperesPage() {
               <tbody>
                 {lot.sample.map((r) => (
                   <tr key={`${r.territoryCode}-${r.indicatorKey}`} className="border-b">
-                    <td className="py-1 pr-4 tabular-nums">{r.territoryCode}</td>
+                    <td className="py-1 pr-4">
+                      {r.communeName ?? r.territoryCode}{" "}
+                      <span className="tabular-nums text-muted-foreground">
+                        ({r.territoryCode})
+                      </span>
+                    </td>
                     <td className="py-1 pr-4">
                       {repereIndicator(r.indicatorKey)?.label ?? r.indicatorKey}
                     </td>
                     <td className="py-1 pr-4 tabular-nums">
                       {r.value === null
                         ? "non établi"
-                        : `${r.value.toLocaleString("fr-FR")} ${r.unit}`}
+                        : r.sampleSize === null
+                          ? `${r.value.toLocaleString("fr-FR")} ${r.unit}`
+                          : `${r.value.toLocaleString("fr-FR")} au-dessus du seuil, sur ${r.sampleSize.toLocaleString("fr-FR")} ${r.unit}`}
                     </td>
                     <td className="py-1">{r.state}</td>
                   </tr>
