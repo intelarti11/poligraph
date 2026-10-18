@@ -1,4 +1,4 @@
-import type { OrganTally, PublicationConfig } from "./types";
+import type { CountCoherence, OrganTally, PublicationConfig } from "./types";
 
 /**
  * Editorial decisions: may a computed position be shown?
@@ -13,13 +13,46 @@ export type PublicationDecision =
   | { publishable: true }
   | {
       publishable: false;
-      reason: "EXCLUDED_VOTES_PRESENT" | "NO_ATTESTED_VOTE" | "NON_INSCRIT_IS_NOT_A_GROUP";
+      reason:
+        | "COUNT_MISMATCH"
+        | "COUNT_UNVERIFIABLE"
+        | "COUNT_COHERENCE_UNKNOWN"
+        | "EXCLUDED_VOTES_PRESENT"
+        | "NO_ATTESTED_VOTE"
+        | "NON_INSCRIT_IS_NOT_A_GROUP";
     };
 
+/**
+ * The gate on the official counts. It comes first and nothing after it can reopen it: a scrutin
+ * whose nominal lists disagree with the published counts (`COUNT_MISMATCH`), or whose counts cannot
+ * be checked (`UNVERIFIABLE`), publishes nothing automatically, however cleanly its votes resolved.
+ * No coherence on record (`null`, or any value this function does not know) is refused too: the
+ * absence of a check is not a pass.
+ */
+function countGate(coherence: CountCoherence | null): PublicationDecision {
+  switch (coherence) {
+    case "COHERENT":
+      return { publishable: true };
+    case "COUNT_MISMATCH":
+      return { publishable: false, reason: "COUNT_MISMATCH" };
+    case "UNVERIFIABLE":
+      return { publishable: false, reason: "COUNT_UNVERIFIABLE" };
+    default:
+      return { publishable: false, reason: "COUNT_COHERENCE_UNKNOWN" };
+  }
+}
+
+/**
+ * `countCoherence` has no default and no `undefined`: a caller that has not looked it up cannot
+ * call this function, and one that found nothing says `null` and is refused.
+ */
 export function decidePositionPublication(
   tally: OrganTally,
-  config: PublicationConfig
+  config: PublicationConfig,
+  countCoherence: CountCoherence | null
 ): PublicationDecision {
+  const gate = countGate(countCoherence);
+  if (!gate.publishable) return gate;
   if (tally.organKind === "NON_INSCRIT") {
     return { publishable: false, reason: "NON_INSCRIT_IS_NOT_A_GROUP" };
   }

@@ -9,6 +9,7 @@
  * Everything returned is a number, a count by name or an identifier of a record. No name of a
  * person is read anywhere, so no report built from this can carry one.
  */
+import { deriveCountCheck } from "./count-check";
 import {
   classifyGroupOrgans,
   type ActorParse,
@@ -285,6 +286,22 @@ function addAnScrutin(
   if (!slot) {
     slot = { aggregate: newLegislature(), actors: new Set() };
     acc.legislatures.set(scrutin.legislature, slot);
+  }
+  // The coherence of the counts is computed twice, by the parser and by `count-check.ts` from the
+  // numbers alone. Two implementations of one rule must agree on every real scrutin: a difference
+  // is a bug in one of them, and the run stops.
+  const check = deriveCountCheck({
+    groups: scrutin.groups.map((g) => ({
+      organRef: g.organRef,
+      nominal: g.nominal,
+      official: g.official,
+    })),
+    synthese: scrutin.synthese,
+  });
+  if (check.coherence !== scrutin.countCoherence) {
+    throw new Error(
+      `count coherence of ${scrutin.scrutinId}: parser ${scrutin.countCoherence}, numbers ${check.coherence}`
+    );
   }
   const agg = slot.aggregate;
   agg.anScrutins += 1;
