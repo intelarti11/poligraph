@@ -20,11 +20,16 @@ import {
 } from "../historical-groups-validation";
 import { parseArgs } from "../../validate-historical-groups";
 
+// Entries carry a modification time. Left to the clock, two archives built a second apart differ in
+// their bytes, and the comparison to a baseline (which keys on the SHA-256) would flicker.
+const FIXED_TIME = new Date(Date.UTC(2020, 0, 1));
+
 function archive(files: Record<string, unknown>) {
   const zip = new AdmZip();
   for (const [name, content] of Object.entries(files)) {
     zip.addFile(name, Buffer.from(typeof content === "string" ? content : JSON.stringify(content)));
   }
+  for (const entry of zip.getEntries()) entry.header.time = FIXED_TIME;
   return openArchiveBytes(zip.toBuffer());
 }
 

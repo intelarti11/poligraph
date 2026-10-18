@@ -1522,3 +1522,10 @@ acteurs ne sont jamais lus : aucun rapport ne peut en porter.
 **Ce que la PR ne contient pas.** Aucune modification de Prisma, de SQL, des synchronisations, de
 calculs persistés ou de statistiques publiées. Aucun import. Le résolveur de la PR 1 n'est pas
 modifié et n'est pas importé par la classification.
+
+## 16. Phase 5B : schéma SQL et modèles Prisma
+
+Écrits, non exécutés. Le rapport, les invariants que PostgreSQL impose, ceux qui restent à
+l'importeur et le plan de vérification sont dans `parlement-historique-lot5b-schema.md`. Écarts avec
+la section 4 (colonne `source` retirée, épingles de run en lignes, `SeatMandateRecord`,
+`decidedByKind`, statuts en `TEXT` avec `CHECK`) : tableau de la section 2 du rapport.
