@@ -116,6 +116,7 @@ export async function reportScdlSource(source: ScdlSource): Promise<ScdlReport> 
 
   const all: ScdlCandidate[] = [];
   const authorityRows = new Map<string, number>();
+  const actTypeRows = new Map<string, number>();
 
   for (const resource of dataset.resources) {
     const title = resource.title ?? "(sans titre)";
@@ -153,6 +154,8 @@ export async function reportScdlSource(source: ScdlSource): Promise<ScdlReport> 
       }
       report.duplicates += parsed.duplicates;
       for (const c of parsed.candidates) {
+        // Counted before the filter: the excluded types stay visible to audit it.
+        if (c.actType) actTypeRows.set(c.actType, (actTypeRows.get(c.actType) ?? 0) + 1);
         if (!isCouncilActType(source, c.actType)) {
           report.excludedByActType++;
           continue;
@@ -203,9 +206,7 @@ export async function reportScdlSource(source: ScdlSource): Promise<ScdlReport> 
     .map(([code, m]) => ({ code, ...m }))
     .sort((a, b) => b.rows - a.rows)
     .slice(0, 20);
-  const types = new Map<string, number>();
-  for (const c of all) if (c.actType) types.set(c.actType, (types.get(c.actType) ?? 0) + 1);
-  report.actTypes = [...types.entries()]
+  report.actTypes = [...actTypeRows.entries()]
     .map(([type, rows]) => ({ type, rows }))
     .sort((a, b) => b.rows - a.rows);
   report.sample = all.slice(0, 3);
