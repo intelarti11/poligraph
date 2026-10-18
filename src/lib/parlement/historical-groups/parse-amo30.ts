@@ -141,8 +141,27 @@ export interface SeatMandateRecord {
   endDate: CivilDate | null;
 }
 
+/**
+ * What a group mandate publishes beyond what the resolver reads. Kept next to the evidence, not
+ * inside it: `GroupMembershipEvidence` is the resolver's input and does not change. Both fields are
+ * stored by the import (lot 5C), none is interpreted here.
+ */
+export interface GroupMembershipDetail {
+  sourceRecordId: string;
+  /** `preseance`: the rank the source gives the mandate. `null` when absent or not a number. */
+  precedence: number | null;
+  /** `datePublication`: the day the mandate was published. `null` when absent or not a real day. */
+  publicationDate: CivilDate | null;
+}
+
 export type MandateParse =
-  | { status: "GROUP"; membership: GroupMembershipEvidence }
+  | {
+      status: "GROUP";
+      membership: GroupMembershipEvidence;
+      detail: GroupMembershipDetail;
+      /** Optional fields that were present but unreadable: counted, never silently dropped. */
+      optionalFieldIssues: number;
+    }
   | { status: "SEAT"; seat: SeatMandateRecord }
   | { status: "OUT_OF_SCOPE"; typeOrgane: string }
   | {
@@ -163,6 +182,10 @@ export type ActorParse =
       status: "ACCEPTED";
       officialId: OfficialActorId;
       memberships: GroupMembershipEvidence[];
+      /** One per membership, same order. */
+      membershipDetails: GroupMembershipDetail[];
+      /** Optional fields present but unreadable, over the whole actor. Not a rejection. */
+      optionalFieldIssues: number;
       seats: SeatMandateRecord[];
       rejectedMandates: MandateReject[];
       outOfScopeMandates: number;
@@ -225,6 +248,20 @@ function parseMandate(raw: unknown, actor: OfficialActorId): MandateParse {
   const principal = raw["nominPrincipale"];
   const startState: StartState = start.value === null ? "UNKNOWN" : "DATED";
   const endState: EndState = end.value === null ? "OPEN_AT_SNAPSHOT" : "DATED";
+
+  // Two optional fields. An unreadable value becomes `null` and is counted: the mandate is kept as
+  // it always was, and nothing it already carried changes.
+  let optionalFieldIssues = 0;
+  let precedence: number | null = null;
+  if (!isAbsent(raw["preseance"])) {
+    precedence = integerOf(raw["preseance"]);
+    if (precedence === null) optionalFieldIssues += 1;
+  }
+  let publicationDate: CivilDate | null = null;
+  if (!isAbsent(raw["datePublication"])) {
+    publicationDate = parseCivilDate(raw["datePublication"]);
+    if (publicationDate === null) optionalFieldIssues += 1;
+  }
   return {
     status: "GROUP",
     membership: {
@@ -240,6 +277,8 @@ function parseMandate(raw: unknown, actor: OfficialActorId): MandateParse {
       endDate: end.value,
       endState,
     },
+    detail: { sourceRecordId: uid, precedence, publicationDate },
+    optionalFieldIssues,
   };
 }
 
@@ -263,13 +302,18 @@ export function parseActeur(raw: unknown): ActorParse {
 
   const officialId = asOfficialActorId(uid);
   const memberships: GroupMembershipEvidence[] = [];
+  const membershipDetails: GroupMembershipDetail[] = [];
+  let optionalFieldIssues = 0;
   const seats: SeatMandateRecord[] = [];
   const rejectedMandates: MandateReject[] = [];
   let outOfScopeMandates = 0;
   for (const rawMandate of rawMandates) {
     const parsed = parseMandate(rawMandate, officialId);
-    if (parsed.status === "GROUP") memberships.push(parsed.membership);
-    else if (parsed.status === "SEAT") seats.push(parsed.seat);
+    if (parsed.status === "GROUP") {
+      memberships.push(parsed.membership);
+      membershipDetails.push(parsed.detail);
+      optionalFieldIssues += parsed.optionalFieldIssues;
+    } else if (parsed.status === "SEAT") seats.push(parsed.seat);
     else if (parsed.status === "OUT_OF_SCOPE") outOfScopeMandates += 1;
     else {
       rejectedMandates.push({
@@ -283,6 +327,8 @@ export function parseActeur(raw: unknown): ActorParse {
     status: "ACCEPTED",
     officialId,
     memberships,
+    membershipDetails,
+    optionalFieldIssues,
     seats,
     rejectedMandates,
     outOfScopeMandates,

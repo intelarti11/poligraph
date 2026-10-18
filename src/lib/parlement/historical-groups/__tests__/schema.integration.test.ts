@@ -20,7 +20,7 @@
  * pinned to that exact container, and anything else is refused before the first statement.
  */
 import { readFileSync } from "node:fs";
-import { Pool } from "pg";
+import { Pool, type PoolClient } from "pg";
 import { createHash } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -179,11 +179,20 @@ describeDb("historical groups schema on a disposable PostgreSQL", () => {
     await decision(id, "RELEASED");
   };
 
+  // Both integration files reset the same database. Vitest runs files in parallel, so each one takes
+  // this lock for its whole duration: they queue instead of dropping each other's schema.
+  let lockClient: PoolClient | undefined;
   beforeAll(async () => {
     pool = new Pool({ connectionString: url });
+    lockClient = await pool.connect();
+    await lockClient.query("SELECT pg_advisory_lock(5330001)");
     await assertDisposable();
   });
   afterAll(async () => {
+    if (lockClient) {
+      await lockClient.query("SELECT pg_advisory_unlock(5330001)");
+      lockClient.release();
+    }
     await pool?.end();
   });
   beforeEach(async () => {

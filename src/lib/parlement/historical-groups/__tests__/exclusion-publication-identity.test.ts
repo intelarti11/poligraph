@@ -144,14 +144,15 @@ describe("publication: editorial decisions, apart from the resolution", () => {
   const strict = { maxExcludedPerGroup: 0 };
 
   it("publishes a position when every vote of the group is attested", () => {
-    expect(decidePositionPublication(tally(), strict)).toEqual({ publishable: true });
+    expect(decidePositionPublication(tally(), strict, "COHERENT")).toEqual({ publishable: true });
   });
 
   it("withholds a position as soon as one vote is left out, under the strict threshold", () => {
     expect(
       decidePositionPublication(
         tally({ excludedCount: 1, excludedByReason: { CONFLICT: 1 } }),
-        strict
+        strict,
+        "COHERENT"
       )
     ).toEqual({ publishable: false, reason: "EXCLUDED_VOTES_PRESENT" });
   });
@@ -159,10 +160,14 @@ describe("publication: editorial decisions, apart from the resolution", () => {
   it("takes the threshold from the configuration, and only the threshold changes the decision", () => {
     const withOneExcluded = tally({ excludedCount: 1 });
     const before = JSON.stringify(withOneExcluded);
-    expect(decidePositionPublication(withOneExcluded, { maxExcludedPerGroup: 1 })).toEqual({
+    expect(
+      decidePositionPublication(withOneExcluded, { maxExcludedPerGroup: 1 }, "COHERENT")
+    ).toEqual({
       publishable: true,
     });
-    expect(decidePositionPublication(withOneExcluded, { maxExcludedPerGroup: 0 })).toEqual({
+    expect(
+      decidePositionPublication(withOneExcluded, { maxExcludedPerGroup: 0 }, "COHERENT")
+    ).toEqual({
       publishable: false,
       reason: "EXCLUDED_VOTES_PRESENT",
     });
@@ -174,13 +179,16 @@ describe("publication: editorial decisions, apart from the resolution", () => {
     expect(
       decidePositionPublication(
         tally({ forCount: 0, againstCount: 0, abstainCount: 0, nonVoterCount: 3 }),
-        strict
+        strict,
+        "COHERENT"
       )
     ).toEqual({ publishable: false, reason: "NO_ATTESTED_VOTE" });
   });
 
   it("does not present non-registered members as a group", () => {
-    expect(decidePositionPublication(tally({ organKind: "NON_INSCRIT" }), strict)).toEqual({
+    expect(
+      decidePositionPublication(tally({ organKind: "NON_INSCRIT" }), strict, "COHERENT")
+    ).toEqual({
       publishable: false,
       reason: "NON_INSCRIT_IS_NOT_A_GROUP",
     });

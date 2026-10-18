@@ -27,7 +27,9 @@ import {
 } from "@/lib/parlement/historical-groups/official-validation";
 import { ArchiveIntegrityError, type OpenedArchive } from "./historical-groups-archive";
 
-export const PARSER_VERSION = "5A-2.1";
+import { PARSER_VERSION } from "@/lib/parlement/historical-groups/parser-version";
+
+export { PARSER_VERSION };
 export const BASELINE_SCHEMA_VERSION = 1;
 
 export interface ArchiveMeta {

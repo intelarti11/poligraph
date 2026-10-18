@@ -38,6 +38,14 @@ export const asScrutinId = (value: string): ScrutinId => nonEmpty<ScrutinId>(val
 
 export type Chamber = "AN" | "SENAT";
 
+/**
+ * Agreement between the nominal lists of a scrutin and the counts the Assemblée publishes for it.
+ * A property of the official files, kept apart from the group resolution (E1/E2) and from the
+ * decision to publish. Only `COHERENT` lets a position be published.
+ */
+export const COUNT_COHERENCES = ["COHERENT", "COUNT_MISMATCH", "UNVERIFIABLE"] as const;
+export type CountCoherence = (typeof COUNT_COHERENCES)[number];
+
 // ---------------------------------------------------------------------------
 // Evidence
 // ---------------------------------------------------------------------------

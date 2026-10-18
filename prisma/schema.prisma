@@ -4267,6 +4267,10 @@ model OfficialSourceSnapshot {
   scrutinVoterAttestationFromSnapshot ScrutinVoterAttestation[]  @relation("ScrutinVoterAttestationFromSnapshot")
   scrutinVoterAttestationToSnapshot   ScrutinVoterAttestation[]  @relation("ScrutinVoterAttestationToSnapshot")
   historicalRunSnapshotPinSnapshot    HistoricalRunSnapshotPin[] @relation("HistoricalRunSnapshotPinSnapshot")
+  scrutinCountCheckFromSnapshot       ScrutinCountCheck[]        @relation("ScrutinCountCheckFromSnapshot")
+  scrutinCountCheckToSnapshot         ScrutinCountCheck[]        @relation("ScrutinCountCheckToSnapshot")
+  scrutinGroupCountCheckFromSnapshot  ScrutinGroupCountCheck[]   @relation("ScrutinGroupCountCheckFromSnapshot")
+  scrutinGroupCountCheckToSnapshot    ScrutinGroupCountCheck[]   @relation("ScrutinGroupCountCheckToSnapshot")
 
   @@unique([stream, seq], map: "OfficialSourceSnapshot_stream_seq_key")
   @@unique([stream, artifactSha256, parserVersion], map: "OfficialSourceSnapshot_stream_artifactSha256_parserVersion_key")
@@ -4465,4 +4469,72 @@ model RunExclusion {
 
   @@id([runId, scrutinExternalId, officialId])
   @@index([runId, reason], map: "RunExclusion_runId_reason_idx")
+}
+
+// Lot 5C-0: count coherence of the official counts, per scrutin and per group (see
+// docs/audits/parlement-historique-lot5c0-schema.md). Same rules as the models above.
+
+model ScrutinCountCheck {
+  stream                     String
+  scrutinExternalId          String
+  fromSeq                    Int
+  toSeq                      Int?
+  scrutinDate                DateTime                @db.Date
+  legislature                Int
+  countCoherence             String
+  groupCount                 Int
+  mismatchedGroups           Int
+  unverifiableGroups         Int
+  nominalPour                Int
+  nominalContre              Int
+  nominalAbstention          Int
+  nominalNonVotant           Int
+  officialPour               Int?
+  officialContre             Int?
+  officialAbstention         Int?
+  officialNonVotant          Int?
+  diffPour                   Int?
+  diffContre                 Int?
+  diffAbstention             Int?
+  diffNonVotant              Int?
+  miseAuPointListedVotants   Int
+  miseAuPointMalformedBlocks Int
+  memberHash                 String
+  sourceMember               String
+  rawHash                    String
+  fromSnapshot               OfficialSourceSnapshot  @relation("ScrutinCountCheckFromSnapshot", fields: [stream, fromSeq], references: [stream, seq], map: "ScrutinCountCheck_fromSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+  toSnapshot                 OfficialSourceSnapshot? @relation("ScrutinCountCheckToSnapshot", fields: [stream, toSeq], references: [stream, seq], map: "ScrutinCountCheck_toSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([stream, scrutinExternalId, fromSeq])
+  @@index([stream, countCoherence], map: "ScrutinCountCheck_stream_countCoherence_idx")
+}
+
+model ScrutinGroupCountCheck {
+  stream             String
+  scrutinExternalId  String
+  organRef           String
+  organOrdinal       Int
+  fromSeq            Int
+  toSeq              Int?
+  groupCoherence     String
+  nominalPour        Int
+  nominalContre      Int
+  nominalAbstention  Int
+  nominalNonVotant   Int
+  officialPour       Int?
+  officialContre     Int?
+  officialAbstention Int?
+  officialNonVotant  Int?
+  diffPour           Int?
+  diffContre         Int?
+  diffAbstention     Int?
+  diffNonVotant      Int?
+  memberHash         String
+  sourceMember       String
+  rawHash            String
+  fromSnapshot       OfficialSourceSnapshot  @relation("ScrutinGroupCountCheckFromSnapshot", fields: [stream, fromSeq], references: [stream, seq], map: "ScrutinGroupCountCheck_fromSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+  toSnapshot         OfficialSourceSnapshot? @relation("ScrutinGroupCountCheckToSnapshot", fields: [stream, toSeq], references: [stream, seq], map: "ScrutinGroupCountCheck_toSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([stream, scrutinExternalId, organRef, organOrdinal, fromSeq])
+  @@index([stream, scrutinExternalId], map: "ScrutinGroupCountCheck_stream_scrutinExternalId_idx")
 }

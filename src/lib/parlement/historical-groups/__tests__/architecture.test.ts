@@ -60,7 +60,13 @@ const ALLOWED_INTERNAL_IMPORTS: Record<string, readonly string[]> = {
   "parse-amo30.ts": ["./civil-date", "./source-shape", "./types"],
   "parse-scrutin.ts": ["./civil-date", "./source-shape", "./types"],
   // The validation is an independent measurement: it must never import the resolver it checks.
-  "official-validation.ts": ["./parse-amo30", "./parse-scrutin", "./types"],
+  "official-validation.ts": ["./count-check", "./parse-amo30", "./parse-scrutin", "./types"],
+  // The coherence of the counts is arithmetic on numbers: it reads no parser and no resolver.
+  "count-check.ts": ["./types"],
+  "parser-version.ts": [],
+  // The rows are the parsers' output turned into table rows and hashed: no resolver, no publication.
+  "rows.ts": ["./canonical", "./count-check", "./parse-amo30", "./parse-scrutin", "./types"],
+  "record-counts.ts": ["./rows"],
 };
 
 function specifiersOf(source: ts.SourceFile): string[] {
@@ -152,14 +158,18 @@ describe("historical groups: the module respects its contract", () => {
     for (const expected of [
       "canonical.ts",
       "civil-date.ts",
+      "count-check.ts",
       "date-semantics.ts",
       "exclusion.ts",
       "identity.ts",
       "official-validation.ts",
       "parse-amo30.ts",
       "parse-scrutin.ts",
+      "parser-version.ts",
       "publication.ts",
+      "record-counts.ts",
       "resolver.ts",
+      "rows.ts",
       "run-contract.ts",
       "run-execution.ts",
       "source-shape.ts",

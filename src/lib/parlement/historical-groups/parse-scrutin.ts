@@ -28,6 +28,7 @@ import {
   asOfficialActorId,
   asScrutinId,
   type CivilDate,
+  type CountCoherence,
   type GroupRef,
   type OfficialActorId,
   type ScrutinId,
@@ -74,6 +75,8 @@ export interface ScrutinAttestation {
   position: NominalPosition;
   /** The seat mandate the voter voted under, as published. */
   seatMandateRef: string | null;
+  /** `parDelegation`: voted by delegation. `null` when absent or not `true` or `false`. */
+  byDelegation: boolean | null;
 }
 
 export interface GroupBreakdown {
@@ -83,7 +86,7 @@ export interface GroupBreakdown {
   official: Counts | null;
 }
 
-export type CountCoherence = "COHERENT" | "COUNT_MISMATCH" | "UNVERIFIABLE";
+export type { CountCoherence } from "./types";
 
 export interface MiseAuPointDiagnostic {
   present: boolean;
@@ -281,6 +284,12 @@ export function parseScrutin(raw: unknown): ScrutinParse {
           publishedOrganRef: asGroupRef(organRef),
           position,
           seatMandateRef: isAbsent(mandate) ? null : textOf(mandate),
+          byDelegation:
+            votant["parDelegation"] === "true"
+              ? true
+              : votant["parDelegation"] === "false"
+                ? false
+                : null,
         });
       }
     }
