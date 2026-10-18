@@ -9,13 +9,13 @@ Référence : `docs/audits/parlement-historique-lot5-architecture-v2.md` (sectio
 
 ## 1. Ce que la PR contient
 
-| Fichier                                                                     | Rôle                                                                                                                                          |
-| --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| `prisma/migrations/manual/2026-10-18-historical-groups-schema.sql`          | Le schéma : 13 tables, 10 fonctions, 37 déclencheurs, 5 contraintes d'exclusion, 104 contraintes `CHECK`, 15 clés étrangères. Une transaction |
-| `prisma/migrations/manual/2026-10-18-historical-groups-schema-rollback.sql` | Retour arrière, refusé dès qu'une table contient une ligne                                                                                    |
-| `prisma/schema.prisma`                                                      | 13 modèles ajoutés à la fin, 255 lignes ajoutées, aucune modifiée                                                                             |
-| `__tests__/schema-conformance.test.ts`                                      | 16 tests statiques, dont 8 qui abîment le SQL pour vérifier que le contrôle échoue                                                            |
-| `__tests__/schema.integration.test.ts`                                      | 49 tests sur une base jetable. **Non exécutés**, ignorés sans variable d'environnement, hors CI                                               |
+| Fichier                                                                     | Rôle                                                                                                                                                                                                      |
+| --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `prisma/migrations/manual/2026-10-18-historical-groups-schema.sql`          | Le schéma : 13 tables, 10 fonctions, 37 déclencheurs, 5 contraintes d'exclusion, 104 contraintes `CHECK`, 15 clés étrangères. Une transaction, SQL simple, le texte du schéma y figure deux fois (voir 5) |
+| `prisma/migrations/manual/2026-10-18-historical-groups-schema-rollback.sql` | Retour arrière, refusé dès qu'une table contient une ligne                                                                                                                                                |
+| `prisma/schema.prisma`                                                      | 13 modèles ajoutés à la fin, 255 lignes ajoutées, aucune modifiée                                                                                                                                         |
+| `__tests__/schema-conformance.test.ts`                                      | 19 tests statiques, dont 9 qui abîment le SQL pour vérifier que le contrôle échoue                                                                                                                        |
+| `__tests__/schema.integration.test.ts`                                      | 49 tests sur une base jetable. **Non exécutés**, ignorés sans variable d'environnement, hors CI                                                                                                           |
 
 Aucune table, synchronisation, route ou statistique existante n'est touchée. Aucune activation.
 
@@ -154,9 +154,27 @@ voir 5), ce qui n'est pas une protection en continu.
 ## 5. L'idempotence, et ce que `IF NOT EXISTS` ne garantit pas
 
 `CREATE TABLE IF NOT EXISTS` garde une table existante telle quelle, même différente. Le script ne
-s'y fie donc pas : il construit le même schéma dans un schéma de référence jetable (`hg_reference`),
-avec le même texte, puis compare les catalogues du schéma réel et du schéma de référence. Le texte
-n'est pas écrit deux fois : une variable le contient et l'exécute deux fois.
+s'y fie donc pas : il exécute le même texte deux fois, d'abord dans un schéma de référence jetable
+(`hg_reference`), puis dans le schéma réel, et compare les catalogues des deux.
+
+**Le contrat SEC-06 du dépôt interdit les blocs `DO` et le SQL dynamique** dans les fichiers SQL
+d'application (`scripts/guards/sec-06-security-definer-guard.mjs`, seuls deux cas relus à la main y
+sont admis). Une première version du script utilisait un bloc `DO` avec `EXECUTE`. Le check « SEC-06
+function privilege contract » de la CI l'a refusée, à raison : je ne l'avais pas lancé en local avant
+d'ouvrir la PR, alors que ces gardes sources tournent hors ligne. Le script est donc du SQL simple :
+
+- le texte du schéma est **écrit deux fois dans le fichier**, produit par le même générateur, et un
+  test vérifie que les deux copies sont identiques. Seule la ligne `SET LOCAL search_path` qui les
+  précède les distingue ;
+- la comparaison est une suite de `INSERT ... SELECT` sur les catalogues, puis une requête finale
+  `SELECT CAST('...' || liste des écarts AS integer)`. Sans écart, `string_agg` vaut `NULL` et le
+  `CAST` ne fait rien. Avec un écart, le `CAST` échoue et son message porte la liste des écarts
+  (`invalid input syntax for type integer: "The existing historical groups schema differs..."`). Ce
+  n'est pas élégant, c'est ce qui reste sans bloc `DO` ;
+- les `REVOKE` nomment `anon` et `authenticated` sans test d'existence : **ces rôles doivent exister**
+  (c'est le cas sur Supabase, et les contrats SEC les créent dans leurs conteneurs). Sur une base
+  isolée, les créer d'abord (plan, étape 1) ;
+- le retour arrière vérifie l'absence de lignes par une requête `CAST` par table avant tout `DROP`.
 
 | Compare      | Détail                                             |
 | ------------ | -------------------------------------------------- |
@@ -172,7 +190,7 @@ Les droits des autres rôles ne sont pas comparés : sur Supabase, `service_role
 les droits par défaut du schéma `public`, que le schéma de référence n'a pas. Les comparer ferait
 échouer le contrôle sans raison.
 
-**Jamais réparé, erreur et annulation** : table, colonne (ajoutée, retirée, type changé),
+**Jamais réparé : la dernière requête échoue et la transaction est annulée** : table, colonne (ajoutée, retirée, type changé),
 contrainte (absente ou différente), index de même nom mais de définition différente, déclencheur ou
 index en trop.
 
@@ -185,7 +203,8 @@ au lieu de bloquer, alors qu'une colonne en trop bloque. Si vous préférez que 
 bloque, y compris pour le code, la comparaison pourrait précéder les `CREATE OR REPLACE` (décision B).
 
 Tout est dans une transaction : si la comparaison échoue, rien n'est posé, le schéma de référence
-non plus.
+non plus. Un schéma `hg_reference` laissé par une interruption manuelle serait supprimé au début du
+script suivant.
 
 ## 6. Plan de vérification, à valider avant toute exécution
 
@@ -205,8 +224,16 @@ docker run --rm -d --name hg-schema-test -p 127.0.0.1:55486:5432 \
   postgres:17
 ```
 
-Contrôle : `SELECT name FROM pg_available_extensions WHERE name = 'btree_gist'` doit répondre.
-Arrêt si l'extension manque.
+Contrôles : `SELECT name FROM pg_available_extensions WHERE name = 'btree_gist'` doit répondre
+(arrêt si l'extension manque), puis créer les deux rôles que les `REVOKE` nomment :
+`CREATE ROLE anon; CREATE ROLE authenticated;`.
+
+**À savoir sur la CI.** Plusieurs jobs de la CI appliquent le schéma Prisma par `prisma db push` sur
+une base jetable : les 13 tables y sont donc créées **sans** contraintes d'exclusion, `CHECK` ni
+déclencheurs. C'est sans effet sur ces jobs, mais le SQL du lot ne doit jamais tourner sur une base
+qui a reçu ces tables par `db push` : sa comparaison de catalogues le refuserait, à raison. Si les
+tests d'intégration entrent un jour en CI, ils auront leur propre base, sans `db push` préalable.
+La même raison interdit `db push` sur la production : il créerait des tables sans leurs garde-fous.
 
 ### Étape 2. Application, deux fois
 
@@ -264,21 +291,23 @@ geste manuel depuis le dashboard Vercel, et ce lot ne contient aucun code applic
 
 ## 7. Validations statiques faites
 
-| Contrôle                                                                  | Résultat                                                                                                                      |
-| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `prisma validate`                                                         | schéma valide                                                                                                                 |
-| `prisma format --check`                                                   | formaté                                                                                                                       |
-| `prisma migrate diff --from-empty`, comparaison avec le SQL, 13 tables    | 0 différence (colonnes, types, défauts, index, clés étrangères, uniques)                                                      |
-| Analyse syntaxique PostgreSQL (`libpg-query`, grammaire de PostgreSQL 17) | 4 instructions de premier niveau et les 139 instructions du DDL passent ; 19 requêtes de la comparaison et des gardes passent |
-| Corps PL/pgSQL                                                            | **non analysés** : l'analyseur disponible ne lit pas PL/pgSQL. Relus à la main                                                |
-| Longueur des identifiants                                                 | tous inférieurs ou égaux à 63 octets (contrôle à la génération et test)                                                       |
-| `vitest` du module                                                        | voir le message de la PR                                                                                                      |
-| ESLint, TypeScript                                                        | voir le message de la PR                                                                                                      |
+| Contrôle                                                                  | Résultat                                                                                                      |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `prisma validate`                                                         | schéma valide                                                                                                 |
+| `prisma format --check`                                                   | formaté                                                                                                       |
+| `prisma migrate diff --from-empty`, comparaison avec le SQL, 13 tables    | 0 différence (colonnes, types, défauts, index, clés étrangères, uniques)                                      |
+| Analyse syntaxique PostgreSQL (`libpg-query`, grammaire de PostgreSQL 17) | le fichier entier passe, y compris la comparaison de catalogues et la requête finale (tout est du SQL simple) |
+| Gardes sources du dépôt, lancées en local                                 | `sec-06-security-definer-guard` et `sec-03-public-grants-guard` passent                                       |
+| Corps PL/pgSQL des 10 fonctions de garde                                  | **non analysés** : l'analyseur disponible ne lit pas PL/pgSQL. Relus à la main                                |
+| Longueur des identifiants                                                 | tous inférieurs ou égaux à 63 octets (contrôle à la génération et test)                                       |
+| `vitest` du module                                                        | voir le message de la PR                                                                                      |
+| ESLint, TypeScript                                                        | voir le message de la PR                                                                                      |
 
 Ce que ces contrôles ne prouvent pas : que PostgreSQL exécute le SQL comme écrit. La syntaxe est
 valide, la logique PL/pgSQL, l'ordre d'exécution des déclencheurs et la comparaison de catalogues
 ne sont vérifiés par aucune exécution. Le risque est concentré dans la comparaison de catalogues
-(section 5), qui est la partie la plus inhabituelle du script.
+(section 5), la partie la plus inhabituelle du script, et dans le format exact des définitions que
+PostgreSQL renvoie (`pg_get_constraintdef`, défauts de colonne), que je n'ai pas pu observer.
 
 ## 8. Décisions à prendre
 
