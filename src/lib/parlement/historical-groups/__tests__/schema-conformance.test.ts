@@ -575,7 +575,16 @@ export function violations(sql: string, schema: string): string[] {
 const SQL = read(SQL_PATH);
 const SCHEMA = read("prisma/schema.prisma");
 const COUNT_CHECK_PATH = "prisma/migrations/manual/2026-10-19-historical-groups-count-check.sql";
+const ROLES_POSITIONS_PATH =
+  "prisma/migrations/manual/2026-10-20-historical-groups-roles-positions.sql";
+const MEMBER_HASH_ADDED_BY_5D = [
+  "OfficialActor",
+  "OfficialOrganRecord",
+  "GroupMembershipRecord",
+  "SeatMandateRecord",
+];
 const COUNT_CHECK_SQL = read(COUNT_CHECK_PATH);
+const ROLES_POSITIONS_SQL = read(ROLES_POSITIONS_PATH);
 
 describe("lot 5B schema: static conformance", () => {
   it("respects every rule on the committed SQL", () => {
@@ -612,6 +621,8 @@ describe("lot 5B schema: static conformance", () => {
         continue;
       }
       const sqlColumns = table.columns.map((c) => `${c.name}:${c.type}:${c.notNull}`);
+      // The lot 5D migration appends memberHash to four of these tables (additive, see its report).
+      if (MEMBER_HASH_ADDED_BY_5D.includes(table.name)) sqlColumns.push("memberHash:TEXT:true");
       const prismaColumns = model.columns.map((c) => `${c.name}:${c.type}:${c.notNull}`);
       // BIGSERIAL is NOT NULL by nature; Prisma writes it as an autoincrement BigInt.
       if (sqlColumns.join("|") !== prismaColumns.join("|"))
@@ -657,6 +668,8 @@ describe("lot 5B schema: static conformance", () => {
       ...parseTables(ddlOf(SQL)).map((t) => t.name),
       // The lot 5C-0 tables belong to the same family, and point at the same snapshot table.
       ...parseTables(ddlOf(COUNT_CHECK_SQL)).map((t) => t.name),
+      // The lot 5D positions table, which points at the run table only.
+      ...parseTables(ddlOf(ROLES_POSITIONS_SQL)).map((t) => t.name),
     ];
     for (const name of lot) expect(models).toContain(name);
     for (const model of models) {

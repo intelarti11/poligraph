@@ -4297,6 +4297,7 @@ model OfficialActor {
   toSeq        Int?
   sourceMember String
   rawHash      String
+  memberHash   String
   fromSnapshot OfficialSourceSnapshot  @relation("OfficialActorFromSnapshot", fields: [stream, fromSeq], references: [stream, seq], map: "OfficialActor_fromSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
   toSnapshot   OfficialSourceSnapshot? @relation("OfficialActorToSnapshot", fields: [stream, toSeq], references: [stream, seq], map: "OfficialActor_toSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
 
@@ -4316,6 +4317,7 @@ model OfficialOrganRecord {
   endDate      DateTime?               @db.Date
   sourceMember String
   rawHash      String
+  memberHash   String
   fromSnapshot OfficialSourceSnapshot  @relation("OfficialOrganRecordFromSnapshot", fields: [stream, fromSeq], references: [stream, seq], map: "OfficialOrganRecord_fromSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
   toSnapshot   OfficialSourceSnapshot? @relation("OfficialOrganRecordToSnapshot", fields: [stream, toSeq], references: [stream, seq], map: "OfficialOrganRecord_toSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
 
@@ -4342,6 +4344,7 @@ model GroupMembershipRecord {
   publicationDate DateTime?               @db.Date
   sourceMember    String
   rawHash         String
+  memberHash      String
   fromSnapshot    OfficialSourceSnapshot  @relation("GroupMembershipRecordFromSnapshot", fields: [stream, fromSeq], references: [stream, seq], map: "GroupMembershipRecord_fromSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
   toSnapshot      OfficialSourceSnapshot? @relation("GroupMembershipRecordToSnapshot", fields: [stream, toSeq], references: [stream, seq], map: "GroupMembershipRecord_toSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
 
@@ -4363,6 +4366,7 @@ model SeatMandateRecord {
   endState       String
   sourceMember   String
   rawHash        String
+  memberHash     String
   fromSnapshot   OfficialSourceSnapshot  @relation("SeatMandateRecordFromSnapshot", fields: [stream, fromSeq], references: [stream, seq], map: "SeatMandateRecord_fromSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
   toSnapshot     OfficialSourceSnapshot? @relation("SeatMandateRecordToSnapshot", fields: [stream, toSeq], references: [stream, seq], map: "SeatMandateRecord_toSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
 
@@ -4445,6 +4449,7 @@ model HistoricalResolutionRun {
   finishedAt               DateTime?                  @db.Timestamptz(3)
   historicalRunSnapshotPin HistoricalRunSnapshotPin[]
   runExclusion             RunExclusion[]
+  scrutinOrganPosition     ScrutinOrganPosition[]
 }
 
 model HistoricalRunSnapshotPin {
@@ -4537,4 +4542,27 @@ model ScrutinGroupCountCheck {
 
   @@id([stream, scrutinExternalId, organRef, organOrdinal, fromSeq])
   @@index([stream, scrutinExternalId], map: "ScrutinGroupCountCheck_stream_scrutinExternalId_idx")
+}
+
+// Lot 5D (PR A): internal historical positions of a run, per scrutin and official organ. Counts and
+// the reason a position is not shown, never a majority position. Same rules as the models above.
+
+model ScrutinOrganPosition {
+  runId             String
+  scrutinExternalId String
+  organRef          String
+  organKind         String?
+  forCount          Int
+  againstCount      Int
+  abstainCount      Int
+  nonVoterCount     Int
+  excludedCount     Int
+  excludedByReason  Json
+  publishable       Boolean
+  reason            String?
+  run               HistoricalResolutionRun @relation(fields: [runId], references: [id], map: "ScrutinOrganPosition_runId_fkey", onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([runId, scrutinExternalId, organRef])
+  @@index([runId, publishable], map: "ScrutinOrganPosition_runId_publishable_idx")
+  @@index([scrutinExternalId], map: "ScrutinOrganPosition_scrutinExternalId_idx")
 }
