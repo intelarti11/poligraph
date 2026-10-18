@@ -1501,7 +1501,12 @@ Deuxième moitié de la phase 5A, sans migration ni écriture en production.
 
 **Reproductibilité.** Même SHA-256 et même référentiel que la baseline : comparaison stricte, tout
 écart est un échec (`STRICT_MISMATCH`). Une archive dont les octets diffèrent (ou lue contre un autre
-AMO30) : `CHANGED_INPUT`, liste des chiffres qui changent, jamais un échec. La baseline est un
+AMO30) : `CHANGED_INPUT`, liste des chiffres qui changent, jamais un échec. Une baseline écrite par
+une autre version du parseur (`parserVersion`) : `PARSER_VERSION_CHANGED`, jamais `STRICT_MATCH`,
+même à octets et chiffres égaux, car l'égalité ne prouve rien sur le nouveau parseur ; `inputsIdentical`
+dit si les octets sont les mêmes, et ce statut n'est pas un échec. `--emit-baseline` applique les
+mêmes critères de sûreté qu'une exécution normale (invariantes, contrôles bloquants) et n'imprime
+rien s'il refuse. La baseline est un
 instantané de ces quatre fichiers, pas une vérité mouvante : pour la rejouer strictement, il faut
 conserver les octets d'AMO30.
 
