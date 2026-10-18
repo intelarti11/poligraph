@@ -163,6 +163,10 @@ validation rend `PARSER_VERSION_CHANGED` pour l'AMO30 et les trois législatures
 
 ## 7. Ce que donnent les lignes sur les fichiers locaux (lecture seule, sans base)
 
+Population : les fichiers officiels de mon poste, projetés par le parseur et `rows.ts`. Le nombre de
+lignes de groupe (192 094) diffère de celui de la mesure de coût de la section 10 (191 389, jeu
+inventé à 11 groupes par scrutin) : l'écart de 705 lignes est expliqué en section 10 bis.
+
 |                                                                    | AMO30                      | 15e                      | 16e                      | 17e                     |
 | ------------------------------------------------------------------ | -------------------------- | ------------------------ | ------------------------ | ----------------------- |
 | Acteurs / organes de groupe / mandats de groupe / mandats de siège | 3 175 / 63 / 7 772 / 3 960 |                          |                          |                         |
@@ -219,23 +223,114 @@ Ce que l'exécution a trouvé :
    mutuellement le schéma (vitest parallélise les fichiers). Chaque fichier prend désormais un verrou
    consultatif pour toute sa durée ; ils font la queue.
 
-## 10. Coût des deux tables, au volume des fichiers locaux (lignes inventées)
+## 10. Coût des deux tables, sur un jeu inventé de même ordre de grandeur
 
-17 399 lignes de scrutin et 191 389 lignes de groupe, en une transaction, conteneur sans réglage :
-**25 s** (2 s pour les scrutins, 23 s pour les groupes), **113 Mo** au total (10 Mo et 103 Mo). Un
-peu moins de 8 % du coût mesuré en 5B pour les attestations. Les index partiels et d'exclusion de
-ces tables font partie du benchmark comparatif séparé que vous avez demandé.
+**Population : un jeu synthétique, pas les fichiers officiels.** 17 399 scrutins, chacun avec
+exactement 11 groupes (une constante choisie pour la mesure), soit 17 399 × 11 = **191 389** lignes de
+groupe, en une transaction, conteneur sans réglage : **25 s** (2 s pour les scrutins, 23 s pour les
+groupes), **113 Mo** au total (10 Mo et 103 Mo). Un peu moins de 8 % du coût mesuré en 5B pour les
+attestations. Les index partiels et d'exclusion de ces tables font partie du benchmark comparatif
+séparé que vous avez demandé.
 
-## 11. Décisions ouvertes
+Ce nombre n'est donc **pas** celui de la section 7 (192 094 lignes de groupe, comptées sur les
+fichiers officiels). L'écart de 705 lignes est expliqué exactement en section 10 bis. Les deux jeux
+ont le même nombre de scrutins (17 399) ; seul le nombre de groupes par scrutin diffère.
 
-| #   | Question                                                                                                 | Recommandation                                                                                                                                          |
-| --- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| C2  | `memberHash` sur `OfficialActor`, `OfficialOrganRecord`, `GroupMembershipRecord`, `SeatMandateRecord`    | Oui, **avant le premier import** (l'ajouter après exigerait de relire l'archive pour remplir). Migration additive distincte, non demandée dans cette PR |
-| C5  | Accès du rôle d'import : politiques `TO` le rôle, ou `BYPASSRLS` dédié                                   | Politiques (cadrage). **Non fait ici** : la création d'un rôle n'était pas dans l'autorisation de cette PR                                              |
-| F1  | Exigence de la 5F : la base refuse une position dont le scrutin n'est pas `COHERENT` au snapshot épinglé | À écrire avec la table de positions : un déclencheur qui lit `ScrutinCountCheck`                                                                        |
-| T1  | Étiquette git `historical-groups-parser/5C-0.1`                                                          | À créer au moment du merge, par vous                                                                                                                    |
-| P1  | Identité d'un groupe : rang parmi les groupes du même organe                                             | À confirmer. L'alternative (position dans le fichier) casserait à chaque réordonnancement de la source                                                  |
-| A9  | Stockage privé des archives                                                                              | Inchangé, toujours ouvert, rien n'a été créé                                                                                                            |
+### 10 bis. Les 705 lignes d'écart
+
+| Population                                                  | Scrutins                       | Groupes par scrutin       | Lignes de groupe |
+| ----------------------------------------------------------- | ------------------------------ | ------------------------- | ---------------- |
+| Section 7 : fichiers officiels, parseur et projection réels | 17 399 (4 417 + 4 105 + 8 877) | variable, voir ci-dessous | **192 094**      |
+| Section 10 : jeu synthétique de la mesure de coût           | 17 399                         | 11, constant              | **191 389**      |
+| Écart                                                       | 0                              |                           | **705**          |
+
+Le nombre de groupes publiés par scrutin, relevé sur les fichiers officiels :
+
+| Législature | Scrutins | Groupes par scrutin                                        | Lignes de groupe | Si c'était 11 partout | Écart avec 11 |
+| ----------- | -------- | ---------------------------------------------------------- | ---------------- | --------------------- | ------------- |
+| 15e         | 4 417    | 7 : 3 scrutins, 8 : 1 241, 9 : 1 500, 10 : 1 437, 11 : 236 | 40 415           | 48 587                | **-8 172**    |
+| 16e         | 4 105    | 11 pour les 4 105                                          | 45 155           | 45 155                | **0**         |
+| 17e         | 8 877    | 12 pour les 8 877                                          | 106 524          | 97 647                | **+8 877**    |
+| Total       | 17 399   |                                                            | **192 094**      | 191 389               | **+705**      |
+
+`-8 172 + 0 + 8 877 = 705`. L'écart tient en entier à la différence entre la constante 11 du jeu de
+mesure et le nombre réel de groupes de chaque législature : la 15e compte moins de groupes (certains
+scrutins en listent 7 à 10), la 17e en compte 12 (une ligne de plus par scrutin que la constante ; je n'ai pas cherché quel organe fait ce douzième groupe, cela ne sert pas au rapprochement). Le détail de la 15e vérifie : 3 × 7 + 1 241 × 8 + 1 500 × 9 + 1 437 × 10 +
+236 × 11 = 40 415.
+
+Ni les données, ni une règle métier, n'ont été touchées pour rapprocher les deux nombres : la mesure
+de coût est un jeu inventé, la section 7 un comptage. Pour mesurer le coût **au volume réel**, il
+suffirait de refaire la mesure avec 12 groupes en 17e et 11 en 16e : 192 094 lignes au lieu de
+191 389, soit 0,4 % de plus, sans effet sur la conclusion (le coût est dominé par les index, 113 Mo
+pour 191 389 lignes donnent environ 114 Mo pour 192 094).
+
+### 10 ter. `recordCounts` conserve le périmètre attendu
+
+Construit (`buildRecordCounts`) puis validé (`validateRecordCounts`) à partir des fichiers officiels,
+lecture seule, sans base. Aucune anomalie dans les quatre cas.
+
+| Flux         | Fichiers | Acceptés                                    | Hors périmètre                                      | Rejetés | Lignes de scrutin | Lignes de groupe |
+| ------------ | -------- | ------------------------------------------- | --------------------------------------------------- | ------- | ----------------- | ---------------- |
+| AMO30        | 14 053   | 3 238 (63 organes de groupe, 3 175 acteurs) | 10 815 (10 756 organes d'un autre type, 59 déports) | 0       |                   |                  |
+| Scrutins 15e | 4 417    | 4 417                                       | 0                                                   | 0       | 4 417             | 40 415           |
+| Scrutins 16e | 4 106    | 4 105                                       | 1 (le Congrès)                                      | 0       | 4 105             | 45 155           |
+| Scrutins 17e | 8 877    | 8 877                                       | 0                                                   | 0       | 8 877             | 106 524          |
+
+Ce que cela démontre :
+
+- **Conservation des fichiers** : acceptés + hors périmètre + rejetés = fichiers, dans les quatre flux
+  (c'est l'une des invariantes de `validateRecordCounts`). Le fichier du Congrès est dans « hors
+  périmètre » et non dans les scrutins de l'Assemblée : 4 106 fichiers, 4 105 scrutins, comme en 5A-2.
+- **Une ligne de cohérence par scrutin accepté** : 4 417, 4 105 et 8 877, égales aux scrutins par
+  statut de cohérence (4 387 + 30, 4 101 + 4, 8 876 + 1).
+- **Les lignes de groupe de `recordCounts` sont celles de la section 7**, flux par flux, et leur somme
+  est 192 094. Le compteur ne retient ni plus ni moins que la projection : il est construit depuis
+  les enregistrements eux-mêmes, pas depuis un second comptage.
+- **Les attestations** (472 631, 602 911, 1 323 978) et les 1 916 attestations sur `PO0` de la 17e
+  figurent à l'identique.
+- **Aucune ligne rejetée ni perdue** : 0 rejet, et les 7 772 mandats de groupe, 3 960 mandats de
+  siège, 3 175 acteurs et 63 organes de l'AMO30 sont tous dans `rows`.
+
+## 11. Décisions
+
+### Retenues le 19 octobre, pour les phases suivantes
+
+| #   | Décision                                                                                                                                   | Ce que cela engage                                                                                                                                                                                                                                                                                                                  |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C2  | `memberHash` ajouté sur `OfficialActor`, `OfficialOrganRecord`, `GroupMembershipRecord` et `SeatMandateRecord` **avant le premier import** | Migration additive distincte, avec son rapport et ses tests. Pas dans cette PR                                                                                                                                                                                                                                                      |
+| C5  | **Politiques RLS** pour un rôle d'import dédié, **sans** `BYPASSRLS`                                                                       | Le rôle d'import n'a pas d'attribut de contournement, et le rôle applicatif habituel n'en reçoit pas. Une politique par table et par commande, dont `WITH CHECK (status = 'QUARANTINED')` sur `SnapshotDecision` : l'importeur ne peut techniquement pas publier. Création du rôle et des politiques : migration manuelle distincte |
+| F1  | **Garde de publication au niveau PostgreSQL, obligatoire en 5F**                                                                           | La table de positions refuse, par un déclencheur qui lit `ScrutinCountCheck` au snapshot épinglé, toute position dont le scrutin n'est pas `COHERENT` ou n'a aucune ligne de cohérence. Pas de 5F sans elle                                                                                                                         |
+| T1  | Étiquette git `historical-groups-parser/5C-0.1` au merge                                                                                   | Créée à la fusion de cette PR, sur le commit de fusion. Sans elle, « rejouer avec la `parserVersion` du snapshot » n'a pas de code à retrouver                                                                                                                                                                                      |
+| P1  | Identité d'un groupe : **rang par occurrence du même `organeRef`**, avec déterminisme et traçabilité des changements                       | Voir ci-dessous                                                                                                                                                                                                                                                                                                                     |
+| A9  | **Stockage privé avec copie indépendante**, fournisseur à confirmer                                                                        | Rien n'est créé. Le fournisseur se confirme dans les tableaux de bord avant tout adaptateur                                                                                                                                                                                                                                         |
+
+**P1, ce que « déterminisme et traçabilité » veut dire dans ce schéma.**
+
+- _Déterminisme_ : le rang est calculé par une règle sans choix. Pour chaque groupe, dans l'ordre du
+  fichier, le rang est le nombre de groupes déjà vus qui portent le même `organeRef`. Les mêmes octets
+  donnent donc toujours les mêmes rangs. Pour un organe réel, le rang est toujours 0 (un organe n'apparaît
+  qu'une fois par scrutin) : seul `PO0` peut avoir un rang supérieur à 0, et seulement dans les
+  scrutins où le fichier le liste plusieurs fois. Le rang est dans le `rawHash` et dans la clé, il ne
+  dépend ni de l'horloge ni de l'ordre d'import des fichiers.
+- _Traçabilité_ : si la source réordonne ou ajoute un groupe `PO0` dans un scrutin, les rangs se
+  décalent, et les lignes concernées apparaissent comme des versions **corrigées** (version ancienne
+  fermée par `toSeq`, nouvelle ouverte), jamais comme une réécriture. La différence entre deux snapshots
+  les liste, et l'ancien classement reste lisible à son snapshot. Le rang ne s'applique qu'aux lignes de
+  groupe de cohérence : les attestations sont identifiées par `(scrutin, acteur)`, sans rang, donc
+  insensibles à ce réordonnancement.
+- _Ce que le rang n'est pas_ : une identité de groupe au sens politique. Deux groupes `PO0` d'un même
+  scrutin ne sont pas « le même groupe », ils sont deux entrées de remplissage que rien ne permet de
+  distinguer autrement. Le résolveur continue de traiter `PO0` comme une valeur de remplissage, jamais
+  comme un groupe.
+- _À tester en 5C-1 ou 5C-2_ : un scrutin où l'ordre de deux groupes `PO0` est permuté entre deux
+  snapshots donne exactement les corrections attendues, rien d'autre (cas de test à écrire avec
+  l'importeur, pas dans cette PR).
+
+### Toujours ouvertes
+
+Aucune décision de cette PR. Les points précédemment ouverts (C2, C5, F1, T1, P1, A9) sont tous
+tranchés ci-dessus ; leur mise en œuvre est renvoyée aux PR qui suivent, chacune soumise à votre
+validation.
 
 ## 12. Limites
 
