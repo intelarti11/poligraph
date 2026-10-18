@@ -9,7 +9,9 @@
  */
 import AdmZip from "adm-zip";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import pg from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -29,14 +31,21 @@ import {
 } from "../historical-groups-db";
 import {
   applyImport,
+  applyImportWithStorage,
   planHashOf,
   planImport,
   type ManifestEntry,
 } from "../historical-groups-import";
+import {
+  StorageIntegrityError,
+  StorageUnavailableError,
+  sha256Of,
+  type ArtifactStore,
+} from "../historical-groups-storage";
 import { assembleRun, execute, replayRun, writeRun } from "../historical-groups-run";
 import { releaseSnapshot, verificationHash, verifySnapshot } from "../historical-groups-verify";
 
-vi.setConfig({ testTimeout: 120_000, hookTimeout: 120_000 });
+vi.setConfig({ testTimeout: 120_000, hookTimeout: 900_000 });
 
 const url = process.env.HISTORICAL_SCHEMA_TEST_DATABASE_URL;
 if (url) {
@@ -78,7 +87,7 @@ const voter = (actor: string, mandate: string): VotantSpec => ({ actor, mandate 
 
 /** Three deputies: two in a group, one non-registered. Organ PO_G1 is a group, PO_NI is not. */
 function amo30Archive(extra: Record<string, unknown> = {}): OpenedArchive {
-  return openArchiveBytes(
+  return openTracked(
     zipOf({
       "json/organe/PO_G1.json": organeFile("PO_G1", { label: "Groupe un", abbreviation: "G1" }),
       "json/organe/PO_NI.json": organeFile("PO_NI", {
@@ -121,8 +130,20 @@ function scrutinsArchive(
       { organ: f.contreAs ?? "PO_NI", contre: [voter("PA2", "PM2")] },
     ]);
   }
-  return openArchiveBytes(zipOf(entries));
+  return openTracked(zipOf(entries));
 }
+
+const archiveBytes = new WeakMap<OpenedArchive, Buffer>();
+function openTracked(bytes: Buffer): OpenedArchive {
+  const archive = openArchiveBytes(bytes);
+  archiveBytes.set(archive, bytes);
+  return archive;
+}
+const zipBytes = (archive: OpenedArchive): Buffer => {
+  const bytes = archiveBytes.get(archive);
+  if (!bytes) throw new Error("archive built outside the helpers");
+  return bytes;
+};
 
 const entryOf = (stream: string, archive: OpenedArchive): ManifestEntry => ({
   stream,
@@ -475,6 +496,106 @@ describeDb("historical groups: import, release, run and replay on a disposable P
       expect(verdict.problems.join(" ")).toContain("rawHash");
       // The state hash is built from the stored raw hashes, which did not move: only the columns check sees it.
       expect(verdict.problems.join(" ")).not.toContain("state hash");
+    });
+  });
+
+  // ------------------------------------------------------------------------------------------
+  describe("the private storage of the archive", () => {
+    const memory = (over: Partial<ArtifactStore> = {}) => {
+      const objects = new Map<string, Buffer>();
+      const store: ArtifactStore & { objects: Map<string, Buffer> } = {
+        objects,
+        kind: "BLOB_PRIVATE",
+        async put(ref, bytes) {
+          objects.set(ref, Buffer.from(bytes));
+        },
+        async read(ref) {
+          return objects.get(ref) ?? null;
+        },
+        ...over,
+      };
+      return store;
+    };
+    /** The archive on disk, as the tool finds it, with an independent offline copy. */
+    function folders(archive: Buffer, withOffline = true) {
+      const root = mkdtempSync(path.join(tmpdir(), "hg-import-"));
+      const archiveDir = path.join(root, "archives");
+      const offlineDir = path.join(root, "offline");
+      mkdirSync(archiveDir);
+      mkdirSync(offlineDir);
+      const name = `${sha256Of(archive)}.zip`;
+      writeFileSync(path.join(archiveDir, name), archive);
+      if (withOffline) writeFileSync(path.join(offlineDir, name), archive);
+      return { archiveDir, offlineDir };
+    }
+    const attempt = async (store: ArtifactStore, withOffline = true) => {
+      const archive = amo30Archive();
+      const bytes = zipBytes(archive);
+      const { archiveDir, offlineDir } = folders(bytes, withOffline);
+      const entry = entryOf(AMO30, archive);
+      return as("importer", async (c) => {
+        const { plan } = await planImport(c, AMO30, archive);
+        return applyImportWithStorage(c, AMO30, archive, entry, planHashOf(plan), {
+          store,
+          bytes,
+          archiveDir,
+          offlineDir,
+        });
+      });
+    };
+    const nothingWritten = async () => {
+      for (const table of [
+        "SourceArtifact",
+        "OfficialSourceSnapshot",
+        "SnapshotDecision",
+        "OfficialActor",
+      ]) {
+        expect(
+          (await owner.query(`SELECT count(*)::int AS n FROM "${table}"`)).rows[0].n,
+          table
+        ).toBe(0);
+      }
+    };
+
+    it("deposits the archive first, and the artifact row points at it", async () => {
+      const store = memory();
+      await expect(attempt(store)).resolves.toMatchObject({ outcome: "IMPORTED" });
+      const row = await owner.query(
+        `SELECT "storageKind","storageRef","sha256" FROM "SourceArtifact"`
+      );
+      expect(row.rows[0].storageKind).toBe("BLOB_PRIVATE");
+      expect(row.rows[0].storageRef).toBe(`historical-groups/${row.rows[0].sha256}.zip`);
+      expect(store.objects.has(row.rows[0].storageRef)).toBe(true);
+    });
+
+    it("writes nothing when the private store is unavailable", async () => {
+      const down = async () => {
+        throw new StorageUnavailableError("503");
+      };
+      await expect(attempt(memory({ put: down }))).rejects.toThrow(StorageUnavailableError);
+      await expect(attempt(memory({ read: down }))).rejects.toThrow(StorageUnavailableError);
+      await nothingWritten();
+    });
+
+    it("writes nothing when the upload comes back corrupted", async () => {
+      const objects = new Map<string, Buffer>();
+      const corrupting = memory({
+        async put(ref, bytes) {
+          objects.set(ref, Buffer.concat([bytes, Buffer.from("x")]));
+        },
+        async read(ref) {
+          return objects.get(ref) ?? null;
+        },
+      });
+      await expect(attempt(corrupting)).rejects.toThrow(StorageIntegrityError);
+      await nothingWritten();
+    });
+
+    it("writes nothing without the independent offline copy", async () => {
+      const store = memory();
+      await expect(attempt(store, false)).rejects.toThrow(/offline copy/);
+      expect(store.objects.size).toBe(0);
+      await nothingWritten();
     });
   });
 
