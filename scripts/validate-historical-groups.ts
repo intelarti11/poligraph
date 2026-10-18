@@ -24,6 +24,7 @@ import {
 } from "./lib/historical-groups-archive";
 import {
   analyzeArchives,
+  baselineEmission,
   compareToBaseline,
   failures,
   isAmo30Archive,
@@ -88,8 +89,13 @@ function main(): number {
       throw new Error("a --scrutins archive looks like an AMO30 archive");
     const analysis = analyzeArchives(amo30, scrutins);
     if (parsed.emitBaseline) {
-      process.stdout.write(`${JSON.stringify(analysis.baseline, null, 2)}\n`);
-      return analysis.invariantViolations.length === 0 ? 0 : 1;
+      const emission = baselineEmission(analysis);
+      if (!emission.ok) {
+        for (const reason of emission.reasons) console.error(`refused: ${reason}`);
+        return 1;
+      }
+      process.stdout.write(emission.output);
+      return 0;
     }
     const reference = JSON.parse(fs.readFileSync(parsed.baseline, "utf8")) as Baseline;
     const comparison = compareToBaseline(analysis.baseline, reference);

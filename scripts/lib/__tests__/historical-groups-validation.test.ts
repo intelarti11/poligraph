@@ -12,6 +12,7 @@ import {
 import { openArchiveBytes, ArchiveIntegrityError } from "../historical-groups-archive";
 import {
   analyzeArchives,
+  baselineEmission,
   compareToBaseline,
   differences,
   failures,
@@ -237,6 +238,124 @@ describe("comparison with a baseline", () => {
     const current = analyzeArchives(amoBytes(), [other]);
     const noScrutins = { ...reference, scrutins: [] };
     expect(compareToBaseline(current.baseline, noScrutins)[1]?.status).toBe("NO_BASELINE");
+  });
+});
+
+describe("parser version", () => {
+  const reference = analyzeArchives(archive(amoFiles()), [archive(scrutinFiles())]).baseline;
+  const current = () => analyzeArchives(archive(amoFiles()), [archive(scrutinFiles())]);
+
+  it("gives no strict verdict when the baseline was written by another parser version", () => {
+    const older = { ...structuredClone(reference), parserVersion: "0.0.0-older" };
+    const run = current();
+    const comparison = compareToBaseline(run.baseline, older);
+    expect(comparison.map((c) => c.status)).toEqual([
+      "PARSER_VERSION_CHANGED",
+      "PARSER_VERSION_CHANGED",
+    ]);
+    expect(comparison.every((c) => c.inputsIdentical)).toBe(true);
+    expect(comparison[0]).toMatchObject({
+      parserVersion: run.baseline.parserVersion,
+      baselineParserVersion: "0.0.0-older",
+    });
+    expect(failures(run, comparison)).toEqual([]);
+  });
+
+  it("lists the figures that changed with the parser, and does not call them a failure", () => {
+    const older = { ...structuredClone(reference), parserVersion: "0.0.0-older" };
+    older.scrutins[0]!.aggregate.byLegislature["16"]!.categories.DIFFERENT_GROUP += 1;
+    const run = current();
+    const comparison = compareToBaseline(run.baseline, older);
+    expect(comparison[1]?.status).toBe("PARSER_VERSION_CHANGED");
+    expect(comparison[1]?.differences.map((d) => d.path)).toEqual([
+      "byLegislature.16.categories.DIFFERENT_GROUP",
+    ]);
+    expect(failures(run, comparison)).toEqual([]);
+  });
+
+  it("keeps the changed-archive and parser changes distinguishable", () => {
+    const older = { ...structuredClone(reference), parserVersion: "0.0.0-older" };
+    const changed = analyzeArchives(archive(amoFiles()), [
+      archive(scrutinFiles({ "json/VTANR5L16V3.json": scrutinFile("VTANR5L16V3", groups) })),
+    ]);
+    const comparison = compareToBaseline(changed.baseline, older);
+    expect(comparison[1]).toMatchObject({
+      status: "PARSER_VERSION_CHANGED",
+      inputsIdentical: false,
+    });
+    expect(compareToBaseline(changed.baseline, reference)[1]).toMatchObject({
+      status: "CHANGED_INPUT",
+      inputsIdentical: false,
+    });
+  });
+
+  it("still gives STRICT_MATCH when the versions are the same", () => {
+    const comparison = compareToBaseline(current().baseline, reference);
+    expect(comparison.map((c) => c.status)).toEqual(["STRICT_MATCH", "STRICT_MATCH"]);
+    expect(
+      comparison.every((c) => c.inputsIdentical && c.parserVersion === c.baselineParserVersion)
+    ).toBe(true);
+  });
+
+  it("does not hide a missing baseline behind a version change", () => {
+    const older = { ...structuredClone(reference), parserVersion: "0.0.0-older", scrutins: [] };
+    expect(compareToBaseline(current().baseline, older)[1]?.status).toBe("NO_BASELINE");
+  });
+});
+
+describe("baselineEmission", () => {
+  it("prints the baseline of sound archives", () => {
+    const run = analyzeArchives(archive(amoFiles()), [archive(scrutinFiles())]);
+    const emission = baselineEmission(run);
+    expect(emission.ok).toBe(true);
+    if (emission.ok) expect(JSON.parse(emission.output)).toEqual(run.baseline);
+  });
+
+  it("refuses, and prints nothing, when a blocking violation is found", () => {
+    const bad = analyzeArchives(
+      archive(
+        amoFiles({
+          "json/acteur/PA3.json": acteurFile("PA3", [groupMandate("PM3", "PA3", "PO-unknown")]),
+          "json/acteur/PA4.json": acteurFile("PA4", [
+            groupMandate("PM4", "PA4", "PO1", { start: "2023-02-01", end: "2023-01-01" }),
+          ]),
+        })
+      ),
+      [archive(scrutinFiles())]
+    );
+    expect(baselineEmission(bad)).toEqual({
+      ok: false,
+      reasons: ["blocking: startAfterEnd = 1", "blocking: membershipsWithAbsentOrgan = 1"],
+    });
+  });
+
+  it("refuses on a vote whose seat mandate is not found", () => {
+    const run = analyzeArchives(archive(amoFiles()), [
+      archive(
+        scrutinFiles({
+          "json/VTANR5L16V9.json": scrutinFile("VTANR5L16V9", [
+            { organ: "PO1", pour: [{ actor: "PA1", mandate: "PS-unknown" }] },
+          ]),
+        })
+      ),
+    ]);
+    const emission = baselineEmission(run);
+    expect(emission.ok).toBe(false);
+    if (!emission.ok)
+      expect(emission.reasons).toEqual(["blocking: voteSeatMandateNotFoundOrMissing = 1"]);
+  });
+
+  it("refuses on a broken invariant", () => {
+    const run = analyzeArchives(archive(amoFiles()), [archive(scrutinFiles())]);
+    expect(baselineEmission({ ...run, invariantViolations: ["files: lost one"] })).toEqual({
+      ok: false,
+      reasons: ["invariant: files: lost one"],
+    });
+  });
+
+  it("does not refuse on a changed input or an absent baseline, which it never reads", () => {
+    const run = analyzeArchives(archive(amoFiles()), [archive(scrutinFiles())]);
+    expect(baselineEmission(run).ok).toBe(true);
   });
 });
 

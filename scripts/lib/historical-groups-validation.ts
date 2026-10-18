@@ -186,6 +186,11 @@ export type ComparisonStatus =
   | "STRICT_MISMATCH"
   /** The archive or the referential it is read against has other bytes. Reported, never a failure. */
   | "CHANGED_INPUT"
+  /**
+   * The baseline was written by another parser version. Equal bytes and equal figures prove nothing
+   * about the new parser then, so no strict verdict is given. Reported, never a failure.
+   */
+  | "PARSER_VERSION_CHANGED"
   | "NO_BASELINE";
 
 export interface ComparisonItem {
@@ -193,6 +198,10 @@ export interface ComparisonItem {
   status: ComparisonStatus;
   sha256: string;
   baselineSha256: string | null;
+  parserVersion: string;
+  baselineParserVersion: string | null;
+  /** Same archive bytes, and for scrutins the same referential, as the baseline entry. */
+  inputsIdentical: boolean;
   differenceCount: number;
   /** At most `MAX_LISTED_DIFFERENCES`, sorted by path. */
   differences: Difference[];
@@ -205,13 +214,20 @@ function item(
   status: ComparisonStatus,
   sha: string,
   baselineSha: string | null,
-  diffs: Difference[]
+  diffs: Difference[],
+  parserVersions: { current: string; baseline: string | null }
 ): ComparisonItem {
+  const inputsIdentical = status === "STRICT_MATCH" || status === "STRICT_MISMATCH";
+  const parserChanged =
+    status !== "NO_BASELINE" && parserVersions.current !== parserVersions.baseline;
   return {
     subject,
-    status,
+    status: parserChanged ? "PARSER_VERSION_CHANGED" : status,
     sha256: sha,
     baselineSha256: baselineSha,
+    parserVersion: parserVersions.current,
+    baselineParserVersion: parserVersions.baseline,
+    inputsIdentical,
     differenceCount: diffs.length,
     differences: diffs.slice(0, MAX_LISTED_DIFFERENCES),
   };
@@ -219,6 +235,7 @@ function item(
 
 export function compareToBaseline(current: Baseline, reference: Baseline): ComparisonItem[] {
   const items: ComparisonItem[] = [];
+  const versions = { current: current.parserVersion, baseline: reference.parserVersion };
   const amo = current.amo30;
   const amoSame = amo.archive.sha256 === reference.amo30.archive.sha256;
   const amoDiffs = differences(reference.amo30.aggregate, amo.aggregate);
@@ -228,7 +245,8 @@ export function compareToBaseline(current: Baseline, reference: Baseline): Compa
       amoSame ? (amoDiffs.length === 0 ? "STRICT_MATCH" : "STRICT_MISMATCH") : "CHANGED_INPUT",
       amo.archive.sha256,
       reference.amo30.archive.sha256,
-      amoDiffs
+      amoDiffs,
+      versions
     )
   );
 
@@ -242,7 +260,7 @@ export function compareToBaseline(current: Baseline, reference: Baseline): Compa
     );
     const found = bySha ?? byLegislature;
     if (!found) {
-      items.push(item(subject, "NO_BASELINE", entry.archive.sha256, null, []));
+      items.push(item(subject, "NO_BASELINE", entry.archive.sha256, null, [], versions));
       continue;
     }
     const diffs = differences(found.aggregate, entry.aggregate);
@@ -253,7 +271,8 @@ export function compareToBaseline(current: Baseline, reference: Baseline): Compa
         strict ? (diffs.length === 0 ? "STRICT_MATCH" : "STRICT_MISMATCH") : "CHANGED_INPUT",
         entry.archive.sha256,
         found.archive.sha256,
-        diffs
+        diffs,
+        versions
       )
     );
   }
@@ -274,4 +293,17 @@ export function failures(analysis: Analysis, comparison: readonly ComparisonItem
       );
   }
   return out;
+}
+
+/**
+ * What `--emit-baseline` may print. The same safety criteria as a normal run apply (broken
+ * invariants, blocking violations), only the comparison is left out. A refused baseline yields no
+ * output at all, so it cannot be saved by mistake as if it were sound.
+ */
+export function baselineEmission(
+  analysis: Analysis
+): { ok: true; output: string } | { ok: false; reasons: string[] } {
+  const reasons = failures(analysis, []);
+  if (reasons.length > 0) return { ok: false, reasons };
+  return { ok: true, output: `${JSON.stringify(analysis.baseline, null, 2)}\n` };
 }
