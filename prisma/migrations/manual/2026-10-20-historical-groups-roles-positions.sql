@@ -22,6 +22,8 @@
 --    même texte est exécuté dans un schéma de référence jetable (hg_reference, avec des coquilles
 --    vides des tables existantes), puis dans le schéma réel, et les catalogues sont comparés avant et
 --    après (colonnes memberHash, table des positions, fonction, politiques RLS, droits).
+--  - La RLS doit déjà être activée sur les 15 tables existantes : sinon le script refuse (aucune réparation),
+--    car une table sans RLS ignorerait les politiques posées ici.
 --  - Droits : chaque rôle reçoit USAGE sur le schéma public (sans quoi il ne voit aucune table), puis exactement ce que la matrice du rapport lui donne, aucun DELETE,
 --    TRUNCATE ni DDL. Aucun rôle n'a BYPASSRLS : chaque commande passe par une politique. Le rôle
 --    d'import ne peut insérer une décision de snapshot que QUARANTINED, par SCRIPT. Une décision
@@ -62,6 +64,11 @@ FROM (
   SELECT 'the role ' || rolname || ' must not be SUPERUSER, BYPASSRLS, CREATEROLE or CREATEDB'
   FROM pg_roles
   WHERE rolname = ANY (ARRAY['hg_importer', 'hg_runner', 'hg_reader']::text[]) AND (rolsuper OR rolbypassrls OR rolcreaterole OR rolcreatedb)
+  UNION ALL
+  SELECT 'row level security is not enabled on ' || c.relname || ': the policies below would not apply'
+  FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = 'public'
+  WHERE c.relkind = 'r' AND c.relname = ANY (ARRAY['SourceArtifact', 'OfficialSourceSnapshot', 'SnapshotDecision', 'OfficialActor', 'OfficialOrganRecord', 'GroupMembershipRecord', 'SeatMandateRecord', 'ScrutinVoterAttestation', 'OfficialActorLinkDecision', 'OrganContinuityDecision', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin', 'RunExclusion', 'ScrutinCountCheck', 'ScrutinGroupCountCheck']::text[]) AND NOT c.relrowsecurity
   UNION ALL
   SELECT 'the role ' || r.rolname || ' owns ' || c.relname || ': a role of the lot never owns a table'
   FROM pg_class c

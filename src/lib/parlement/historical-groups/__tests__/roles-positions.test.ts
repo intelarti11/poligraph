@@ -188,6 +188,15 @@ describe("lot 5D (PR A) SQL: static conformance", () => {
     expect(model).toMatch(/run\s+HistoricalResolutionRun\s+@relation/);
   });
 
+  it("refuses before granting anything when RLS is off on one of the 15 existing tables", () => {
+    expect(SQL).toContain("row level security is not enabled on ' || c.relname");
+    expect(SQL).toContain("AND NOT c.relrowsecurity");
+    // The check sits in the prerequisites, before the first CREATE or GRANT.
+    expect(SQL.indexOf("AND NOT c.relrowsecurity")).toBeLessThan(
+      SQL.indexOf("CREATE SCHEMA hg_reference")
+    );
+  });
+
   it("refuses a populated table before it changes anything, and a partial installation", () => {
     expect(SQL).toContain("memberHash cannot be added to a table that already holds rows");
     expect(SQL).toContain("partial installation");
