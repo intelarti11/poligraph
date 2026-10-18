@@ -5,8 +5,11 @@
  * database is reachable only through the checks below, and every one of them must pass:
  *
  *  1. The target is NAMED: `HG_TARGET=shared`. A URL alone never selects it.
- *  2. The URL is a direct PostgreSQL connection: not a transactional pooler (port 6543, a pooler host,
- *     a `role.project` user name, none of which keep a session), with TLS required.
+ *  2. The URL is a direct PostgreSQL connection: not a pooler (port 6543, a pooler host, a
+ *     `role.project` user name), and the server is authenticated by TLS: `sslmode=verify-full`, with the
+ *     provider's CA certificate in `HG_TARGET_CA_FILE`. Certificate chain AND host name are verified.
+ *     `require` and `verify-ca` are refused: depending on the library they check the chain, the name,
+ *     both or neither, and a connection that "uses TLS" without authenticating the server is not enough.
  *  3. The host fingerprint equals the expected one (`HG_EXPECTED_TARGET_FINGERPRINT`).
  *  4. The user is the role of the tool, and that role has no special attribute.
  *  5. Once connected, the identity of the PROJECT is checked inside the database, not from the URL:
@@ -22,6 +25,7 @@
  * No value read from the environment is ever written to a log or an error message.
  */
 import { createHash } from "node:crypto";
+import fs from "node:fs";
 import pg from "pg";
 import { TargetRefusedError, type ToolRole } from "./historical-groups-db";
 
@@ -50,13 +54,14 @@ export interface SharedTarget {
   execution: Execution;
   /** The role name of the owner, only for the human gesture `release`. */
   ownerRole: string | null;
+  /** PEM file of the CA that signs the server certificate. */
+  caFile: string;
 }
 
 type Env = Record<string, string | undefined>;
 
 const POOLER_HOST = /pooler|supavisor|pgbouncer/i;
 const POOLER_PORTS = new Set(["6543"]);
-const TLS_MODES = new Set(["require", "verify-ca", "verify-full"]);
 
 /**
  * Everything that can be refused from the configuration alone, before any connection.
@@ -99,9 +104,25 @@ export function resolveSharedTarget(
       "a pooled user name (role.project) is refused: a direct connection is required"
     );
   }
-  const sslmode = target.searchParams.get("sslmode");
-  if (!sslmode || !TLS_MODES.has(sslmode)) {
-    throw new TargetRefusedError("TLS is required (sslmode=require, verify-ca or verify-full)");
+  if (target.searchParams.get("sslmode") !== "verify-full") {
+    throw new TargetRefusedError(
+      "the server must be authenticated: sslmode=verify-full is required"
+    );
+  }
+  const caFile = env["HG_TARGET_CA_FILE"];
+  if (!caFile) {
+    throw new TargetRefusedError(
+      "the CA certificate of the server is not configured (HG_TARGET_CA_FILE)"
+    );
+  }
+  let pem: string;
+  try {
+    pem = fs.readFileSync(caFile, "utf8");
+  } catch {
+    throw new TargetRefusedError("the CA certificate file cannot be read");
+  }
+  if (!/-----BEGIN CERTIFICATE-----[\s\S]*-----END CERTIFICATE-----/.test(pem)) {
+    throw new TargetRefusedError("the CA certificate file holds no certificate");
   }
   for (const name of ["DATABASE_URL"]) {
     if (env[name] !== undefined && env[name] === url) {
@@ -134,7 +155,7 @@ export function resolveSharedTarget(
       throw new TargetRefusedError("HG_ALLOW_SHARED_WRITE does not acknowledge this target");
     }
   }
-  return { url, role, expectedFingerprint, expectedSystemIdentifier, execution, ownerRole };
+  return { url, role, expectedFingerprint, expectedSystemIdentifier, execution, ownerRole, caFile };
 }
 
 /** What `verifyConnectedTarget` needs from a client. A stub implements it in the tests. */
@@ -216,8 +237,20 @@ export async function connectShared(
   env: Env = process.env
 ): Promise<pg.Client> {
   const target = resolveSharedTarget(url, role, execution, env);
+  // The parts of the URL are passed one by one, with an explicit TLS configuration: a connection string
+  // carrying `sslmode` would override it, and libraries differ on what each mode verifies.
+  const parsed = new URL(target.url);
   const client = new pg.Client({
-    connectionString: target.url,
+    host: parsed.hostname,
+    port: Number(parsed.port || 5432),
+    user: decodeURIComponent(parsed.username),
+    password: decodeURIComponent(parsed.password),
+    database: parsed.pathname.slice(1),
+    ssl: {
+      ca: fs.readFileSync(target.caFile, "utf8"),
+      rejectUnauthorized: true,
+      servername: parsed.hostname,
+    },
     types: {
       getTypeParser: ((oid: number, format?: "text" | "binary") =>
         oid === 1082 ? (v: string) => v : pg.types.getTypeParser(oid, format as "text")) as never,

@@ -25,10 +25,12 @@ rôles `hg_importer`, `hg_runner` et `hg_reader` sont sans connexion (`NOLOGIN`)
       `wal_compression=zstd`) : 1,47 Go de données au total, 2,8 Go de WAL au total (11,9 Mo, 587 Mo, 746 Mo
       et 1 682 Mo pour AMO30, 15e, 16e et 17e). Le WAL fait donc environ deux fois le volume de données, et
       la 17e est le flux le plus lourd (880 Mo de données, 1,7 Go de WAL, environ 22 minutes).
-- [ ] Le WAL est recyclé par les checkpoints tant que l'archivage suit : avec `max_wal_size` à 4 Go, le
-      répertoire WAL reste borné. Si l'archivage prend du retard, il grossit jusqu'au total de 2,8 Go en plus
-      du volume actuel. Le pire cas à vérifier est donc : espace utilisé + 1,47 Go + 2,8 Go sous le disque
-      provisionné, avec une marge.
+- [ ] **`max_wal_size` n'est pas une limite physique stricte.** C'est une cible qui déclenche des
+      checkpoints, que le répertoire WAL peut dépasser : archivage en retard, slot de réplication qui
+      retient du WAL, pic d'écriture plus rapide que les checkpoints. Le WAL est recyclé tant que
+      l'archivage suit. S'il prend du retard, le répertoire grossit jusqu'au total produit, soit jusqu'à
+      2,8 Go de plus que le volume actuel. Le pire cas à vérifier est donc : espace utilisé + 1,47 Go +
+      2,8 Go sous le disque provisionné, avec une marge. `max_wal_size` ne protège pas le disque.
 - [ ] Réglages relevés par `SHOW` : `max_wal_size`, `min_wal_size`, `wal_level`, `archive_mode`,
       `max_slot_wal_keep_size`, `wal_compression`. Le 2026-10-18 : 4 096 Mo, 1 024 Mo, `logical`,
       `on`, 2 048 Mo, `zstd`.
@@ -38,7 +40,11 @@ rôles `hg_importer`, `hg_runner` et `hg_reader` sont sans connexion (`NOLOGIN`)
       (`pg_stat_archiver` : aucun échec récent).
 - [ ] Marge exigée avant de lancer : espace libre supérieur aux données du flux plus son WAL mesuré plus 2 Go. Sinon, augmenter le disque d'abord (geste du dashboard, à confirmer dans le dashboard :
       délai et comportement de l'augmentation ne sont pas connus ici).
-- [ ] Un flux à la fois, et l'espace libre relevé entre deux flux.
+- [ ] Un flux à la fois. **Entre deux imports, avant de lancer le suivant** : espace libre relevé dans le
+      dashboard, taille du répertoire WAL (`pg_ls_waldir()`), état de l'archivage (`pg_stat_archiver` :
+      `failed_count` n'augmente pas, `last_archived_time` récent) et aucun slot de réplication qui retient du
+      WAL. Un archivage en échec ou un répertoire WAL qui ne redescend pas après le checkpoint arrête la
+      série.
 - [ ] Arrêt immédiat si l'espace libre passe sous 2 Go : la transaction du flux en cours est annulée, rien
       n'est écrit.
 
@@ -51,18 +57,50 @@ rôles `hg_importer`, `hg_runner` et `hg_reader` sont sans connexion (`NOLOGIN`)
 - [ ] La durée de cette restauration est notée, pour savoir ce que coûterait un retour arrière complet.
 - [ ] Sans sauvegarde restaurable, l'import ne démarre pas.
 
-## 3. Connectivité directe
+## 3. Connectivité directe et TLS
 
-- [ ] L'URL du rôle est une connexion directe (jamais le pooleur transactionnel : port 6543, hôte de
-      pooleur, utilisateur de la forme `role.projet`), avec TLS (`sslmode=require` au minimum).
+Limitations constatées chez le fournisseur le 2026-10-18 (relevées par poignée de main TLS et requêtes
+en lecture seule, sans connexion des rôles du lot) :
+
+- L'hôte de connexion directe n'a **qu'un enregistrement IPv6** (pas d'IPv4 sans option payante, à
+  confirmer dans le dashboard). Depuis la machine de développement, il est **injoignable** (réseau
+  inaccessible, `errno 101`) bien qu'une route IPv6 par défaut existe. L'import direct exige donc une
+  machine qui joint l'IPv6 du projet, ou l'option IPv4.
+- L'URL `DIRECT_URL` du projet passe en réalité par le **pooleur en mode session** (certificat
+  `*.pooler`, utilisateur de la forme `role.projet`). Ce mode garde la session, mais il ne répond pas à
+  « connexion directe ». La garde le refuse (hôte de pooleur, utilisateur à point). L'accepter serait un
+  changement de contrat à décider explicitement : il n'est pas fait.
+- Le certificat du serveur est signé par une autorité propre au fournisseur (« Supabase Root 2021 CA »),
+  absente des magasins publics : sans fichier d'autorité, `verify-full` échoue (`self-signed certificate in
+certificate chain`). Avec ce fichier, la chaîne et le nom d'hôte se vérifient (contrôlé avec `openssl`
+  sur le pooleur : accepté avec l'autorité du fournisseur, refusé avec un autre nom d'hôte). Le certificat
+  de l'autorité est téléchargeable dans les réglages de la base du dashboard (à confirmer). Comparer son
+  empreinte SHA-256 à celle présentée par le serveur :
+  `80:70:25:AD:50:D4:ED:21:9D:2C:9C:7D:29:9C:00:4F:82:4E:B0:0C:F7:F6:5A:FE:F6:07:D0:7B:72:E6:CA:FA`.
+  Ne jamais faire confiance à une autorité simplement parce qu'elle est présentée par le serveur.
+- Le certificat de l'hôte de connexion directe n'a pas pu être inspecté (hôte injoignable) : sa chaîne et
+  son nom sont à vérifier avant l'import, avec le même fichier d'autorité.
+
+À contrôler avant l'import :
+
+- [ ] L'URL du rôle est une connexion directe (jamais un pooleur : port 6543, hôte de pooleur, utilisateur
+      de la forme `role.projet`), avec `sslmode=verify-full`. `require` et `verify-ca` sont refusés : selon
+      la bibliothèque ils ne vérifient ni la chaîne ni le nom.
+- [ ] `HG_TARGET_CA_FILE` désigne le fichier PEM de l'autorité du fournisseur, dont l'empreinte a été
+      comparée à celle du dashboard. L'outil passe ce fichier au client TLS avec `rejectUnauthorized` et le
+      nom d'hôte attendu : un certificat d'une autre autorité ou d'un autre nom est refusé.
 - [ ] `npm run historical-groups -- fingerprint --role importer` imprime l'empreinte de l'hôte. Elle est
       comparée à celle attendue, et `HG_EXPECTED_TARGET_FINGERPRINT` est posée.
 - [ ] `HG_EXPECTED_SYSTEM_IDENTIFIER` est posé avec l'identifiant du cluster relevé par un administrateur
       (`SELECT system_identifier FROM pg_control_system()`). L'outil le relit à chaque connexion : un
-      projet inattendu est refusé même si l'hôte est le bon.
+      projet inattendu est refusé même si l'hôte est le bon, et un identifiant illisible est refusé (aucun
+      repli silencieux). `EXECUTE` sur `pg_control_system()` est accordé à `PUBLIC` (vérifié le 2026-10-18
+      par `has_function_privilege` pour les trois rôles du lot) : aucun privilège supplémentaire n'est
+      donné. À revérifier avant l'import : si ce droit était un jour retiré à `PUBLIC`, l'outil refuse de
+      s'exécuter plutôt que de s'en passer.
 - [ ] `HG_TARGET=shared` est posé explicitement. Sans lui, les outils n'acceptent que la base locale.
 - [ ] Un plan (`import --stream S`, lecture seule) réussit avant tout `--apply`. Il vérifie aussi que
-      la session est réelle (pas de pooleur), en TLS, sur un primaire.
+      la session est réelle (le backend ne change pas entre deux requêtes), en TLS, sur un primaire.
 - [ ] Pour une écriture : `HG_ALLOW_SHARED_WRITE` vaut le début de l'empreinte imprimée par `fingerprint`.
       C'est la reconnaissance écrite de cette cible précise.
 

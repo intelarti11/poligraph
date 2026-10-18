@@ -1,4 +1,7 @@
 // @vitest-environment node
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { TargetRefusedError } from "../historical-groups-db";
 import {
@@ -9,13 +12,18 @@ import {
   type SharedTarget,
 } from "../historical-groups-target";
 
-const URL_OK = "postgresql://hg_importer:x@db.project.example.test:5432/postgres?sslmode=require";
+const CA_DIR = mkdtempSync(path.join(tmpdir(), "hg-ca-"));
+const CA_FILE = path.join(CA_DIR, "ca.pem");
+writeFileSync(CA_FILE, "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n");
+const URL_OK =
+  "postgresql://hg_importer:x@db.project.example.test:5432/postgres?sslmode=verify-full";
 const FP = targetFingerprint(URL_OK);
 const SYSTEM_ID = "7000000000000000001";
 const ENV = {
   HG_TARGET: "shared",
   HG_EXPECTED_TARGET_FINGERPRINT: FP,
   HG_EXPECTED_SYSTEM_IDENTIFIER: SYSTEM_ID,
+  HG_TARGET_CA_FILE: CA_FILE,
 };
 const WRITE = { ...ENV, HG_ALLOW_SHARED_WRITE: FP.slice(0, 16) };
 
@@ -60,7 +68,8 @@ describe("the shared target, before any connection", () => {
   });
 
   it("refuses another host than the expected one, even with the right database name", () => {
-    const other = "postgresql://hg_importer:x@db.other.example.test:5432/postgres?sslmode=require";
+    const other =
+      "postgresql://hg_importer:x@db.other.example.test:5432/postgres?sslmode=verify-full";
     expect(refusal(() => resolveSharedTarget(other, "importer", "plan", ENV))).toContain(
       "fingerprint"
     );
@@ -69,15 +78,15 @@ describe("the shared target, before any connection", () => {
   it.each([
     [
       "the pooler port",
-      "postgresql://hg_importer:x@db.project.example.test:6543/postgres?sslmode=require",
+      "postgresql://hg_importer:x@db.project.example.test:6543/postgres?sslmode=verify-full",
     ],
     [
       "a pooler host",
-      "postgresql://hg_importer:x@aws-0-eu.pooler.example.test:5432/postgres?sslmode=require",
+      "postgresql://hg_importer:x@aws-0-eu.pooler.example.test:5432/postgres?sslmode=verify-full",
     ],
     [
       "a pooled user name",
-      "postgresql://hg_importer.projectref:x@db.project.example.test:5432/postgres?sslmode=require",
+      "postgresql://hg_importer.projectref:x@db.project.example.test:5432/postgres?sslmode=verify-full",
     ],
   ])("refuses a transactional pooler: %s", (_label, url) => {
     expect(
@@ -90,12 +99,43 @@ describe("the shared target, before any connection", () => {
     ).toContain("direct connection");
   });
 
-  it("refuses a connection without TLS", () => {
-    const plain = "postgresql://hg_importer:x@db.project.example.test:5432/postgres";
-    expect(refusal(() => resolveSharedTarget(plain, "importer", "plan", ENV))).toContain("TLS");
+  it("refuses a connection that does not authenticate the server: any mode but verify-full", () => {
+    const base = "postgresql://hg_importer:x@db.project.example.test:5432/postgres";
+    for (const query of [
+      "",
+      "?sslmode=disable",
+      "?sslmode=prefer",
+      "?sslmode=require",
+      "?sslmode=verify-ca",
+    ]) {
+      expect(
+        refusal(() => resolveSharedTarget(base + query, "importer", "plan", ENV)),
+        query
+      ).toContain("verify-full");
+    }
+  });
+
+  it("refuses without the CA certificate of the server, unreadable, or not a certificate", () => {
     expect(
-      refusal(() => resolveSharedTarget(`${plain}?sslmode=disable`, "importer", "plan", ENV))
-    ).toContain("TLS");
+      refusal(() =>
+        resolveSharedTarget(URL_OK, "importer", "plan", { ...ENV, HG_TARGET_CA_FILE: undefined })
+      )
+    ).toContain("not configured");
+    expect(
+      refusal(() =>
+        resolveSharedTarget(URL_OK, "importer", "plan", {
+          ...ENV,
+          HG_TARGET_CA_FILE: path.join(CA_DIR, "absent.pem"),
+        })
+      )
+    ).toContain("cannot be read");
+    const notPem = path.join(CA_DIR, "not.pem");
+    writeFileSync(notPem, "hello");
+    expect(
+      refusal(() =>
+        resolveSharedTarget(URL_OK, "importer", "plan", { ...ENV, HG_TARGET_CA_FILE: notPem })
+      )
+    ).toContain("no certificate");
   });
 
   it("refuses the application's own pooled URL", () => {
@@ -200,6 +240,7 @@ const TARGET: SharedTarget = {
   expectedSystemIdentifier: SYSTEM_ID,
   execution: "plan",
   ownerRole: null,
+  caFile: CA_FILE,
 };
 
 interface Behaviour {
