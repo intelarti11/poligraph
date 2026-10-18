@@ -86,7 +86,9 @@ async function main(): Promise<void> {
     createdAt: row.createdAt.toISOString(),
   }));
 
-  console.info(JSON.stringify({ mode: apply ? "apply" : "dry-run", count: summary.length, rows: summary }, null, 2));
+  console.info(
+    JSON.stringify({ mode: apply ? "apply" : "dry-run", count: summary.length, rows: summary }, null, 2)
+  );
   if (!apply) {
     console.info("Dry-run only. Pass --apply to delete these verified duplicate rows.");
     return;
@@ -111,22 +113,30 @@ async function main(): Promise<void> {
         id: { notIn: ids },
         politicianId: { in: politicianIds },
         type: MandateType.SENATEUR,
-        externalId: { in: candidates.map((row) => row.externalId!).filter(Boolean) },
+        externalId: {
+          in: candidates.map((row) => row.externalId!).filter(Boolean),
+        },
       },
       select: { politicianId: true, externalId: true },
     });
-    const siblingKeys = new Set(siblingRows.map((row) => `${row.politicianId}:${row.externalId}`));
+    const siblingKeys = new Set(
+      siblingRows.map((row) => `${row.politicianId}:${row.externalId}`)
+    );
     if (
       stillMatching.some(
         (row) => row.externalId === null || !siblingKeys.has(`${row.politicianId}:${row.externalId}`)
       )
     ) {
-      throw new Error("Safety check failed inside transaction: a duplicate has no remaining Senate sibling. No rows changed.");
+      throw new Error(
+        "Safety check failed inside transaction: a duplicate has no remaining Senate sibling. No rows changed."
+      );
     }
 
     const result = await tx.mandate.deleteMany({ where: { id: { in: ids } } });
     if (result.count !== EXPECTED_ROWS) {
-      throw new Error(`Expected to delete ${EXPECTED_ROWS} rows, deleted ${result.count}. Transaction rolled back.`);
+      throw new Error(
+        `Expected to delete ${EXPECTED_ROWS} rows, deleted ${result.count}. Transaction rolled back.`
+      );
     }
     return result.count;
   });
@@ -135,7 +145,9 @@ async function main(): Promise<void> {
     { politicianIds },
     "cleanup:duplicate-senate-mandates-2026-02"
   );
-  console.info(JSON.stringify({ deleted, profilesToRefresh: politicianIds.length, refresh }));
+  console.info(
+    JSON.stringify({ deleted, profilesToRefresh: politicianIds.length, refresh })
+  );
 
   if (refresh.sent === 0) {
     throw new Error(
