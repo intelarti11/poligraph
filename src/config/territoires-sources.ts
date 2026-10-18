@@ -337,19 +337,20 @@ export const TERRITOIRES_SOURCES: readonly TerritoireSource[] = [
   },
   {
     id: "meteofrance-normales",
-    name: "Normales climatiques 1991-2020 des stations de Météo-France",
+    name: "Fiches climatologiques des stations de Météo-France",
     producer: "Météo-France",
-    url: "https://meteo.data.gouv.fr",
+    url: "https://www.data.gouv.fr/datasets/fiches-climatologiques",
     licence: {
-      name: null,
-      url: null,
-      verifiedOn:
-        "https://data.gouv.fr/en/datasets/fiche-climatologique-des-stations-de-meteo-france",
-      verifiedAt: "2026-10-13",
-      note: "Licence de Météo-France non confirmée : la seule fiche data.gouv.fr trouvée est celle d'une association tierce (Infoclimat), pas celle du producteur. À établir sur le fichier effectivement importé avant toute reprise. Aucun import tant que ce n'est pas fait.",
+      name: "Licence Ouverte / Open Licence version 2.0 (Etalab)",
+      url: "https://www.etalab.gouv.fr/licence-ouverte-open-licence",
+      verifiedOn: "https://www.data.gouv.fr/api/1/datasets/fiches-climatologiques/",
+      verifiedAt: "2026-10-18",
+      note: "Jeu publié par Météo-France lui-même. Chaque bloc d'une fiche annonce sa propre période : elle est lue station par station et affichée avec la valeur.",
     },
-    attribution: null,
-    reuse: "Température moyenne annuelle et précipitations annuelles de la station de référence.",
+    attribution:
+      "Météo-France, fiches climatologiques des stations, avec la date de dernière mise à jour des données.",
+    reuse:
+      "Température moyenne annuelle et précipitations annuelles de la station de référence, avec la période mesurée par cette station.",
     status: "PREVU",
   },
 ];

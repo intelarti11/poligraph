@@ -14,8 +14,8 @@ const station = (over: Partial<ClimatStation>): ClimatStation => ({
   departmentCode: "35",
   lat: 48.0686,
   lon: -1.7342,
-  tempMoyenne: 12.4,
-  precipitations: 680,
+  tempMoyenne: { value: 12.4, startYear: 1991, endYear: 2020 },
+  precipitations: { value: 680, startYear: 1991, endYear: 2020 },
   ...over,
 });
 
@@ -79,6 +79,16 @@ describe("lignes climatiques", () => {
     });
     expect(rows[0]?.scopeLabel).toMatch(/^Station de Rennes-Saint-Jacques, à \d+ km$/);
     expect(rows[1]).toMatchObject({ indicatorKey: "climat_precipitations", value: 680 });
+  });
+
+  it("garde la période propre à la station, pas 1991-2020 par défaut", () => {
+    const young = station({
+      tempMoyenne: { value: 9.1, startYear: 2002, endYear: 2020 },
+      precipitations: { value: 910, startYear: 2007, endYear: 2020 },
+    });
+    const rows = climatRows("35238", pickReferenceStation(rennes, [young]));
+    expect(rows[0]).toMatchObject({ periodStart: "2002-01-01", periodEnd: "2020-12-31" });
+    expect(rows[1]).toMatchObject({ periodStart: "2007-01-01", periodEnd: "2020-12-31" });
   });
 
   it("écrit des lignes non établies, sans valeur, quand il n'y a pas de station", () => {

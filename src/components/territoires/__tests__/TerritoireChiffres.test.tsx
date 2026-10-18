@@ -132,6 +132,20 @@ describe("Le territoire en chiffres", () => {
     expect(doc.querySelector('a[href="/territoires/methode/climat"]')).not.toBeNull();
   });
 
+  it("affiche la période propre à la station, pas 1991-2020 par défaut", () => {
+    const climat = row("climat_temp_moyenne", 9.1, {
+      unit: "°C",
+      scopeKind: "STATION",
+      scopeLabel: "Station de Cessy, à 3 km",
+      periodStart: "2002-01-01",
+      periodEnd: "2020-12-31",
+      source: { ...source, methodSlug: "climat" },
+    });
+    const { text } = render(base({ reperes: [climat] }));
+    expect(text).toContain("sur 2002-2020");
+    expect(text).not.toContain("1991-2020");
+  });
+
   it("présente chaque unité de distribution séparément, avec la phrase fixe sur la limite", () => {
     const eau = (label: string, value: number | null, n: number) =>
       row("eau_nitrates", value, {

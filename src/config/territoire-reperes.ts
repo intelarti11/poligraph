@@ -69,7 +69,7 @@ export const REPERE_INDICATORS: readonly RepereIndicator[] = [
   {
     key: "climat_temp_moyenne",
     theme: "ENVIRONNEMENT",
-    label: "Température moyenne annuelle (normales 1991-2020)",
+    label: "Température moyenne annuelle",
     unit: "°C",
     scales: ["COM", "DEP"],
     methodSlug: "climat",
@@ -77,7 +77,7 @@ export const REPERE_INDICATORS: readonly RepereIndicator[] = [
   {
     key: "climat_precipitations",
     theme: "ENVIRONNEMENT",
-    label: "Précipitations annuelles (normales 1991-2020)",
+    label: "Précipitations annuelles",
     unit: "mm",
     scales: ["COM", "DEP"],
     methodSlug: "climat",
