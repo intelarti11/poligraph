@@ -8,13 +8,19 @@ import {
   type ArchiveErrorCode,
 } from "../historical-groups-archive";
 
+// Entries carry a modification time: fixed, so that the same content gives the same bytes whatever
+// the clock says (a test about fingerprints must not depend on the second it runs in).
+const FIXED_TIME = new Date(Date.UTC(2020, 0, 1));
+
 function zipOf(files: Record<string, string | Buffer>, attrs: Record<string, number> = {}): Buffer {
   const zip = new AdmZip();
   for (const [name, content] of Object.entries(files)) {
     zip.addFile(name, Buffer.isBuffer(content) ? content : Buffer.from(content));
+    const entry = zip.getEntry(name) as AdmZip.IZipEntry;
+    entry.header.time = FIXED_TIME;
     const attr = attrs[name];
     // `addFile` mangles its attribute argument, the entry property is the one that is honoured.
-    if (attr !== undefined) (zip.getEntry(name) as AdmZip.IZipEntry).attr = attr;
+    if (attr !== undefined) entry.attr = attr;
   }
   return zip.toBuffer();
 }
