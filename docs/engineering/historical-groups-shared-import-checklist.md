@@ -67,9 +67,12 @@ en lecture seule, sans connexion des rôles du lot) :
   connectivité IPv6 de bout en bout (adresse globale et route par défaut IPv6). À vérifier sur la machine
   qui lancera l'import, avant tout le reste. Sans IPv6, l'option IPv4 du projet est nécessaire.
 - L'URL `DIRECT_URL` du projet passe en réalité par le **pooleur en mode session** (certificat
-  `*.pooler`, utilisateur de la forme `role.projet`). Ce mode garde la session, mais il ne répond pas à
-  « connexion directe ». La garde le refuse (hôte de pooleur, utilisateur à point). L'accepter serait un
-  changement de contrat à décider explicitement : il n'est pas fait.
+  `*.pooler`, utilisateur de la forme `role.projet`, port 5432). Ce mode garde la session. Par défaut la
+  garde le refuse. Il s'accepte seulement sur demande explicite : `HG_CONNECTION_MODE=session-pooler`, qui
+  exige un hôte de pooleur, le port de session 5432 et un utilisateur `role.projet` dont le rôle est celui de
+  l'outil. Le port transactionnel (6543) est refusé dans tous les modes, et la sonde de session en base
+  (backend stable, verrou retrouvé) détecte un pooleur transactionnel quel que soit le mode annoncé. Le
+  contrôle de l'identité du cluster, de TLS `verify-full` et de l'empreinte de l'hôte restent identiques.
 - Le certificat du serveur est signé par une autorité propre au fournisseur (« Supabase Root 2021 CA »),
   absente des magasins publics : sans fichier d'autorité, `verify-full` échoue (`self-signed certificate in
 certificate chain`). Avec ce fichier, la chaîne et le nom d'hôte se vérifient (contrôlé avec `openssl`
@@ -83,8 +86,9 @@ certificate chain`). Avec ce fichier, la chaîne et le nom d'hôte se vérifient
 
 À contrôler avant l'import :
 
-- [ ] L'URL du rôle est une connexion directe (jamais un pooleur : port 6543, hôte de pooleur, utilisateur
-      de la forme `role.projet`), avec `sslmode=verify-full`. `require` et `verify-ca` sont refusés : selon
+- [ ] L'URL du rôle est une connexion directe, ou, sur décision explicite, le port de session d'un pooleur
+      (`HG_CONNECTION_MODE=session-pooler`). Jamais le port transactionnel (6543). Dans les deux cas
+      `sslmode=verify-full`. `require` et `verify-ca` sont refusés : selon
       la bibliothèque ils ne vérifient ni la chaîne ni le nom.
 - [ ] `HG_TARGET_CA_FILE` désigne le fichier PEM de l'autorité du fournisseur, dont l'empreinte a été
       comparée à celle du dashboard. L'outil passe ce fichier au client TLS avec `rejectUnauthorized` et le
@@ -131,10 +135,15 @@ Les rôles sont `NOLOGIN` tant que cette étape n'est pas décidée.
 
 ## 6. Import, un flux à la fois
 
-Pour AMO30, puis scrutins 15e, 16e, 17e :
+Ordre retenu : **AMO30, puis les scrutins de la 17e législature** (environ 0,89 Go de données et 1,7 Go de
+WAL). Les scrutins des 15e et 16e (environ 0,7 Go de données et 1,3 Go de WAL) suivent plus tard, avec le même
+déroulé, après avoir relevé de nouveau l'espace libre et l'état de l'archivage. Un run n'a besoin que de
+l'évidence AMO30 et du flux de sa législature : la 17e est exploitable seule.
 
-- [ ] Plan en lecture seule, comptes relus (AMO30 : 14 970 lignes ; 15e : 517 463 ; 16e : 652 171 ;
-      17e : 1 439 379), empreinte du plan notée.
+Pour chaque flux :
+
+- [ ] Plan en lecture seule, comptes relus (AMO30 : 14 970 lignes ; 17e : 1 439 379 ; plus tard 15e :
+      517 463 et 16e : 652 171), empreinte du plan notée.
 - [ ] `--apply --confirm <empreinte> --store blob`. Une confirmation absente ou périmée est refusée.
 - [ ] Un second plan sur le même flux annonce `ALREADY_IMPORTED`.
 
