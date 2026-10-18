@@ -87,7 +87,11 @@ async function main(): Promise<void> {
   }));
 
   console.info(
-    JSON.stringify({ mode: apply ? "apply" : "dry-run", count: summary.length, rows: summary }, null, 2)
+    JSON.stringify(
+      { mode: apply ? "apply" : "dry-run", count: summary.length, rows: summary },
+      null,
+      2
+    )
   );
   if (!apply) {
     console.info("Dry-run only. Pass --apply to delete these verified duplicate rows.");
@@ -119,12 +123,11 @@ async function main(): Promise<void> {
       },
       select: { politicianId: true, externalId: true },
     });
-    const siblingKeys = new Set(
-      siblingRows.map((row) => `${row.politicianId}:${row.externalId}`)
-    );
+    const siblingKeys = new Set(siblingRows.map((row) => `${row.politicianId}:${row.externalId}`));
     if (
       stillMatching.some(
-        (row) => row.externalId === null || !siblingKeys.has(`${row.politicianId}:${row.externalId}`)
+        (row) =>
+          row.externalId === null || !siblingKeys.has(`${row.politicianId}:${row.externalId}`)
       )
     ) {
       throw new Error(
@@ -145,9 +148,7 @@ async function main(): Promise<void> {
     { politicianIds },
     "cleanup:duplicate-senate-mandates-2026-02"
   );
-  console.info(
-    JSON.stringify({ deleted, profilesToRefresh: politicianIds.length, refresh })
-  );
+  console.info(JSON.stringify({ deleted, profilesToRefresh: politicianIds.length, refresh }));
 
   if (refresh.sent === 0) {
     throw new Error(
