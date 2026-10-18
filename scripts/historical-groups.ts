@@ -14,7 +14,8 @@
  *
  * Shared target (never the default): HG_TARGET=shared, HG_EXPECTED_TARGET_FINGERPRINT,
  * HG_EXPECTED_SYSTEM_IDENTIFIER, a direct connection (no pooler) with sslmode=verify-full and the
- * provider's CA in HG_TARGET_CA_FILE, and for any write
+ * provider's CA in HG_TARGET_CA_FILE (or, explicitly, HG_CONNECTION_MODE=session-pooler for the
+ * session port of a pooler; the transactional port is always refused), and for any write
  * HG_ALLOW_SHARED_WRITE (printed by `fingerprint`), `--store blob`, HG_BLOB_READ_WRITE_TOKEN and
  * HG_OFFLINE_COPY_DIR (an independent copy of the archives). See historical-groups-target.ts.
  *   fingerprint     [--role importer]      prints the fingerprint of the configured URL, no connection

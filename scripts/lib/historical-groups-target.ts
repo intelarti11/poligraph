@@ -93,16 +93,45 @@ export function resolveSharedTarget(
   if (target.protocol !== "postgresql:" && target.protocol !== "postgres:") {
     throw new TargetRefusedError("not a PostgreSQL URL");
   }
-  if (POOLER_PORTS.has(target.port) || POOLER_HOST.test(target.hostname)) {
+  const mode = env["HG_CONNECTION_MODE"] ?? "direct";
+  if (mode !== "direct" && mode !== "session-pooler") {
+    throw new TargetRefusedError("HG_CONNECTION_MODE is direct or session-pooler");
+  }
+  // The transactional port of a pooler is refused in every mode: it hands a backend to each statement.
+  if (POOLER_PORTS.has(target.port)) {
     throw new TargetRefusedError(
-      "a transactional pooler is refused: a direct connection is required"
+      "a transactional pooler is refused: a direct or session-mode connection is required"
     );
   }
-  const user = decodeURIComponent(target.username);
-  if (user.includes(".")) {
-    throw new TargetRefusedError(
-      "a pooled user name (role.project) is refused: a direct connection is required"
-    );
+  const rawUser = decodeURIComponent(target.username);
+  let user = rawUser;
+  if (mode === "direct") {
+    if (POOLER_HOST.test(target.hostname)) {
+      throw new TargetRefusedError(
+        "a pooler is refused in direct mode: a direct connection is required (or HG_CONNECTION_MODE=session-pooler)"
+      );
+    }
+    if (rawUser.includes(".")) {
+      throw new TargetRefusedError(
+        "a pooled user name (role.project) is refused: a direct connection is required"
+      );
+    }
+  } else {
+    // Session mode of a pooler: a real session (the in-database probe still proves it), on the session
+    // port, with the pooler's `role.project` user name. The role is what precedes the dot.
+    if (!POOLER_HOST.test(target.hostname)) {
+      throw new TargetRefusedError("the session-pooler mode expects a pooler host");
+    }
+    if (target.port !== "5432") {
+      throw new TargetRefusedError("the session-pooler mode uses the session port 5432");
+    }
+    const parts = rawUser.split(".");
+    if (parts.length !== 2 || !parts[0] || !parts[1]) {
+      throw new TargetRefusedError(
+        "the session-pooler mode expects a user name of the form role.project"
+      );
+    }
+    user = parts[0];
   }
   if (target.searchParams.get("sslmode") !== "verify-full") {
     throw new TargetRefusedError(

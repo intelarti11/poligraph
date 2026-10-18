@@ -96,7 +96,7 @@ describe("the shared target, before any connection", () => {
           HG_EXPECTED_TARGET_FINGERPRINT: targetFingerprint(url),
         })
       )
-    ).toContain("direct connection");
+    ).toMatch(/direct (or session-mode )?connection/);
   });
 
   it("refuses a connection that does not authenticate the server: any mode but verify-full", () => {
@@ -226,6 +226,79 @@ describe("the shared target, before any connection", () => {
     ]) {
       expect(messages).not.toContain(secret);
     }
+  });
+});
+
+describe("the session mode of a pooler, only when asked for", () => {
+  const POOLED =
+    "postgresql://hg_importer.projref:x@aws-0-eu.pooler.example.test:5432/postgres?sslmode=verify-full";
+  const SESSION = {
+    ...ENV,
+    HG_EXPECTED_TARGET_FINGERPRINT: targetFingerprint(POOLED),
+    HG_CONNECTION_MODE: "session-pooler",
+  };
+  const resolve = (
+    url: string,
+    env: Record<string, string | undefined> = SESSION,
+    role: "importer" | "runner" = "importer"
+  ) => refusal(() => resolveSharedTarget(url, role, "plan", env));
+
+  it("accepts the session port of a pooler with a role.project user, once requested", () => {
+    expect(resolve(POOLED)).toBeNull();
+    expect(
+      refusal(() =>
+        resolveSharedTarget(POOLED, "importer", "apply", {
+          ...SESSION,
+          HG_ALLOW_SHARED_WRITE: targetFingerprint(POOLED).slice(0, 16),
+        })
+      )
+    ).toBeNull();
+  });
+
+  it("stays refused by default, and for an unknown mode", () => {
+    expect(resolve(POOLED, { ...SESSION, HG_CONNECTION_MODE: undefined })).toContain(
+      "pooler is refused in direct mode"
+    );
+    expect(resolve(POOLED, { ...SESSION, HG_CONNECTION_MODE: "direct" })).toContain(
+      "pooler is refused in direct mode"
+    );
+    expect(resolve(POOLED, { ...SESSION, HG_CONNECTION_MODE: "transaction" })).toContain(
+      "direct or session-pooler"
+    );
+  });
+
+  it("refuses the transactional port in every mode", () => {
+    const transactional = POOLED.replace(":5432", ":6543");
+    const env = { ...SESSION, HG_EXPECTED_TARGET_FINGERPRINT: targetFingerprint(transactional) };
+    expect(resolve(transactional, env)).toContain("transactional pooler is refused");
+  });
+
+  it("refuses what is not a session pooler: a direct host, another port, a bare user name", () => {
+    const direct =
+      "postgresql://hg_importer.projref:x@db.project.example.test:5432/postgres?sslmode=verify-full";
+    expect(
+      resolve(direct, { ...SESSION, HG_EXPECTED_TARGET_FINGERPRINT: targetFingerprint(direct) })
+    ).toContain("expects a pooler host");
+    const otherPort = POOLED.replace(":5432", ":5433");
+    expect(
+      resolve(otherPort, {
+        ...SESSION,
+        HG_EXPECTED_TARGET_FINGERPRINT: targetFingerprint(otherPort),
+      })
+    ).toContain("session port 5432");
+    const bare = POOLED.replace("hg_importer.projref", "hg_importer");
+    expect(resolve(bare)).toContain("role.project");
+    const many = POOLED.replace("hg_importer.projref", "hg_importer.a.b");
+    expect(resolve(many)).toContain("role.project");
+  });
+
+  it("still requires the role of the tool before the dot, the expected host and verify-full", () => {
+    expect(resolve(POOLED, SESSION, "runner")).toContain("hg_runner");
+    expect(resolve(POOLED.replace("hg_importer.", "postgres."))).toContain("hg_importer");
+    expect(resolve(POOLED, { ...SESSION, HG_EXPECTED_TARGET_FINGERPRINT: FP })).toContain(
+      "fingerprint"
+    );
+    expect(resolve(POOLED.replace("verify-full", "require"))).toContain("verify-full");
   });
 });
 
