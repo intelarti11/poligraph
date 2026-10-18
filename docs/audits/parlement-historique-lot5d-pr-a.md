@@ -78,7 +78,8 @@ exécuté dans un schéma de référence (avec des coquilles vides des tables ex
 schéma réel, et les catalogues sont comparés avant et après : colonnes `memberHash` et contrainte,
 table des positions, fonction, politiques, droits (table, colonne, séquence, fonction).
 
-Prérequis vérifiés avant tout : les 15 tables, les 9 fonctions de garde, `btree_gist`, les trois rôles
+Prérequis vérifiés avant tout : les 15 tables (RLS activée sur chacune : sans cela, une table ignorerait
+les politiques posées par le script et le rôle d'import pourrait insérer une décision RELEASED), les 9 fonctions de garde, `btree_gist`, les trois rôles
 (existants, sans SUPERUSER, BYPASSRLS, CREATEROLE ni CREATEDB, propriétaires d'aucune table).
 
 ## Résultats sur le conteneur jetable

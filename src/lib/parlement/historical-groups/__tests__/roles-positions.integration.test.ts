@@ -306,6 +306,24 @@ describeDb("lot 5D roles, policies and positions on a disposable PostgreSQL", ()
       await q(`ALTER TABLE "RunExclusion" OWNER TO hg_schema_test`);
     });
 
+    it("refuses when row level security is off on an existing table, and changes nothing", async () => {
+      // With RLS off on SnapshotDecision the quarantine-only policy would not apply: the importer
+      // could insert a RELEASED decision. The script must not grant anything over such a table.
+      await q(`ALTER TABLE "SnapshotDecision" DISABLE ROW LEVEL SECURITY`);
+      const e = await stateOf(apply5d());
+      expect(e?.message).toContain("row level security is not enabled on SnapshotDecision");
+      expect((await q(`SELECT to_regclass('"ScrutinOrganPosition"') AS t`)).rows[0].t).toBeNull();
+      expect(
+        (
+          await q(
+            `SELECT 1 FROM information_schema.role_table_grants WHERE grantee = 'hg_importer'`
+          )
+        ).rowCount
+      ).toBe(0);
+      await q(`ALTER TABLE "SnapshotDecision" ENABLE ROW LEVEL SECURITY`);
+      expect(await stateOf(apply5d())).toBeNull();
+    });
+
     it("refuses over a partial lot 5B, naming the count", async () => {
       await q(`DROP TABLE "ScrutinGroupCountCheck"`);
       const e = await stateOf(apply5d());
