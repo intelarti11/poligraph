@@ -135,6 +135,7 @@
     "test:data:verbose": "tsx scripts/test-data-quality.ts --verbose",
     "test:all": "npm run test:data && npm run test:chatbot",
     "validate:historical-groups": "tsx scripts/validate-historical-groups.ts",
+    "historical-groups": "NODE_OPTIONS=--max-old-space-size=8192 tsx scripts/historical-groups.ts",
     "validate:truth": "tsx scripts/validate-truth.ts",
     "validate:truth:verbose": "tsx scripts/validate-truth.ts --verbose",
     "test:visual": "playwright test",

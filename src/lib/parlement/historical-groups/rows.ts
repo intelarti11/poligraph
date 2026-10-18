@@ -148,7 +148,7 @@ export interface HashedRecord<K extends RecordKind = RecordKind> {
   rawHash: string;
 }
 
-const IDENTITY: { [K in RecordKind]: readonly (keyof RowOf[K])[] } = {
+export const RECORD_IDENTITY: { [K in RecordKind]: readonly (keyof RowOf[K])[] } = {
   OFFICIAL_ACTOR: ["officialId"],
   OFFICIAL_ORGAN: ["organeRef"],
   GROUP_MEMBERSHIP: ["sourceRecordId"],
@@ -160,7 +160,7 @@ const IDENTITY: { [K in RecordKind]: readonly (keyof RowOf[K])[] } = {
 
 /** The identity of a record. A JSON array, so a separator inside a value cannot merge two keys. */
 export function recordKeyOf<K extends RecordKind>(kind: K, row: RowOf[K]): string {
-  return JSON.stringify(IDENTITY[kind].map((column) => row[column]));
+  return JSON.stringify(RECORD_IDENTITY[kind].map((column) => row[column]));
 }
 
 export function rawHashOf<K extends RecordKind>(kind: K, row: RowOf[K]): string {
