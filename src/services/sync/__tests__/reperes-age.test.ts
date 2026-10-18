@@ -21,6 +21,7 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
+import { TERRITOIRES_SOURCES } from "@/config/territoires-sources";
 import { licenceOfSource, syncReperesAge } from "@/services/sync/reperes-age";
 import { AGE_SUM_TOLERANCE, parseAgeStructure } from "@/services/sync/reperes-age-plan";
 
@@ -125,7 +126,7 @@ describe("écriture du lot", () => {
   });
 
   it("le code de l'importeur ne mentionne aucun statut publié", () => {
-    for (const f of ["reperes-age.ts", "reperes-age-plan.ts"]) {
+    for (const f of ["reperes-age.ts", "reperes-age-plan.ts", "reperes-climat.ts"]) {
       const code = readFileSync(join(process.cwd(), "src/services/sync", f), "utf8")
         .split("\n")
         .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l))
@@ -140,7 +141,19 @@ describe("licence", () => {
     expect(licenceOfSource("insee-structure-age").licenceName).toMatch(/Licence Ouverte/);
   });
 
+  it("lit la licence des fiches climatologiques au registre", () => {
+    expect(licenceOfSource("meteofrance-normales").licenceName).toMatch(/Licence Ouverte/);
+  });
+
   it("bloque l'import d'une source dont la licence n'est pas établie", () => {
-    expect(() => licenceOfSource("meteofrance-normales")).toThrow(/import bloqué/);
+    const source = TERRITOIRES_SOURCES.find((x) => x.id === "meteofrance-normales");
+    if (!source) throw new Error("source absente du registre");
+    const { name } = source.licence;
+    source.licence.name = null;
+    try {
+      expect(() => licenceOfSource("meteofrance-normales")).toThrow(/import bloqué/);
+    } finally {
+      source.licence.name = name;
+    }
   });
 });

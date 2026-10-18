@@ -177,11 +177,16 @@ function eauSentence(row: RepereRow): string {
   return `${period}, ${n} analyses de nitrates : ${above} de la limite de qualité (${EAU_NITRATES_LIMIT_MG_L} mg/L).`;
 }
 
+/** "1991-2020", or "2002-2020" for a station that measured over fewer years. */
+function periodYears(row: RepereRow): string {
+  return `${row.periodStart.slice(0, 4)}-${row.periodEnd.slice(0, 4)}`;
+}
+
 function ClimatCard({ rows }: { rows: RepereRow[] }) {
   if (rows.length === 0) return null;
   const station = rows.find((r) => r.scopeLabel)?.scopeLabel ?? null;
   return (
-    <Card title="Climat, normales 1991-2020" methodSlug="climat">
+    <Card title="Climat, moyennes de la station" methodSlug="climat">
       {station && <p className="text-sm">{station}</p>}
       <ul className="mt-1 space-y-1">
         {rows.map((row) => (
@@ -190,6 +195,9 @@ function ClimatCard({ rows }: { rows: RepereRow[] }) {
               {repereIndicator(row.indicatorKey)?.label ?? row.indicatorKey} :{" "}
             </span>
             <span className="font-semibold tabular-nums">{valueText(row)}</span>
+            {row.value !== null && (
+              <span className="text-muted-foreground"> (sur {periodYears(row)})</span>
+            )}
           </li>
         ))}
       </ul>

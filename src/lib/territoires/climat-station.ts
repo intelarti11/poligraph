@@ -1,9 +1,9 @@
 import { CLIMAT_STATION_MAX_KM } from "@/config/territoire-reperes";
+import type { FicheMeasure } from "./climat-fiche";
 
 /**
  * Reference weather station of a commune (#1052, "Le territoire en chiffres", lot R3). Pure: no
- * data access, no source. The climate source itself is not imported yet (its licence is not
- * confirmed, see src/config/territoires-sources.ts); this is the rule its import will apply.
+ * data access, no source: the rule the climate import applies (src/services/sync/reperes-climat.ts).
  *
  * One station, never an average: the nearest station of the SAME department, strictly closer than
  * the threshold. Otherwise the figure is not established, and that is said, not filled in.
@@ -15,10 +15,10 @@ export interface ClimatStation {
   departmentCode: string;
   lat: number;
   lon: number;
-  /** Annual mean temperature of the 1991-2020 normals, null when the station has none. */
-  tempMoyenne: number | null;
-  /** Annual precipitation of the 1991-2020 normals, in mm, null when the station has none. */
-  precipitations: number | null;
+  /** Annual mean temperature with the years it covers, null when the station has none. */
+  tempMoyenne: FicheMeasure | null;
+  /** Annual precipitation in mm with the years it covers, null when the station has none. */
+  precipitations: FicheMeasure | null;
 }
 
 export interface ClimatCommune {
@@ -70,6 +70,7 @@ export function pickReferenceStation(
   return { state: "ETABLI", station: best.station, km: best.km };
 }
 
+/** Reference period of the sheets, used by a row that has no station (so no period of its own). */
 export const CLIMAT_PERIOD = { start: "1991-01-01", end: "2020-12-31" } as const;
 
 export interface ClimatRowInput {
@@ -124,9 +125,13 @@ export function climatRows(territoryCode: string, ref: ClimatReference): ClimatR
         reason: ref.reason,
       };
     }
-    const value = d.pick(ref.station);
+    const measure = d.pick(ref.station);
+    const value = measure?.value ?? null;
     return {
       ...base,
+      // Each figure carries the period its own station measured it over.
+      periodStart: measure ? `${measure.startYear}-01-01` : base.periodStart,
+      periodEnd: measure ? `${measure.endYear}-12-31` : base.periodEnd,
       indicatorKey: d.indicatorKey,
       scopeId: ref.station.id,
       scopeLabel: `${ref.station.name}, à ${Math.round(ref.km)} km`,

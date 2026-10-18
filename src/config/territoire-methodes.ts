@@ -70,18 +70,22 @@ export const REPERE_METHODES: readonly RepereMethode[] = [
   },
   {
     slug: "climat",
-    title: "Climat (normales 1991-2020)",
+    title: "Climat (moyennes de la station de référence)",
     sourceIds: ["meteofrance-normales"],
     montre:
-      "Les normales 1991-2020 de la station météorologique de référence de la commune : température moyenne annuelle et cumul annuel de précipitations. Ce sont des moyennes sur trente ans, pas la météo d'une année.",
-    calcul: `La station de référence est la plus proche station du même département, à moins de ${CLIMAT_STATION_MAX_KM} km du centre de la commune. Le nom de la station et la distance sont affichés avec chaque valeur. Sans station dans ce rayon, le chiffre est non établi. Poligraph ne fait aucune moyenne entre plusieurs stations.`,
-    limites: `Une station mesure son emplacement, pas la commune : l'altitude et le relief peuvent changer le chiffre, d'où l'affichage de la distance. Le seuil de ${CLIMAT_STATION_MAX_KM} km est provisoire et sera calibré sur les données réelles.`,
+      "La température moyenne annuelle et le cumul annuel de précipitations de la station météorologique de référence de la commune, avec la période sur laquelle cette station les a mesurés : 1991-2020 pour les stations anciennes, une période plus courte pour celles ouvertes plus tard. Ce sont des moyennes sur plusieurs années, pas la météo d'une année.",
+    calcul: `La station de référence est la plus proche station du même département, à moins de ${CLIMAT_STATION_MAX_KM} km du centre de la commune. Le nom de la station et la distance sont affichés avec chaque valeur. Sans station dans ce rayon, le chiffre est non établi. Poligraph ne fait aucune moyenne entre plusieurs stations. La période est lue sur la fiche de la station, grandeur par grandeur, et affichée avec chaque valeur.`,
+    limites: `Une station mesure son emplacement, pas la commune : l'altitude et le relief peuvent changer le chiffre, d'où l'affichage de la distance. Deux stations voisines peuvent ne pas couvrir les mêmes années : leurs valeurs ne se comparent pas strictement entre elles, les normales officielles de Météo-France étant établies sur 1991-2020. Le seuil de ${CLIMAT_STATION_MAX_KM} km est provisoire et sera calibré sur les données réelles.`,
     neDitPas:
-      "Ces normales ne sont pas une prévision, et elles ne disent rien de la politique menée dans la commune.",
+      "Ces moyennes ne sont pas une prévision, et elles ne disent rien de la politique menée dans la commune.",
     historique: [
       {
         date: "2026-10-13",
         text: "Première version de la méthode. Aucune donnée n'est importée tant que la licence du fichier n'est pas confirmée.",
+      },
+      {
+        date: "2026-10-18",
+        text: "Licence confirmée (Licence Ouverte 2.0, fiches climatologiques de Météo-France). Les fiches annoncent une période par grandeur, parfois plus courte que 1991-2020 : chaque valeur affiche donc la période de sa station, et le libellé « normales 1991-2020 » est retiré.",
       },
     ],
   },
