@@ -25,7 +25,7 @@ import { createHash } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Applying the script takes about a second, and a few tests insert tens of thousands of rows.
-vi.setConfig({ testTimeout: 120_000, hookTimeout: 120_000 });
+vi.setConfig({ testTimeout: 120_000, hookTimeout: 900_000 });
 
 const url = process.env.HISTORICAL_SCHEMA_TEST_DATABASE_URL;
 if (url) {

@@ -42,6 +42,12 @@ import {
   snapshotByArtifact,
 } from "./historical-groups-db";
 import { indexArchive, scanArchive, type SnapshotIndex } from "./historical-groups-snapshot";
+import {
+  checkOfflineCopy,
+  depositArtifact,
+  type ArtifactStore,
+  type Deposit,
+} from "./historical-groups-storage";
 
 // ---------------------------------------------------------------------------
 // Manifest of the archives kept outside the repository
@@ -64,14 +70,19 @@ export function readManifest(dir: string): ManifestEntry[] {
   return manifest.archives;
 }
 
-/** Opens the archive of a manifest entry, refusing it if its bytes are not the ones declared. */
-export function openVerified(dir: string, entry: ManifestEntry): OpenedArchive {
+/** The bytes of the archive of a manifest entry, refused if they are not the ones declared. */
+export function readArchiveBytes(dir: string, entry: ManifestEntry): Buffer {
   const bytes = fs.readFileSync(path.join(dir, entry.file));
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   if (sha256 !== entry.sha256 || bytes.length !== entry.sizeBytes) {
     throw new Error(`${entry.stream}: the archive on disk is not the one the manifest declares`);
   }
-  return openArchiveBytes(bytes);
+  return bytes;
+}
+
+/** Opens the archive of a manifest entry, refusing it if its bytes are not the ones declared. */
+export function openVerified(dir: string, entry: ManifestEntry): OpenedArchive {
+  return openArchiveBytes(readArchiveBytes(dir, entry));
 }
 
 // ---------------------------------------------------------------------------
@@ -250,7 +261,8 @@ export async function applyImport(
   archive: OpenedArchive,
   entry: ManifestEntry,
   confirm: string,
-  log: (line: string) => void = () => undefined
+  log: (line: string) => void = () => undefined,
+  deposit: Deposit | null = null
 ): Promise<ApplyResult> {
   const started = Date.now();
   await client.query("SELECT pg_advisory_lock(hashtextextended($1, 0))", [`hg-import:${stream}`]);
@@ -283,8 +295,13 @@ export async function applyImport(
       if (have.rowCount === 0) {
         await client.query(
           `INSERT INTO "SourceArtifact"("sha256","byteSize","mediaType","storageKind","storageRef","storedAt","storedBy")
-           VALUES ($1, $2, 'application/zip', 'LOCAL_OFFLINE', $3, now(), 'import-an')`,
-          [archive.sha256, archive.sizeBytes, entry.file]
+           VALUES ($1, $2, 'application/zip', $3, $4, now(), 'import-an')`,
+          [
+            archive.sha256,
+            archive.sizeBytes,
+            deposit?.storageKind ?? "LOCAL_OFFLINE",
+            deposit?.storageRef ?? entry.file,
+          ]
         );
       }
       const snapshotId = `hg-${stream}-${seq}`;
@@ -380,4 +397,24 @@ export async function applyImport(
       `hg-import:${stream}`,
     ]);
   }
+}
+
+/**
+ * `applyImport` with the archive deposited first: the independent offline copy is checked, the archive
+ * is put in the private store (by hash), read back and hashed again, and only then does the import open
+ * its transaction. Any failure here writes nothing to the database.
+ */
+export async function applyImportWithStorage(
+  client: pg.Client,
+  stream: string,
+  archive: OpenedArchive,
+  entry: ManifestEntry,
+  confirm: string,
+  storage: { store: ArtifactStore; bytes: Buffer; archiveDir: string; offlineDir: string },
+  log: (line: string) => void = () => undefined
+): Promise<ApplyResult> {
+  checkOfflineCopy(storage.archiveDir, storage.offlineDir, archive.sha256);
+  const deposit = await depositArtifact(storage.store, storage.bytes, archive.sha256);
+  log(`${stream}: archive stored as ${deposit.storageRef}`);
+  return applyImport(client, stream, archive, entry, confirm, log, deposit);
 }

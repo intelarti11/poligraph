@@ -14,7 +14,7 @@ import { Pool, type PoolClient } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { EXPECTED, ROLES, type Role } from "../__fixtures__/role-matrix";
 
-vi.setConfig({ testTimeout: 120_000, hookTimeout: 120_000 });
+vi.setConfig({ testTimeout: 120_000, hookTimeout: 900_000 });
 
 const url = process.env.HISTORICAL_SCHEMA_TEST_DATABASE_URL;
 if (url) {

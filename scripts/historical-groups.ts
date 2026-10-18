@@ -11,6 +11,13 @@
  * the archives from HG_ARCHIVE_DIR (the folder holding manifest.json). Nothing is read from
  * DATABASE_URL or DIRECT_URL, and a URL that is not the disposable local database is refused.
  * `import` without --apply writes nothing: it prints the plan and its hash.
+ *
+ * Shared target (never the default): HG_TARGET=shared, HG_EXPECTED_TARGET_FINGERPRINT,
+ * HG_EXPECTED_SYSTEM_IDENTIFIER, a direct connection (no pooler) with sslmode=verify-full and the
+ * provider's CA in HG_TARGET_CA_FILE, and for any write
+ * HG_ALLOW_SHARED_WRITE (printed by `fingerprint`), `--store blob`, HG_BLOB_READ_WRITE_TOKEN and
+ * HG_OFFLINE_COPY_DIR (an independent copy of the archives). See historical-groups-target.ts.
+ *   fingerprint     [--role importer]      prints the fingerprint of the configured URL, no connection
  */
 import {
   applyImport,
@@ -26,6 +33,11 @@ import {
   readBaselineLegislature,
 } from "./lib/historical-groups-crosscheck";
 import { connectDisposable, type ToolRole } from "./lib/historical-groups-db";
+import { connectShared, targetFingerprint, type Execution } from "./lib/historical-groups-target";
+import { applyImportWithStorage, readArchiveBytes } from "./lib/historical-groups-import";
+import { openArchiveBytes } from "./lib/historical-groups-archive";
+import { createBlobStore, type ArtifactStore } from "./lib/historical-groups-storage";
+import * as blob from "@vercel/blob";
 import { releaseSnapshot, verificationHash, verifySnapshot } from "./lib/historical-groups-verify";
 import {
   assembleRun,
@@ -74,29 +86,80 @@ async function latestReleasedSeq(client: pg.Client, stream: string): Promise<num
   return (r.rows[0] as { seq: number }).seq;
 }
 
+/**
+ * The local disposable database by default. The shared target only when it is named
+ * (`HG_TARGET=shared`) and every check of `historical-groups-target.ts` passes.
+ */
+function connect(role: ToolRole, execution: Execution) {
+  const url = urlFor(role);
+  return process.env["HG_TARGET"] === "shared"
+    ? connectShared(url, role, execution)
+    : connectDisposable(url, role);
+}
+
+const isShared = () => process.env["HG_TARGET"] === "shared";
+
+function storeFor(args: string[]): { store: ArtifactStore; offlineDir: string } | null {
+  const kind = option(args, "store");
+  if (kind === undefined) {
+    if (isShared())
+      throw new Error("the shared target needs --store blob (private storage of the archive)");
+    return null;
+  }
+  if (kind !== "blob") throw new Error("--store only knows blob");
+  const offlineDir = process.env["HG_OFFLINE_COPY_DIR"];
+  if (!offlineDir) throw new Error("HG_OFFLINE_COPY_DIR (independent offline copy) is not set");
+  return { store: createBlobStore(blob, process.env["HG_BLOB_READ_WRITE_TOKEN"]), offlineDir };
+}
+
 const log = (line: string) => process.stderr.write(`${line}\n`);
 
 async function main(): Promise<void> {
   const [command, ...args] = process.argv.slice(2);
   const stream = option(args, "stream");
+  if (command === "fingerprint") {
+    // Prints the fingerprint of the URL configured for a role. No connection, nothing else printed.
+    const role = (option(args, "role") ?? "importer") as ToolRole;
+    const fingerprint = targetFingerprint(urlFor(role));
+    console.log(JSON.stringify({ fingerprint, acknowledgement: fingerprint.slice(0, 16) }));
+    return;
+  }
   if (command === "import") {
     if (!stream) throw new Error("--stream is required");
+    const apply = flag(args, "apply");
+    const confirm = option(args, "confirm");
+    if (apply && !confirm) throw new Error("--apply needs --confirm <plan hash>");
+    // Storage and archive are checked before any connection: nothing is opened for a refusal.
+    const storage = apply ? storeFor(args) : null;
     const entry = entryFor(stream);
-    const archive = openVerified(archiveDir(), entry);
-    const client = await connectDisposable(urlFor("importer"), "importer");
+    const bytes = readArchiveBytes(archiveDir(), entry);
+    const archive = openArchiveBytes(bytes);
+    const client = await connect("importer", apply ? "apply" : "plan");
     try {
-      if (!flag(args, "apply")) {
+      if (!apply) {
         await client.query("BEGIN READ ONLY");
         const { plan } = await planImport(client, stream, archive);
         await client.query("ROLLBACK");
         console.log(JSON.stringify({ plan, planHash: planHashOf(plan) }, null, 2));
         return;
       }
-      const confirm = option(args, "confirm");
-      if (!confirm) throw new Error("--apply needs --confirm <plan hash>");
-      console.log(
-        JSON.stringify(await applyImport(client, stream, archive, entry, confirm, log), null, 2)
-      );
+      const result = storage
+        ? await applyImportWithStorage(
+            client,
+            stream,
+            archive,
+            entry,
+            confirm as string,
+            {
+              store: storage.store,
+              bytes,
+              archiveDir: archiveDir(),
+              offlineDir: storage.offlineDir,
+            },
+            log
+          )
+        : await applyImport(client, stream, archive, entry, confirm as string, log);
+      console.log(JSON.stringify(result, null, 2));
     } finally {
       await client.end();
     }
@@ -109,9 +172,9 @@ async function main(): Promise<void> {
       flag(args, "with-archive") || command === "release"
         ? openVerified(archiveDir(), entryFor(stream))
         : null;
-    const client = await connectDisposable(
-      urlFor(command === "verify" ? "reader" : "owner"),
-      command === "verify" ? "reader" : "owner"
+    const client = await connect(
+      command === "verify" ? "reader" : "owner",
+      command === "verify" ? "plan" : "apply"
     );
     try {
       if (command === "verify") {
@@ -135,7 +198,7 @@ async function main(): Promise<void> {
   if (command === "run") {
     const legislature = Number(option(args, "legislature"));
     if (!Number.isInteger(legislature)) throw new Error("--legislature is required");
-    const client = await connectDisposable(urlFor("runner"), "runner");
+    const client = await connect("runner", flag(args, "apply") ? "apply" : "plan");
     try {
       const amo30 = await latestReleasedSeq(client, "AN_AMO30");
       const scrutins = await latestReleasedSeq(client, `AN_SCRUTINS_L${legislature}`);
@@ -172,7 +235,7 @@ async function main(): Promise<void> {
   if (command === "verify-run") {
     const runId = option(args, "run");
     if (!runId) throw new Error("--run is required");
-    const client = await connectDisposable(urlFor("reader"), "reader");
+    const client = await connect("reader", "plan");
     try {
       const verdict = await replayRun(client, runId);
       console.log(JSON.stringify(verdict, null, 2));
