@@ -2,7 +2,7 @@
 
 Premier parcours public pour lire ce que les groupes de l'Assemblée nationale ont voté à la date
 d'un scrutin, à partir des runs du lot 5D. Le lot livre l'interface, la couche de lecture et les
-tests. **Il n'active rien** : l'interrupteur est éteint, le SQL n'est pas appliqué. La section 6
+tests. **Il n'active rien** : l'interrupteur est éteint, et le SQL est appliqué mais rien ne le lit encore. La section 6
 est le relevé de préparation de l'activation (audit, recette, cache, GO / NO-GO).
 
 ## 1. Audit de l'existant
@@ -103,10 +103,11 @@ fourni). Il ajoute **trois vues** et ne modifie aucune table.
   l'affiliation actuelle.
 - **Rien d'interne** : ni empreinte, ni identifiant de run ou d'élu, ni preuve, ni décision. Des
   comptes et des noms de groupes.
-- **Moindre privilège** : aucun `GRANT`. `PUBLIC`, `anon` et `authenticated` sont révoqués (Supabase
-  accorde ces droits par défaut sur les objets neufs du schéma public). Les rôles `hg_*` ne lisent
-  pas les vues. Le script **échoue de lui-même** si un droit subsiste ou si la RLS d'une table brute
-  est coupée.
+- **Moindre privilège** : aucun `GRANT`. `PUBLIC`, `anon`, `authenticated` et `readonly` sont révoqués
+  (les droits par défaut du schéma public les accordent aux objets neufs, avec `service_role`). Les
+  rôles `hg_*` ne lisent pas les vues. Le script **échoue de lui-même** si un rôle autre que le
+  propriétaire et `service_role` garde un droit, qu'il soit nommé ou non dans le `REVOKE`, ou si la
+  RLS d'une table brute est coupée.
 - **Bornes** : un scrutin à la fois, 40 lignes au plus, identifiant validé, SQL paramétré, schéma de
   sortie strict (liens limités à https et au site de données de l'Assemblée).
 - **Lecteur unique** : `src/lib/data/historical-group-positions.ts`. Un test d'architecture interdit
@@ -129,40 +130,48 @@ matérialisait toutes les positions (102 ms) : réécrite avant livraison.
 - Couche de données : vues nommées, paramètres, bornes, rejet des lignes et des liens malformés.
 - Page : interrupteur éteint (comportement d'avant) et allumé, chaque état, Sénat exclu.
 - Architecture : frontière de lecture, aucun droit accordé, interrupteur éteint.
-- **Intégration PostgreSQL** (conteneur jetable, non lancée par défaut) : 20 cas, sous les droits par
+- **Intégration PostgreSQL** (conteneur jetable, non lancée par défaut) : 26 cas, sous les droits par
   défaut de Supabase, dont : run non libéré, révocation, run plus récent, rôles `anon`,
   `authenticated`, `hg_*` refusés, liste exacte des colonnes, aucune empreinte dans les valeurs. La
-  révocation a été retirée du script pour vérifier que la garde interne échoue bien (48 droits).
+  révocation a été retirée du script pour vérifier que la garde interne échoue bien (48 droits). Les
+  droits par défaut de Supabase sont reproduits en entier (`service_role`, `readonly`, et
+  `poligraph_bot` qui en hérite avec `BYPASSRLS`) : la première version du script passait ces tests
+  alors que `readonly` lisait les vues en production, parce que le jeu d'essai ne connaissait que
+  `anon` et `authenticated`.
 - Rendu : stories pour chaque état, vérifiées sans violation `axe`, sans débordement horizontal à
   390 px, en clair et en sombre.
 
 ## 6. Préparation de l'activation (relevé du 2026-10-19)
 
-Tout ce qui suit a été mesuré sur la base partagée **en lecture seule** (SELECT, transaction
-`READ ONLY`), sans créer d'objet, sans toucher aux snapshots, aux runs ni aux statistiques. Les
-vues n'existent pas encore en base : la logique du fichier SQL a été rejouée en la composant en
-requête (le texte exact du fichier, avec les trois `SELECT` en sous-requêtes).
+Les mesures ci-dessous ont été prises sur la base partagée **en lecture seule** (SELECT, transaction
+`READ ONLY`), sans toucher aux snapshots, aux runs ni aux statistiques. Avant l'application du SQL,
+les vues n'existaient pas : la logique du fichier a été rejouée en la composant en requête (le texte
+exact du fichier, avec les trois `SELECT` en sous-requêtes). **Le SQL a ensuite été appliqué** le
+2026-10-19 à 14:51Z, puis `readonly` a été révoqué sur les trois vues à 15:02Z : voir 6.1.
 
 ### 6.1 Audit du SQL fusionné et du contrat de permissions
 
-| Contrôle                     | Constat                                                                                                                                                                                                                                                          | Preuve                                                                                      |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| Vues en base                 | Absentes. Seules les tables brutes existent.                                                                                                                                                                                                                     | Catalogue `pg_class` : aucune relation `Historical*` de type vue.                           |
-| Runs publiables              | Trois runs `COMPLETED` (15e, 16e, 17e). Leurs snapshots épinglés sont `VERIFIED` et leur dernière décision est `RELEASED`.                                                                                                                                       | `hg-AN_AMO30-1` (partagé par les trois), `hg-AN_SCRUTINS_L15-1`, `-L16-1`, `-L17-1`.        |
-| Rôle applicatif              | `postgres`, `BYPASSRLS`, propriétaire des tables. **La RLS ne retient pas le code de l'application** : la frontière de lecture est le test d'architecture, pas la base. Risque résiduel accepté. Un rôle applicatif dédié serait un chantier d'architecture.     | `pg_roles`, `current_user`.                                                                 |
-| `anon`, `authenticated`      | Aucun droit sur les tables brutes, RLS active sans politique. Les vues sont révoquées pour eux, et le script échoue de lui-même s'il reste un droit.                                                                                                             | ACL des tables brutes ; test d'intégration (refus `42501`).                                 |
-| `hg_*`, `readonly`           | `NOLOGIN`. `hg_*` n'a aucun droit sur les vues. `readonly` a `SELECT` sur les tables brutes, mais la RLS sans politique ne lui laisse aucune ligne.                                                                                                              | `pg_roles`, ACL, `pg_policies`.                                                             |
-| `service_role`               | Garde `ALL` par les droits par défaut de Supabase et `BYPASSRLS`, comme sur chaque table du schéma. Hors périmètre du script, accessible seulement avec la clé de service.                                                                                       | ACL des tables brutes.                                                                      |
-| Lecture sur données réelles  | 17 399 scrutins (4 417 en 15e, 4 105 en 16e, 8 877 en 17e) et 161 592 lignes de groupe. Les 12 982 scrutins du site (16e et 17e) ont tous un état.                                                                                                               | Script de lecture seule, recette ci-dessous.                                                |
-| **Défaut trouvé et corrigé** | Pour les 35 scrutins discordants, la vue d'état listait `COUNT_MISMATCH` parmi les groupes écartés. Le lecteur refuse cette raison : la page aurait affiché « momentanément indisponible » et un avertissement Sentry, au lieu de l'explication prévue.          | 35 lignes refusées avant, 0 après, positions inchangées. Test d'intégration et garde en CI. |
-| Hypothèse écartée            | Un run `COMPLETED` sans `finishedAt` passerait devant les autres dans `ORDER BY finishedAt DESC`. Impossible : la contrainte `HistoricalResolutionRun_lifecycle_consistent` l'interdit (essayé sur la base jetable).                                             | Test écrit puis retiré, la base refuse l'insertion.                                         |
-| Performance                  | Plan par index. État d'un scrutin : 2,1 ms (3 ms de planification). Lignes de groupes : 0,43 ms. Budget : 500 ms.                                                                                                                                                | `EXPLAIN (ANALYZE)` sur la base réelle, SELECT seul.                                        |
-| Vues non `security_invoker`  | Choix voulu : la définition des vues porte toute la politique de lecture. Je crois que le contrôle de sécurité de Supabase signale ce genre de vue, à confirmer dans le dashboard après application. Les droits restent révoqués pour `anon` et `authenticated`. | À vérifier après application.                                                               |
+| Contrôle                     | Constat                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Preuve                                                                                                                                         |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Vues en base                 | Appliquées le 2026-10-19 à 14:51Z, avec le fichier fusionné (empreinte identique à celle de `origin/main`), en une transaction. Aucune table touchée : 126 tables, 13 séquences, 517 index et droits des autres relations identiques avant et après.                                                                                                                                                                                                                                                                                                                                                                     | Catalogue, empreinte des droits avant et après.                                                                                                |
+| Runs publiables              | Trois runs `COMPLETED` (15e, 16e, 17e). Leurs snapshots épinglés sont `VERIFIED` et leur dernière décision est `RELEASED`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | `hg-AN_AMO30-1` (partagé par les trois), `hg-AN_SCRUTINS_L15-1`, `-L16-1`, `-L17-1`.                                                           |
+| Rôle applicatif              | `postgres`, `BYPASSRLS`, propriétaire des tables. **La RLS ne retient pas le code de l'application** : la frontière de lecture est le test d'architecture, pas la base. Risque résiduel accepté. Un rôle applicatif dédié serait un chantier d'architecture.                                                                                                                                                                                                                                                                                                                                                             | `pg_roles`, `current_user`.                                                                                                                    |
+| `anon`, `authenticated`      | Aucun droit sur les tables brutes, RLS active sans politique. Les vues sont révoquées pour eux, et le script échoue de lui-même s'il reste un droit.                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | ACL des tables brutes ; test d'intégration (refus `42501`).                                                                                    |
+| `hg_*`, `readonly`           | `hg_*` : `NOLOGIN`, aucun droit sur les vues. **`readonly` : écart trouvé après l'application.** Les droits par défaut de Supabase lui donnaient `SELECT` sur les trois vues, et comme une vue ordinaire s'exécute avec les droits de son propriétaire, il les lisait malgré la RLS. `poligraph_bot` en héritait. Révoqué le 2026-10-19 à 15:02Z, dans une transaction limitée à ce `REVOKE` : rôles, appartenances et droits des autres relations identiques avant et après. Le script porte désormais `readonly` dans son `REVOKE`, et s'arrête si un autre rôle que le propriétaire et `service_role` garde un droit. | Lecture des droits effectifs avant et après ; test d'intégration avec les droits par défaut reproduits, qui échoue contre la première version. |
+| `service_role`               | Garde `ALL` par les droits par défaut de Supabase et `BYPASSRLS`, comme sur chaque table du schéma. Hors périmètre du script, accessible seulement avec la clé de service.                                                                                                                                                                                                                                                                                                                                                                                                                                               | ACL des tables brutes.                                                                                                                         |
+| `poligraph_bot`              | Rôle de connexion avec `BYPASSRLS`, qui hérite de `readonly`. Par le droit par défaut de `readonly` sur les tables, il lit l'ensemble du schéma public, tables brutes du lot 5 comprises. Antérieur au lot 6, inchangé ici (hors du périmètre autorisé), à traiter avec #1154.                                                                                                                                                                                                                                                                                                                                           | `has_table_privilege` effectif, appartenances.                                                                                                 |
+| Lecture sur données réelles  | 17 399 scrutins (4 417 en 15e, 4 105 en 16e, 8 877 en 17e) et 161 592 lignes de groupe. Les 12 982 scrutins du site (16e et 17e) ont tous un état.                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Script de lecture seule, recette ci-dessous.                                                                                                   |
+| **Défaut trouvé et corrigé** | Pour les 35 scrutins discordants, la vue d'état listait `COUNT_MISMATCH` parmi les groupes écartés. Le lecteur refuse cette raison : la page aurait affiché « momentanément indisponible » et un avertissement Sentry, au lieu de l'explication prévue.                                                                                                                                                                                                                                                                                                                                                                  | 35 lignes refusées avant, 0 après, positions inchangées. Test d'intégration et garde en CI.                                                    |
+| Hypothèse écartée            | Un run `COMPLETED` sans `finishedAt` passerait devant les autres dans `ORDER BY finishedAt DESC`. Impossible : la contrainte `HistoricalResolutionRun_lifecycle_consistent` l'interdit (essayé sur la base jetable).                                                                                                                                                                                                                                                                                                                                                                                                     | Test écrit puis retiré, la base refuse l'insertion.                                                                                            |
+| Performance                  | Plan par index. État d'un scrutin : 2,1 ms (3 ms de planification). Lignes de groupes : 0,43 ms. Budget : 500 ms.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | `EXPLAIN (ANALYZE)` sur la base réelle, SELECT seul.                                                                                           |
+| Vues non `security_invoker`  | Choix voulu : la définition des vues porte toute la politique de lecture. Je crois que le contrôle de sécurité de Supabase signale ce genre de vue, à confirmer dans le dashboard après application. Les droits restent révoqués pour `anon` et `authenticated`.                                                                                                                                                                                                                                                                                                                                                         | À vérifier après application.                                                                                                                  |
 
 **Ce que le script garantit, et ce qu'il ne garantit pas.** Il garantit qu'aucun rôle API
-(`anon`, `authenticated`) ni aucun rôle `hg_*` ne lit les tables brutes ni les vues, et qu'une
-révocation de snapshot retire le run de la lecture. Il ne restreint pas le rôle `postgres` de
-l'application : ce qu'elle ne lit pas, elle ne le lit que parce que le code ne le demande pas.
+(`anon`, `authenticated`), aucun rôle `hg_*` et pas `readonly` ne lit les vues, que le script
+s'arrête si un autre rôle que le propriétaire et `service_role` garde un droit, et qu'une
+révocation de snapshot retire le run de la lecture. Il ne ferme pas les tables brutes aux rôles qui
+contournent la RLS (`postgres`, `service_role`, `poligraph_bot`) : cela relève des rôles, voir #1154.
+Ce que l'application ne lit pas, elle ne le lit que parce que le code ne le demande pas.
 
 ### 6.2 Redondance entre décompte officiel et décompte daté
 
@@ -298,8 +307,10 @@ demande et paresseusement : une page est régénérée à sa prochaine visite. *
 
 L'activation se fait en deux gestes séparés, chacun à autoriser :
 
-1. **Appliquer le SQL** (geste du propriétaire), puis relire les droits, les comptes et le plan.
-   Sans effet visible tant que l'interrupteur est éteint : c'est la première vraie vérification.
+1. **Appliquer le SQL** (geste du propriétaire). Fait le 2026-10-19 à 14:51Z, puis `REVOKE` de
+   `readonly` à 15:02Z, droits, comptes et plan relus. Le fichier du dépôt porte la version
+   corrigée : la base lui correspond, sans nouvelle exécution. Sans effet visible tant que
+   l'interrupteur est éteint.
 2. **Passer `HISTORICAL_GROUP_POSITIONS_PUBLIC` à `true`** dans une PR d'une ligne, la fusionner,
    puis déploiement manuel depuis le dashboard Vercel. Rien n'est déployé par une fusion.
 
@@ -330,17 +341,18 @@ R1 n'efface rien : insérer une décision `RELEASED` plus récente remet le run 
 
 Seuls les risques bloquants. Chaque ligne a sa preuve.
 
-| #   | Condition                                                                           | État au 2026-10-19                       | Preuve                                                                           |
-| --- | ----------------------------------------------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------- |
-| 1   | Le SQL est appliqué, droits relus : rien pour `PUBLIC`, `anon`, `authenticated`     | **À faire (autorisation distincte)**     | Auto-contrôle du script, puis relecture des ACL.                                 |
-| 2   | Les trois vues rendent 17 399 états et 161 592 lignes sur la base réelle            | Vérifié sur la logique, pas sur les vues | Rejeu en lecture seule ; à refaire sur les vues après application.               |
-| 3   | Aucun scrutin du site ne tombe en « lecture en échec »                              | Vérifié, après correction                | 35 lignes refusées avant, 0 après ; test d'intégration ; garde en CI.            |
-| 4   | Plan de lecture sous 500 ms                                                         | Vérifié                                  | 2,1 ms et 0,43 ms.                                                               |
-| 5   | Aucune page ne montre deux tableaux de groupes                                      | Vérifié                                  | Test de page ; rendu réel de 30 scrutins.                                        |
-| 6   | Rendu correct sur mobile et ordinateur, en clair et en sombre, sans violation `axe` | Vérifié                                  | 120 chargements, 0 violation `axe` (6.4).                                        |
-| 7   | Retour arrière R1 et R2 répétés avant l'activation                                  | À faire                                  | R1 sur une base jetable est couvert par les tests ; R2 se fait sur le dashboard. |
-| 8   | Plafond de dépense Vercel et alerte en place                                        | À confirmer par le mainteneur            | Dashboard Vercel.                                                                |
-| 9   | Relecture humaine des textes (6.3) et de la méthodologie                            | À faire                                  | Cette PR.                                                                        |
+| #   | Condition                                                                                           | État au 2026-10-19            | Preuve                                                                                                   |
+| --- | --------------------------------------------------------------------------------------------------- | ----------------------------- | -------------------------------------------------------------------------------------------------------- |
+| 1   | Le SQL est appliqué, droits relus : rien pour `PUBLIC`, `anon`, `authenticated`, `readonly`, `hg_*` | Fait le 2026-10-19            | Application à 14:51Z, `REVOKE` de `readonly` à 15:02Z, relecture des droits effectifs et refus par rôle. |
+| 2   | Les trois vues rendent 17 399 états et 161 592 lignes sur la base réelle                            | Vérifié sur les vues          | Égalité exacte avec le rejeu, avant et après la révocation.                                              |
+| 3   | Aucun scrutin du site ne tombe en « lecture en échec »                                              | Vérifié, après correction     | 35 lignes refusées avant, 0 après ; test d'intégration ; garde en CI.                                    |
+| 4   | Plan de lecture sous 500 ms                                                                         | Vérifié                       | 2,1 ms et 0,43 ms.                                                                                       |
+| 5   | Aucune page ne montre deux tableaux de groupes                                                      | Vérifié                       | Test de page ; rendu réel de 30 scrutins.                                                                |
+| 6   | Rendu correct sur mobile et ordinateur, en clair et en sombre, sans violation `axe`                 | Vérifié                       | 120 chargements, 0 violation `axe` (6.4).                                                                |
+| 7   | Retour arrière R1 et R2 répétés avant l'activation                                                  | À faire                       | R1 sur une base jetable est couvert par les tests ; R2 se fait sur le dashboard.                         |
+| 8   | Plafond de dépense Vercel et alerte en place                                                        | À confirmer par le mainteneur | Dashboard Vercel.                                                                                        |
+| 9   | Relecture humaine des textes (6.3) et de la méthodologie                                            | À faire                       | Cette PR.                                                                                                |
+| 10  | Chemins d'accès serveur et rôle applicatif examinés (#1154)                                         | À faire avant l'activation    | Issue #1154.                                                                                             |
 
 NO-GO si : une ligne 1 à 6 est fausse, ou si Sentry montre l'empreinte
 `historical-group-positions-unreadable` après application du SQL.

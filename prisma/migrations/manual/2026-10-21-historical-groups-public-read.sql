@@ -1,8 +1,11 @@
 -- Lot 6: public read layer for the historical group positions (AN, legislatures 15 to 17).
 --
--- NOT APPLIED. A review deliverable: the lot owner decides when and where it runs
--- (prisma db execute --file), never through db:push. It changes no existing table: it adds three
--- views, which hold no data of their own.
+-- Applied on the shared database on 2026-10-19 (prisma db execute --file, never db:push), in its
+-- first version; the REVOKE FROM readonly below was then run by hand in its own transaction, so the
+-- database matches this file without re-running it. It changes no existing table: it adds three
+-- views, which hold no data of their own. Prerequisite: the roles anon, authenticated and readonly
+-- exist (readonly is a project role, not a Supabase built-in: create it NOLOGIN on a database that
+-- lacks it, or the REVOKE fails by name).
 --
 -- Read contract
 --  - The raw tables stay closed to anon and authenticated (RLS, no policy). These views are the only
@@ -10,9 +13,13 @@
 --    not security_invoker), so RLS does not apply to them: the definition of the views carries the
 --    whole read policy.
 --  - Only the owner (the application role) reads them. No GRANT is given: not PUBLIC, not anon, not
---    authenticated, not the hg_* roles. Supabase grants new objects of the public schema to anon and
---    authenticated by default, so the REVOKE below is essential, and the last section makes the
---    script fail if any privilege is left.
+--    authenticated, not readonly, not the hg_* roles. The default privileges of the public schema
+--    grant every new object to anon, authenticated, service_role and, on this project, readonly
+--    (the Wikibot login role poligraph_bot inherits it and bypasses RLS, which these views do too: an
+--    ordinary view runs with the rights of its owner). So the REVOKE below is essential, and the
+--    last section makes the script fail if ANY role other than the owner and service_role keeps a
+--    privilege, whether or not the REVOKE names it. service_role keeps its default grant: it bypasses
+--    RLS on every table anyway and is reachable only with the service key.
 --  - A run is readable only when it is COMPLETED and EVERY snapshot it pins is VERIFIED, carries the
 --    pinned state hash, and has RELEASED as its latest decision (so neither QUARANTINED nor
 --    REVOKED). A revocation takes the run out of the read path with no other gesture.
@@ -180,14 +187,15 @@ GROUP BY b."legislature", b."runId", b."scrutinExternalId", cc."countCoherence",
 
 -- 4. Rights: nobody but the owner.
 REVOKE ALL ON TABLE "HistoricalPublishedRun", "HistoricalGroupPositionPublic", "HistoricalScrutinPublicStatus"
-  FROM PUBLIC, anon, authenticated;
+  FROM PUBLIC, anon, authenticated, readonly;
 
--- 5. Self-check: the script fails if a view is readable by PUBLIC, anon or authenticated, or if row
---    level security has been switched off on a raw table. No DO block here (the SEC-06 guard allows
---    none outside its own migration): a failed cast of the message to int aborts the transaction and
---    carries the message in the error text.
+-- 5. Self-check: the script fails if a view keeps a privilege for any role other than its owner and
+--    service_role (PUBLIC, anon, authenticated, readonly, a role created later with default
+--    privileges), or if row level security has been switched off on a raw table. No DO block here
+--    (the SEC-06 guard allows none outside its own migration): a failed cast of the message to int
+--    aborts the transaction and carries the message in the error text.
 SELECT CASE
-  WHEN n > 0 THEN ('public read views: ' || n || ' privilege(s) left to PUBLIC, anon or authenticated')::int
+  WHEN n > 0 THEN ('public read views: ' || n || ' privilege(s) left to a role other than the owner and service_role')::int
   ELSE 0
 END AS "privileges_ok"
 FROM (
@@ -198,7 +206,8 @@ FROM (
   LEFT JOIN pg_roles r ON r.oid = x.grantee
   WHERE ns.nspname = 'public'
     AND c.relname IN ('HistoricalPublishedRun', 'HistoricalGroupPositionPublic', 'HistoricalScrutinPublicStatus')
-    AND (x.grantee = 0 OR r.rolname IN ('anon', 'authenticated'))
+    AND x.grantee <> c.relowner
+    AND (x.grantee = 0 OR r.rolname <> 'service_role')
 ) leak;
 
 SELECT CASE

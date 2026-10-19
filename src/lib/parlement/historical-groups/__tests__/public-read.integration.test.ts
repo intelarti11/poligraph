@@ -122,15 +122,30 @@ describeDb("lot 6 public read views on a disposable PostgreSQL", () => {
       IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'hg_importer') THEN CREATE ROLE hg_importer LOGIN; END IF;
       IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'hg_runner') THEN CREATE ROLE hg_runner LOGIN; END IF;
       IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'hg_reader') THEN CREATE ROLE hg_reader LOGIN; END IF;
+      IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'service_role') THEN CREATE ROLE service_role; END IF;
+      IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'readonly') THEN CREATE ROLE readonly; END IF;
+      IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'poligraph_bot') THEN CREATE ROLE poligraph_bot LOGIN; END IF;
     END $$`);
+    // The shared database, as found on 2026-10-19: service_role bypasses RLS, readonly has no login,
+    // and poligraph_bot (the Wikibot login role) bypasses RLS and inherits readonly.
+    await q("ALTER ROLE service_role BYPASSRLS");
+    await q("ALTER ROLE readonly NOLOGIN NOBYPASSRLS");
+    await q("ALTER ROLE poligraph_bot LOGIN BYPASSRLS INHERIT");
+    await q("GRANT readonly TO poligraph_bot");
     await q("ALTER ROLE hg_importer NOBYPASSRLS");
     await q("CREATE EXTENSION IF NOT EXISTS btree_gist");
     // What Supabase does on the public schema: anon and authenticated may use it, and every new
-    // object is granted to them by default. The REVOKE statements of the scripts are what closes
-    // the lot 5 tables and the views; without this, the test would pass on a schema that is closed
-    // by accident (no USAGE at all) instead of by the REVOKE.
-    await q("GRANT USAGE ON SCHEMA public TO anon, authenticated");
-    await q("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated");
+    // object is granted to them, and to service_role, by default. The project's own readonly role
+    // gets SELECT the same way. The REVOKE statements of the scripts are what closes the lot 5
+    // tables and the views; without this, the test would pass on a schema that is closed by accident
+    // (no USAGE at all, or a role the fixture forgot) instead of by the REVOKE. The first version of
+    // the views passed here while readonly, and through it poligraph_bot, could read them in
+    // production, because the fixture knew only anon and authenticated.
+    await q("GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role, readonly");
+    await q(
+      "ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role"
+    );
+    await q("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO readonly");
     // Managed by Prisma on the real database, not by the lot 5 scripts: the minimal shape the views read.
     await q(`CREATE TABLE "AnOrgan" (
       "organeRef" TEXT PRIMARY KEY, "legislature" INTEGER NOT NULL, "label" TEXT NOT NULL,
@@ -495,33 +510,77 @@ describeDb("lot 6 public read views on a disposable PostgreSQL", () => {
       "OfficialSourceSnapshot",
     ];
 
-    it.each(["anon", "authenticated", "hg_reader", "hg_runner", "hg_importer"])(
-      "%s ne lit ni les vues ni les tables brutes",
-      async (role) => {
-        await as(role, async (c) => {
-          for (const view of VIEWS) {
-            const e = await stateOf(c.query(`SELECT * FROM "${view}"`));
-            expect(e?.code, `${role} on ${view}`).toBe(DENIED);
+    it.each([
+      "anon",
+      "authenticated",
+      "hg_reader",
+      "hg_runner",
+      "hg_importer",
+      "readonly",
+      "poligraph_bot",
+    ])("%s ne lit pas les vues", async (role) => {
+      await as(role, async (c) => {
+        for (const view of VIEWS) {
+          const e = await stateOf(c.query(`SELECT * FROM "${view}"`));
+          expect(e?.code, `${role} on ${view}`).toBe(DENIED);
+        }
+        if (role === "anon" || role === "authenticated") {
+          for (const table of RAW) {
+            const e = await stateOf(c.query(`SELECT * FROM "${table}"`));
+            expect(e?.code, `${role} on ${table}`).toBe(DENIED);
           }
-          if (role === "anon" || role === "authenticated") {
-            for (const table of RAW) {
-              const e = await stateOf(c.query(`SELECT * FROM "${table}"`));
-              expect(e?.code, `${role} on ${table}`).toBe(DENIED);
-            }
-          }
-        });
-      }
-    );
+        }
+      });
+    });
 
-    it("aucun droit n'est accordé par le script : PUBLIC, anon, authenticated et hg_* n'ont rien sur les vues", async () => {
+    it("aucun droit n'est accordé par le script : seuls le propriétaire et service_role en ont sur les vues", async () => {
       const r = await q(
-        `SELECT count(*)::int AS n
+        `SELECT DISTINCT CASE x.grantee WHEN 0 THEN 'PUBLIC' ELSE pg_get_userbyid(x.grantee) END AS grantee
          FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
          CROSS JOIN LATERAL aclexplode(COALESCE(c.relacl, acldefault('r', c.relowner))) x
-         WHERE n.nspname = 'public' AND c.relname = ANY($1) AND x.grantee <> c.relowner`,
+         WHERE n.nspname = 'public' AND c.relname = ANY($1)
+         ORDER BY 1`,
         [VIEWS]
       );
-      expect(r.rows[0].n).toBe(0);
+      // service_role keeps the Supabase default grant (it bypasses RLS on every table anyway). The
+      // owner is the test user here and `postgres` on the shared database. Nobody else, readonly
+      // included: that one came from the default privileges and the first version left it in place.
+      const owner = (await q("SELECT current_user AS u")).rows[0].u;
+      expect(r.rows.map((x) => x.grantee).sort()).toEqual([owner, "service_role"].sort());
+    });
+
+    it("le schéma de test reproduit les droits par défaut de Supabase et leur héritage", async () => {
+      // A control that can fail: without the fixture defaults, every case below would be closed
+      // by accident. A fresh table is granted to readonly and service_role, and poligraph_bot
+      // reaches it through readonly.
+      await q(`CREATE TABLE "DefaultsProbe" (id int)`);
+      const priv = async (role: string) =>
+        (
+          await q(`SELECT has_table_privilege($1, 'public."DefaultsProbe"', 'SELECT') AS ok`, [
+            role,
+          ])
+        ).rows[0].ok;
+      expect(await priv("readonly")).toBe(true);
+      expect(await priv("service_role")).toBe(true);
+      expect(await priv("poligraph_bot")).toBe(true);
+      const bot = (
+        await q(`SELECT rolbypassrls, rolcanlogin FROM pg_roles WHERE rolname = 'poligraph_bot'`)
+      ).rows[0];
+      expect(bot).toEqual({ rolbypassrls: true, rolcanlogin: true });
+      expect(
+        (await q(`SELECT pg_has_role('poligraph_bot', 'readonly', 'USAGE') AS inherits`)).rows[0]
+          .inherits
+      ).toBe(true);
+    });
+
+    it("readonly ne voit aucune ligne des tables brutes : la RLS la retient, les vues ne sont pas son chemin", async () => {
+      const raw = (await q(`SELECT count(*)::int AS n FROM "ScrutinOrganPosition"`)).rows[0].n;
+      expect(raw).toBeGreaterThan(0);
+      await as("readonly", async (c) => {
+        expect(
+          (await c.query(`SELECT count(*)::int AS n FROM "ScrutinOrganPosition"`)).rows[0].n
+        ).toBe(0);
+      });
     });
 
     it("les colonnes exposées sont exactement la liste attendue", async () => {
@@ -563,6 +622,40 @@ describeDb("lot 6 public read views on a disposable PostgreSQL", () => {
       expect(
         (await q(`SELECT to_regclass('"HistoricalGroupPositionPublic"') AS t`)).rows[0].t
       ).toBeNull();
+    });
+
+    it("s'arrête de lui-même si readonly garde un droit sur une vue", async () => {
+      // The exact regression of the first version: the REVOKE named PUBLIC, anon and authenticated
+      // only, so readonly (and poligraph_bot through it) kept SELECT on the three views.
+      const withoutReadonly = SQL_6.replace(
+        "FROM PUBLIC, anon, authenticated, readonly;",
+        "FROM PUBLIC, anon, authenticated;"
+      );
+      expect(withoutReadonly).not.toBe(SQL_6);
+      await q(SQL_6_ROLLBACK);
+      const e = await stateOf(q(withoutReadonly));
+      expect(e?.message).toContain(
+        "privilege(s) left to a role other than the owner and service_role"
+      );
+      expect(
+        (await q(`SELECT to_regclass('"HistoricalGroupPositionPublic"') AS t`)).rows[0].t
+      ).toBeNull();
+      await q(SQL_6);
+    });
+
+    it("s'arrête aussi pour un rôle que le REVOKE ne nomme pas, venu des droits par défaut", async () => {
+      await q(
+        `DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'late_reader') THEN CREATE ROLE late_reader; END IF; END $$`
+      );
+      await q("GRANT USAGE ON SCHEMA public TO late_reader");
+      await q(SQL_6_ROLLBACK);
+      await q("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO late_reader");
+      const e = await stateOf(q(SQL_6));
+      expect(e?.message).toContain(
+        "privilege(s) left to a role other than the owner and service_role"
+      );
+      await q("ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE SELECT ON TABLES FROM late_reader");
+      await q(SQL_6);
     });
 
     it("ne touche à aucune table existante et se retire proprement", async () => {
