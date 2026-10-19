@@ -19,6 +19,7 @@ import { computeJudicialCounts } from "@/lib/politicians/judicial-counts";
 import { isAccusedInvolvement } from "@/config/certainty";
 import { buildPoliticianSignals } from "@/lib/politicians/signals";
 import { buildSourceLinks } from "@/lib/politicians/external-sources";
+import { partitionMandatesForDisplay } from "@/lib/mandates/overlaps";
 import type {
   PoliticianDossier,
   PoliticianIdentity,
@@ -69,6 +70,7 @@ export function PoliticianProfileBody({
   governmentsEnabled = false,
 }: PoliticianProfileBodyProps) {
   const { affairs, factCheckMentions, dossierAuthors } = dossier;
+  const displayableMandates = partitionMandatesForDisplay(politician.mandates).displayable;
 
   const voteData = voteStats?.voteData ?? null;
   const parliamentaryCard = voteStats?.parliamentaryCard ?? null;
@@ -92,7 +94,7 @@ export function PoliticianProfileBody({
 
   const signals = buildPoliticianSignals({
     slug: politician.slug,
-    mandatesCount: politician.mandates.length,
+    mandatesCount: displayableMandates.length,
     votesTotal: voteData ? voteData.stats.total : null,
     hasVotesTab: Boolean((voteData && voteData.stats.total > 0) || parliamentaryCard),
     hasFactchecksTab: factCheckMentions.length > 0,
@@ -232,7 +234,7 @@ export function PoliticianProfileBody({
                   birthDate={politician.birthDate}
                   deathDate={politician.deathDate}
                 />
-                {politician.mandates.length > 0 && (
+                {displayableMandates.length > 0 && (
                   <Card>
                     <CardHeader>
                       <h2 className="leading-none font-semibold">Mandats</h2>
@@ -243,7 +245,7 @@ export function PoliticianProfileBody({
                     </CardHeader>
                     <CardContent>
                       <MandateTimeline
-                        mandates={politician.mandates}
+                        mandates={displayableMandates}
                         civility={politician.civility}
                         governmentsEnabled={governmentsEnabled}
                       />
