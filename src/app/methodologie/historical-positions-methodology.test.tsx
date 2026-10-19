@@ -30,7 +30,7 @@ describe("méthodologie des votes de groupe à la date du scrutin", () => {
     const text = container.textContent ?? "";
 
     expect(text).toMatch(/n'en calcule\s*aucune/);
-    expect(text).toMatch(/pour 12, contre 3/);
+    expect(text).toMatch(/Pour 12, contre 3/);
     expect(text).toMatch(/groupe auquel chaque député appartenait le jour du vote/);
   });
 
@@ -40,6 +40,7 @@ describe("méthodologie des votes de groupe à la date du scrutin", () => {
 
     expect(text).not.toMatch(/sans doute possible|ne peuvent pas être juste|figées/);
     expect(text).toMatch(/reprend le classement de l'Assemblée sans\s*l'interpréter/);
+    expect(text).toMatch(/membres du Gouvernement et la\s*personne qui préside la séance/);
     expect(text).toMatch(/pas la date de publication/);
   });
 
@@ -51,7 +52,7 @@ describe("méthodologie des votes de groupe à la date du scrutin", () => {
       "Les totaux ne peuvent pas être comparés",
       "Le groupe d'un député est incertain",
       "Un groupe sans vote pour, contre ou abstention",
-      "Les non-inscrits",
+      "Les députés non inscrits",
       "Un groupe renommé",
       "Pas de données pour ce scrutin",
     ]) {
@@ -65,6 +66,23 @@ describe("méthodologie des votes de groupe à la date du scrutin", () => {
 
     expect(text).not.toMatch(FORBIDDEN_DASHES);
     expect(text).not.toMatch(/snapshot|publishable|run |hash|organRef|quarantaine|pin /i);
+  });
+
+  it("dit que le tableau recalculé est le repli du décompte publié, et nomme les bonnes législatures", () => {
+    const { container } = render(<HistoricalPositionsMethodology />);
+    const text = container.textContent ?? "";
+
+    expect(text).toMatch(/l'Assemblée publie le décompte par groupe avec le\s*résultat/);
+    expect(text).toMatch(/Quand ce décompte manque ou ne\s*s'additionne pas, PoliGraph le calcule/);
+    // The site holds no scrutin of the 15th legislature: the page must not promise one.
+    expect(text).toMatch(/16e et 17e législatures/);
+    expect(text).not.toMatch(/15e/);
+  });
+
+  it("n'attribue aucune cause à l'écart entre les totaux", () => {
+    const { container } = render(<HistoricalPositionsMethodology />);
+    expect(container.textContent).not.toMatch(/périmètre|peut venir/);
+    expect(container.textContent).toMatch(/n'a pas pu expliquer l'écart/);
   });
 
   it("garde l'ancre que le bloc de scrutin vise", () => {

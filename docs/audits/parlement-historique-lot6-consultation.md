@@ -1,8 +1,9 @@
 # Lot 6 : consulter les positions historiques des groupes
 
 Premier parcours public pour lire ce que les groupes de l'Assemblée nationale ont voté à la date
-d'un scrutin, à partir des runs du lot 5D. Cette PR livre l'interface, la couche de lecture et les
-tests. **Elle n'active rien** : l'interrupteur est éteint, le SQL n'est pas appliqué.
+d'un scrutin, à partir des runs du lot 5D. Le lot livre l'interface, la couche de lecture et les
+tests. **Il n'active rien** : l'interrupteur est éteint, le SQL n'est pas appliqué. La section 6
+est le relevé de préparation de l'activation (audit, recette, cache, GO / NO-GO).
 
 ## 1. Audit de l'existant
 
@@ -85,6 +86,11 @@ disparaît pour ce scrutin : deux tableaux de groupes qui disent des choses diff
 induiraient en erreur. Quand l'historique est indisponible, l'ancien bloc reste, avec sa mise en
 garde.
 
+**Mise à jour (section 6.2).** Le décompte daté est le repli du décompte officiel : quand le tableau
+officiel est affiché, il n'est ni lu ni montré, et l'ancien bloc disparaît aussi. Le tableau de
+cette section n'apparaît donc que sur 862 pages de 16e et 17e législatures, plus 12 pages où il explique
+pourquoi aucun groupe n'est présentable.
+
 ## 4. Contrat de lecture sécurisé
 
 Fichier : `prisma/migrations/manual/2026-10-21-historical-groups-public-read.sql` (retour arrière
@@ -123,35 +129,221 @@ matérialisait toutes les positions (102 ms) : réécrite avant livraison.
 - Couche de données : vues nommées, paramètres, bornes, rejet des lignes et des liens malformés.
 - Page : interrupteur éteint (comportement d'avant) et allumé, chaque état, Sénat exclu.
 - Architecture : frontière de lecture, aucun droit accordé, interrupteur éteint.
-- **Intégration PostgreSQL** (conteneur jetable, non lancée par défaut) : 19 cas, sous les droits par
+- **Intégration PostgreSQL** (conteneur jetable, non lancée par défaut) : 20 cas, sous les droits par
   défaut de Supabase, dont : run non libéré, révocation, run plus récent, rôles `anon`,
   `authenticated`, `hg_*` refusés, liste exacte des colonnes, aucune empreinte dans les valeurs. La
   révocation a été retirée du script pour vérifier que la garde interne échoue bien (48 droits).
 - Rendu : stories pour chaque état, vérifiées sans violation `axe`, sans débordement horizontal à
   390 px, en clair et en sombre.
 
-## 6. À valider avant une éventuelle activation
+## 6. Préparation de l'activation (relevé du 2026-10-19)
 
-1. **Appliquer le SQL** sur la base partagée (geste du propriétaire, par `prisma db execute`, jamais
-   `db:push`), puis relire les droits des trois vues.
-2. **Méthodologie** : la section « Votes des groupes à la date du scrutin » de `/methodologie` est
-   écrite (`HistoricalPositionsMethodology`). Elle ne s'affiche que si l'interrupteur est allumé,
-   pour que la page ne décrive jamais un bloc absent du site. À relire par un humain avant
-   activation.
-3. **Non-votants** : aucune définition officielle trouvée en recherche rapide (à confirmer dans la
-   documentation de l'Assemblée). Le bloc et la méthodologie disent seulement que PoliGraph reprend
-   le classement de l'Assemblée sans l'interpréter.
-4. **Relecture humaine d'un échantillon** : une trentaine de scrutins, dont des discordants, des
-   groupes renommés de la 16e (sigle SOC) et des scrutins aux votes exclus.
-5. **Redondance avec le décompte officiel par groupe** : pour les scrutins recoupés, les deux
-   tableaux portent les mêmes chiffres. À arbitrer : garder les deux, ou replier l'un.
-6. **Fraîcheur** : la lecture est mise en cache sous le tag `votes`. Un nouveau run n'invalide rien :
-   pas de revalidation en masse (plafond de dépense). Décider de la procédure.
-7. **Continuité des groupes renommés** (#1146) : reportée. Tant qu'elle ne l'est pas, la mise en
-   garde reste affichée, et la vue détecte les doublons de sigle par structure, pas par décision.
-8. **15e législature** : aucun `Scrutin` AN pour elle. Les 4 417 scrutins sont lus par personne.
-9. **Mesure sur la base réelle** : relancer les deux requêtes de lecture avec `EXPLAIN` après
-   application du SQL.
+Tout ce qui suit a été mesuré sur la base partagée **en lecture seule** (SELECT, transaction
+`READ ONLY`), sans créer d'objet, sans toucher aux snapshots, aux runs ni aux statistiques. Les
+vues n'existent pas encore en base : la logique du fichier SQL a été rejouée en la composant en
+requête (le texte exact du fichier, avec les trois `SELECT` en sous-requêtes).
+
+### 6.1 Audit du SQL fusionné et du contrat de permissions
+
+| Contrôle                     | Constat                                                                                                                                                                                                                                                          | Preuve                                                                                      |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Vues en base                 | Absentes. Seules les tables brutes existent.                                                                                                                                                                                                                     | Catalogue `pg_class` : aucune relation `Historical*` de type vue.                           |
+| Runs publiables              | Trois runs `COMPLETED` (15e, 16e, 17e). Leurs snapshots épinglés sont `VERIFIED` et leur dernière décision est `RELEASED`.                                                                                                                                       | `hg-AN_AMO30-1` (partagé par les trois), `hg-AN_SCRUTINS_L15-1`, `-L16-1`, `-L17-1`.        |
+| Rôle applicatif              | `postgres`, `BYPASSRLS`, propriétaire des tables. **La RLS ne retient pas le code de l'application** : la frontière de lecture est le test d'architecture, pas la base. Risque résiduel accepté. Un rôle applicatif dédié serait un chantier d'architecture.     | `pg_roles`, `current_user`.                                                                 |
+| `anon`, `authenticated`      | Aucun droit sur les tables brutes, RLS active sans politique. Les vues sont révoquées pour eux, et le script échoue de lui-même s'il reste un droit.                                                                                                             | ACL des tables brutes ; test d'intégration (refus `42501`).                                 |
+| `hg_*`, `readonly`           | `NOLOGIN`. `hg_*` n'a aucun droit sur les vues. `readonly` a `SELECT` sur les tables brutes, mais la RLS sans politique ne lui laisse aucune ligne.                                                                                                              | `pg_roles`, ACL, `pg_policies`.                                                             |
+| `service_role`               | Garde `ALL` par les droits par défaut de Supabase et `BYPASSRLS`, comme sur chaque table du schéma. Hors périmètre du script, accessible seulement avec la clé de service.                                                                                       | ACL des tables brutes.                                                                      |
+| Lecture sur données réelles  | 17 399 scrutins (4 417 en 15e, 4 105 en 16e, 8 877 en 17e) et 161 592 lignes de groupe. Les 12 982 scrutins du site (16e et 17e) ont tous un état.                                                                                                               | Script de lecture seule, recette ci-dessous.                                                |
+| **Défaut trouvé et corrigé** | Pour les 35 scrutins discordants, la vue d'état listait `COUNT_MISMATCH` parmi les groupes écartés. Le lecteur refuse cette raison : la page aurait affiché « momentanément indisponible » et un avertissement Sentry, au lieu de l'explication prévue.          | 35 lignes refusées avant, 0 après, positions inchangées. Test d'intégration et garde en CI. |
+| Hypothèse écartée            | Un run `COMPLETED` sans `finishedAt` passerait devant les autres dans `ORDER BY finishedAt DESC`. Impossible : la contrainte `HistoricalResolutionRun_lifecycle_consistent` l'interdit (essayé sur la base jetable).                                             | Test écrit puis retiré, la base refuse l'insertion.                                         |
+| Performance                  | Plan par index. État d'un scrutin : 2,1 ms (3 ms de planification). Lignes de groupes : 0,43 ms. Budget : 500 ms.                                                                                                                                                | `EXPLAIN (ANALYZE)` sur la base réelle, SELECT seul.                                        |
+| Vues non `security_invoker`  | Choix voulu : la définition des vues porte toute la politique de lecture. Je crois que le contrôle de sécurité de Supabase signale ce genre de vue, à confirmer dans le dashboard après application. Les droits restent révoqués pour `anon` et `authenticated`. | À vérifier après application.                                                               |
+
+**Ce que le script garantit, et ce qu'il ne garantit pas.** Il garantit qu'aucun rôle API
+(`anon`, `authenticated`) ni aucun rôle `hg_*` ne lit les tables brutes ni les vues, et qu'une
+révocation de snapshot retire le run de la lecture. Il ne restreint pas le rôle `postgres` de
+l'application : ce qu'elle ne lit pas, elle ne le lit que parce que le code ne le demande pas.
+
+### 6.2 Redondance entre décompte officiel et décompte daté
+
+Mesure sur les 12 982 scrutins du site, avec les vraies fonctions de décision de la page :
+
+| Décompte officiel (publié par l'Assemblée) | Décompte daté (calculé par PoliGraph) | Pages  |
+| ------------------------------------------ | ------------------------------------- | ------ |
+| affiché                                    | positions (complet ou partiel)        | 12 103 |
+| affiché                                    | écarté, décomptes discordants         | 5      |
+| non importé ou non fiable                  | positions (complet ou partiel)        | 862    |
+| non fiable                                 | aucun groupe présentable              | 12     |
+
+Sur les groupes présents des deux côtés, **aucune différence de chiffres sur 125 775 lignes**. Le
+tableau daté est donc, là où le décompte officiel existe, une copie de ce dernier moins la ligne
+des non-inscrits et les groupes à zéro. Le document du lot en faisait l'hypothèse (ancien point 5) : la mesure la confirme.
+
+**Règle retenue.** Le décompte daté est le repli du décompte officiel. Quand le tableau officiel est
+affiché, le décompte daté n'est ni lu ni affiché, et l'ancien bloc « positions calculées » (groupe
+actuel) disparaît aussi, comme prévu par le lot. Le tableau daté ne paraît donc plus que sur 874
+pages (6,7 %), celles où il apporte quelque chose. Deux effets de bord utiles : les pages qui
+affichent le tableau officiel ne dépendent plus des nouvelles vues (si elles cassaient, 93 % des
+pages ne bougeraient pas), et le bruit des états « pas encore disponible » disparaît là où le
+décompte officiel suffit.
+
+**Avis « sigle partagé » resserré.** Il s'affichait sur 10 705 pages sur 12 982, sans désigner
+aucune ligne visible (jamais deux lignes de même sigle dans un même scrutin). Il ne s'affiche plus
+que lorsque deux lignes, ou une ligne et un groupe écarté, partagent un sigle sur la page : cas
+décrit par le lot, et qui ne se présente dans aucun scrutin actuel.
+
+### 6.3 Textes relus
+
+- Titre du bloc : « Votes par groupe le … ». L'ancien « Vote de chaque groupe » laissait entendre
+  que le groupe vote en bloc, ce que la méthodologie nie.
+- Introduction : dit que le chiffre est **calculé par PoliGraph**, puis l'aide explique d'où vient
+  le groupe de chaque député. Les deux disaient la même chose l'une sous l'autre.
+- Non-votants : l'Assemblée range dans cette catégorie, sur ses pages de scrutin, des membres du
+  Gouvernement (mention « Membre du gouvernement ») et la personne qui préside la séance (mention
+  « Présidente de séance » ou « Présidente de l'Assemblée nationale »). Vérifié sur la page d'un
+  scrutin de la 17e législature. Le texte le dit, sans prétendre en donner la définition complète,
+  que je n'ai pas trouvée dans un texte de l'Assemblée.
+- « Députés non inscrits » : terme de l'Assemblée, repris tel quel.
+- Noms des jeux de données : « Scrutins » (intitulé relevé sur le portail de données ouvertes) et
+  « acteurs, mandats et organes » (fichier AMO). L'ancien « votes nominatifs » n'est pas un
+  intitulé de l'Assemblée.
+- Date d'arrêt des groupes : sous le tableau, « Groupes et mandats arrêtés au … », car le fichier des
+  groupes et celui des scrutins n'ont pas la même date. Rien n'est affiché si le fichier n'en porte pas.
+- Méthodologie : la 15e législature n'est plus citée (aucun scrutin du site). La cause d'un écart
+  de totaux n'est plus affirmée (« périmètre différent » n'était étayé par rien). Le rôle de repli du
+  tableau est dit en première phrase. Un accord grammatical corrigé (« pour ces députés »).
+
+### 6.4 Recette : 30 scrutins sur la base réelle
+
+Choisis pour couvrir chaque état réel des deux blocs et les deux législatures, dans l'ordre : résultats
+cohérents, scrutins discordants, conflits, non-inscrits, groupes écartés, données absentes, bornes
+de période. Lien de lecture : `/parlement/votes/<identifiant>` (la page accepte l'identifiant externe
+et redirige vers l'adresse canonique).
+
+| Cas                                                 | Identifiant      | Date             | Ce que la page montre (vérifié au rendu)                                                                                                                                           |
+| --------------------------------------------------- | ---------------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A1 officiel affiché, 16e                            | `VTANR5L16V923`  | 9 février 2023   | Tableau officiel seul. Ni bloc daté, ni « positions calculées », ni mention « non affichées ».                                                                                     |
+| A1 officiel affiché, 16e                            | `VTANR5L16V2661` | 5 octobre 2023   | Tableau officiel seul. Ni bloc daté, ni « positions calculées », ni mention « non affichées ».                                                                                     |
+| A2 officiel affiché, 17e                            | `VTANR5L17V2116` | 27 mai 2025      | Tableau officiel seul. Ni bloc daté, ni « positions calculées », ni mention « non affichées ».                                                                                     |
+| A2 officiel affiché, 17e                            | `VTANR5L17V6543` | 12 mai 2026      | Tableau officiel seul. Ni bloc daté, ni « positions calculées », ni mention « non affichées ».                                                                                     |
+| A3 vote clé, officiel affiché                       | `VTANR5L17V5397` | 12 février 2026  | Tableau officiel seul. Ni bloc daté, ni « positions calculées », ni mention « non affichées ».                                                                                     |
+| A3 vote clé, officiel affiché                       | `VTANR5L17V7404` | 16 juin 2026     | Tableau officiel seul. Ni bloc daté, ni « positions calculées », ni mention « non affichées ».                                                                                     |
+| B officiel affiché, daté partiel (masqué)           | `VTANR5L16V2284` | 13 juillet 2023  | Tableau officiel seul. Ni bloc daté, ni « positions calculées », ni mention « non affichées ».                                                                                     |
+| B officiel affiché, daté partiel (masqué)           | `VTANR5L17V4126` | 21 novembre 2025 | Tableau officiel seul. Ni bloc daté, ni « positions calculées », ni mention « non affichées ».                                                                                     |
+| C décomptes discordants, officiel affiché           | `VTANR5L16V1927` | 21 juin 2023     | Tableau officiel seul. Ni bloc daté, ni « positions calculées », ni mention « non affichées ».                                                                                     |
+| C décomptes discordants, officiel affiché           | `VTANR5L16V1929` | 21 juin 2023     | Tableau officiel seul. Ni bloc daté, ni « positions calculées », ni mention « non affichées ».                                                                                     |
+| C décomptes discordants, officiel affiché           | `VTANR5L16V1930` | 21 juin 2023     | Tableau officiel seul. Ni bloc daté, ni « positions calculées », ni mention « non affichées ».                                                                                     |
+| C décomptes discordants, officiel affiché           | `VTANR5L16V1948` | 21 juin 2023     | Tableau officiel seul. Ni bloc daté, ni « positions calculées », ni mention « non affichées ».                                                                                     |
+| C décomptes discordants, officiel affiché           | `VTANR5L17V1`    | 8 octobre 2024   | Tableau officiel seul. Ni bloc daté, ni « positions calculées », ni mention « non affichées ».                                                                                     |
+| D officiel non importé, daté complet                | `VTANR5L17V8612` | 8 octobre 2026   | Encadré « Décompte officiel pas encore importé », puis « Votes par groupe » (complet), source et date d'arrêt des groupes.                                                         |
+| D officiel non importé, daté complet                | `VTANR5L17V8743` | 15 octobre 2026  | Encadré « Décompte officiel pas encore importé », puis « Votes par groupe » (complet), source et date d'arrêt des groupes.                                                         |
+| D officiel non importé, daté complet                | `VTANR5L17V8833` | 16 octobre 2026  | Encadré « Décompte officiel pas encore importé », puis « Votes par groupe » (complet), source et date d'arrêt des groupes.                                                         |
+| E officiel non importé, daté partiel                | `VTANR5L17V8619` | 8 octobre 2026   | Encadré « Décompte officiel pas encore importé », puis « Votes par groupe » (partiel, avec « Groupes non présentés »), source et date d'arrêt des groupes.                         |
+| E officiel non importé, daté partiel                | `VTANR5L17V8819` | 16 octobre 2026  | Encadré « Décompte officiel pas encore importé », puis « Votes par groupe » (partiel, avec « Groupes non présentés »), source et date d'arrêt des groupes.                         |
+| F1 officiel non fiable, daté partiel, conflit       | `VTANR5L16V3062` | 29 novembre 2023 | Encadré « Décompte officiel par groupe non affiché » avec sa raison, puis « Votes par groupe » (partiel) : votes écartés pour conflit, groupe non présenté.                        |
+| F1 officiel non fiable, daté partiel, conflit       | `VTANR5L16V3352` | 13 février 2024  | Encadré « Décompte officiel par groupe non affiché » avec sa raison, puis « Votes par groupe » (partiel) : votes écartés pour conflit, avis des non-inscrits, groupe non présenté. |
+| F2 officiel non fiable, daté partiel, groupe écarté | `VTANR5L16V3485` | 13 mars 2024     | Encadré « Décompte officiel par groupe non affiché » avec sa raison, puis « Votes par groupe » (partiel) : avis des non-inscrits, groupe non présenté.                             |
+| F3 non-inscrits                                     | `VTANR5L16V3248` | 24 janvier 2024  | Encadré « Décompte officiel par groupe non affiché » avec sa raison, puis « Votes par groupe » (partiel) : votes écartés pour conflit, avis des non-inscrits, groupe non présenté. |
+| G officiel non fiable, daté complet                 | `VTANR5L16V2922` | 7 novembre 2023  | Encadré « Décompte officiel par groupe non affiché » avec sa raison, puis « Votes par groupe » (complet).                                                                          |
+| G officiel non fiable, daté complet                 | `VTANR5L16V3208` | 13 décembre 2023 | Encadré « Décompte officiel par groupe non affiché » avec sa raison, puis « Votes par groupe » (complet).                                                                          |
+| H aucun groupe présentable                          | `VTANR5L17V492`  | 2 décembre 2024  | Deux encadrés, aucun tableau : décompte officiel non affiché, puis « Aucun groupe présentable » avec le nombre de votes sans groupe.                                               |
+| H aucun groupe présentable                          | `VTANR5L17V496`  | 2 décembre 2024  | Deux encadrés, aucun tableau : décompte officiel non affiché, puis « Aucun groupe présentable » avec le nombre de votes sans groupe.                                               |
+| H aucun groupe présentable                          | `VTANR5L17V500`  | 2 décembre 2024  | Deux encadrés, aucun tableau : décompte officiel non affiché, puis « Aucun groupe présentable » avec le nombre de votes sans groupe.                                               |
+| I groupe inconnu                                    | `VTANR5L17V493`  | 2 décembre 2024  | Deux encadrés, aucun tableau : décompte officiel non affiché, puis « Aucun groupe présentable » avec le nombre de votes sans groupe.                                               |
+| K1 premier scrutin de la 16e                        | `VTANR5L16V1`    | 11 juillet 2022  | Tableau officiel seul. Ni bloc daté, ni « positions calculées », ni mention « non affichées ».                                                                                     |
+| K2 scrutin le plus récent de la 17e                 | `VTANR5L17V8877` | 16 octobre 2026  | Encadré « Décompte officiel pas encore importé », puis « Votes par groupe » (complet), source et date d'arrêt des groupes.                                                         |
+
+**Contrôle de rendu.** Les 30 scrutins ont été chargés dans un vrai navigateur (interrupteur allumé
+en local seulement, lecture par les corps de vues du fichier SQL, serveur de développement sans
+Sentry) en quatre variantes : ordinateur 1400 px et mobile 390 px, en clair et en sombre.
+
+- 120 chargements, 120 réponses 200, le thème demandé est bien celui appliqué.
+- Aucun débordement horizontal de la page ni de la section, aucune cible « Comment lire ces
+  chiffres » sous 44 px.
+- `axe` (règles WCAG 2 A et AA, 2.1 AA, bonnes pratiques) : 0 violation. Contrôlé capable d'échouer :
+  sur la même section, trois violations injectées (nom de bouton, alternative d'image, contraste)
+  sont toutes détectées.
+- Défaut trouvé et corrigé : sur mobile, « Non-votants » se coupait au tiret. Mesuré après correction :
+  106 occurrences sur 12 pages, aucune sur deux lignes.
+- Lecture humaine toujours nécessaire : un contrôle automatique ne juge ni le ton ni la justesse
+  d'une phrase. Les cas F1 et H sont les plus utiles à relire.
+
+### 6.5 Cache et invalidation ciblée
+
+**Ce que fait déjà le site.** La lecture historique portait le tag `votes`, que la synchronisation
+quotidienne (`scripts/sync-daily.ts`, étape « Votes cache revalidation ») purge chaque jour. Contrairement
+à ce que disait la première version de ce document, un nouveau run ne reste donc pas invisible :
+il apparaît à la prochaine synchronisation, sans geste. **Aucune revalidation manuelle n'est
+nécessaire pour un fonctionnement normal.**
+
+**Ce qui manquait : retirer vite sans purger `votes`.** Purger `votes` régénère tout le site et a
+fait atteindre le plafond de dépense de Vercel le 2026-07-29. La lecture porte désormais aussi le
+tag étroit `historical-group-positions`, ajouté aux tags sélectionnables et à ceux que la route
+`/api/cron/revalidate` sait expirer sur-le-champ (`expireNow`), donc sans servir une seule fois de
+plus l'entrée périmée.
+
+Retrait d'urgence, à lancer par le mainteneur avec `CRON_SECRET` (aucune autre donnée n'est touchée) :
+
+```
+POST /api/cron/revalidate
+Authorization: Bearer $CRON_SECRET
+{"tags": ["historical-group-positions"], "expireNow": true}
+```
+
+Il n'invalide que les pages qui ont lu cette lecture (scrutins de l'Assemblée nationale), à la
+demande et paresseusement : une page est régénérée à sa prochaine visite. **Ne jamais y ajouter
+`votes`.** Au plus 12 982 pages sont concernées, et seulement celles que quelqu'un visite.
+
+### 6.6 Activation et retour arrière
+
+L'activation se fait en deux gestes séparés, chacun à autoriser :
+
+1. **Appliquer le SQL** (geste du propriétaire), puis relire les droits, les comptes et le plan.
+   Sans effet visible tant que l'interrupteur est éteint : c'est la première vraie vérification.
+2. **Passer `HISTORICAL_GROUP_POSITIONS_PUBLIC` à `true`** dans une PR d'une ligne, la fusionner,
+   puis déploiement manuel depuis le dashboard Vercel. Rien n'est déployé par une fusion.
+
+L'ouverture est progressive par construction : seules 874 pages changent de contenu, les autres
+affichent le tableau officiel comme aujourd'hui.
+
+**Retour arrière, du plus étroit au plus large :**
+
+| Niveau | Geste                                                                                                                                                  | Effet                                                                                           | Déploiement |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- | ----------- |
+| R1     | Insérer une décision `REVOKED` sur un snapshot, puis expirer le tag étroit (6.5).                                                                      | Le run quitte la lecture : « pas encore disponible » sur les pages concernées.                  | Non         |
+| R2     | PR qui remet l'interrupteur à `false`, puis déploiement manuel (ou redéploiement de la version précédente depuis le dashboard, à confirmer sur place). | Le bloc, la section de méthodologie et son lien disparaissent. La page redevient celle d'avant. | Oui         |
+| R3     | Script de retrait (`…-rollback.sql`) : supprime les trois vues, aucune donnée touchée.                                                                 | Les lectures échouent : « momentanément indisponible », avertissement Sentry. À suivre de R2.   | Non         |
+
+R1, retrait par législature : `hg-AN_SCRUTINS_L16-1`, `hg-AN_SCRUTINS_L17-1` (ou `-L15-1`). Révoquer
+`hg-AN_AMO30-1`, partagé, retire les trois législatures. Il n'existe **pas** de commande `revoke`
+dans `scripts/historical-groups.ts` (seulement `fingerprint`, `import`, `verify`, `release`, `run`,
+`verify-run`) : c'est une insertion dans `SnapshotDecision`, validée sur la base jetable :
+
+```sql
+INSERT INTO "SnapshotDecision"("snapshotId", "status", "reason", "decidedBy", "decidedByKind")
+VALUES ('hg-AN_SCRUTINS_L16-1', 'REVOKED', '<raison>', '<nom>', 'HUMAN');
+```
+
+R1 n'efface rien : insérer une décision `RELEASED` plus récente remet le run en lecture.
+
+### 6.7 GO / NO-GO
+
+Seuls les risques bloquants. Chaque ligne a sa preuve.
+
+| #   | Condition                                                                           | État au 2026-10-19                       | Preuve                                                                           |
+| --- | ----------------------------------------------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------- |
+| 1   | Le SQL est appliqué, droits relus : rien pour `PUBLIC`, `anon`, `authenticated`     | **À faire (autorisation distincte)**     | Auto-contrôle du script, puis relecture des ACL.                                 |
+| 2   | Les trois vues rendent 17 399 états et 161 592 lignes sur la base réelle            | Vérifié sur la logique, pas sur les vues | Rejeu en lecture seule ; à refaire sur les vues après application.               |
+| 3   | Aucun scrutin du site ne tombe en « lecture en échec »                              | Vérifié, après correction                | 35 lignes refusées avant, 0 après ; test d'intégration ; garde en CI.            |
+| 4   | Plan de lecture sous 500 ms                                                         | Vérifié                                  | 2,1 ms et 0,43 ms.                                                               |
+| 5   | Aucune page ne montre deux tableaux de groupes                                      | Vérifié                                  | Test de page ; rendu réel de 30 scrutins.                                        |
+| 6   | Rendu correct sur mobile et ordinateur, en clair et en sombre, sans violation `axe` | Vérifié                                  | 120 chargements, 0 violation `axe` (6.4).                                        |
+| 7   | Retour arrière R1 et R2 répétés avant l'activation                                  | À faire                                  | R1 sur une base jetable est couvert par les tests ; R2 se fait sur le dashboard. |
+| 8   | Plafond de dépense Vercel et alerte en place                                        | À confirmer par le mainteneur            | Dashboard Vercel.                                                                |
+| 9   | Relecture humaine des textes (6.3) et de la méthodologie                            | À faire                                  | Cette PR.                                                                        |
+
+NO-GO si : une ligne 1 à 6 est fausse, ou si Sentry montre l'empreinte
+`historical-group-positions-unreadable` après application du SQL.
 
 ## 7. Hors périmètre, volontairement
 

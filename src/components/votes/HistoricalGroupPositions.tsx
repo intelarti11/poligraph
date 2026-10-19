@@ -21,8 +21,8 @@ interface HistoricalGroupPositionsProps {
 
 const UNAVAILABLE_COPY = {
   "no-published-run": {
-    title: "Groupes à la date du scrutin pas encore disponibles",
-    body: "PoliGraph n'a pas encore rattaché les votes de ce scrutin au groupe de chaque député à cette date. Ce n'est pas une absence de vote : le résultat officiel et les votes individuels restent affichés.",
+    title: "Votes par groupe pas encore disponibles",
+    body: "PoliGraph n'a pas encore calculé le vote par groupe de ce scrutin. Ce n'est pas une absence de vote : le résultat officiel et les votes individuels restent affichés.",
   },
   "read-error": {
     title: "Décompte par groupe momentanément indisponible",
@@ -59,14 +59,21 @@ function groupName(row: { label: string; abbreviation: string | null }) {
 function sourcesOf(source: HistoricalSource): SourceRef[] {
   const refs: SourceRef[] = [];
   refs.push({
-    label: "Assemblée nationale, votes nominatifs des scrutins",
+    label: "Assemblée nationale, Scrutins (données ouvertes)",
     ...(source.scrutins.url ? { url: source.scrutins.url } : {}),
   });
   refs.push({
-    label: "Assemblée nationale, groupes et mandats des députés",
+    label: "Assemblée nationale, acteurs, mandats et organes (données ouvertes)",
     ...(source.affiliations.url ? { url: source.affiliations.url } : {}),
   });
   return refs;
+}
+
+function sourceNote(source: HistoricalSource): string {
+  const base = "Décompte calculé par PoliGraph à partir de ces deux jeux de données";
+  return source.affiliations.asOf
+    ? `${base} · Groupes et mandats arrêtés au ${formatDate(source.affiliations.asOf)}`
+    : base;
 }
 
 function Notices({ notices }: { notices: HistoricalNotice[] }) {
@@ -100,7 +107,7 @@ function WithheldGroups({ groups }: { groups: WithheldGroup[] }) {
 
 function CountsList({ rows }: { rows: HistoricalGroupRow[] }) {
   return (
-    <ul className="mt-3 divide-y sm:hidden" aria-label="Votes de chaque groupe">
+    <ul className="mt-3 divide-y sm:hidden" aria-label="Votes par groupe">
       {rows.map((row) => (
         <li key={row.organRef} className="py-3">
           <p className="font-medium">{groupName(row)}</p>
@@ -111,8 +118,8 @@ function CountsList({ rows }: { rows: HistoricalGroupRow[] }) {
             className="mt-2"
           />
           <p className="mt-2 text-sm tabular-nums text-muted-foreground">
-            Pour {row.forCount} · Contre {row.againstCount} · Abstentions {row.abstainCount} ·
-            Non-votants {row.nonVoterCount}
+            Pour {row.forCount} · Contre {row.againstCount} · Abstentions {row.abstainCount} ·{" "}
+            <span className="whitespace-nowrap">Non-votants {row.nonVoterCount}</span>
           </p>
         </li>
       ))}
@@ -125,7 +132,7 @@ function CountsTable({ rows, date }: { rows: HistoricalGroupRow[]; date: string 
     <div
       className="mt-3 hidden overflow-x-auto sm:block"
       role="region"
-      aria-label="Votes de chaque groupe"
+      aria-label="Votes par groupe"
       tabIndex={0}
     >
       <table className="w-full min-w-[34rem] text-sm">
@@ -184,14 +191,14 @@ function HowToRead() {
       </summary>
       <div className="mt-2 space-y-2 text-muted-foreground">
         <p>
-          L&apos;Assemblée nationale publie le vote de chaque député, nom par nom. Ce tableau
-          additionne ces votes selon le groupe auquel le député appartenait le jour du scrutin,
-          d&apos;après le référentiel de l&apos;Assemblée.
+          Le groupe de chaque député est celui que le référentiel de l&apos;Assemblée nationale lui
+          donne le jour du scrutin, pas celui qu&apos;il occupe aujourd&apos;hui.
         </p>
         <p>
           Un groupe ne vote pas d&apos;un seul bloc : « Pour 12, Contre 3 » ne dit pas ce que le
           groupe a décidé. PoliGraph n&apos;en tire aucune position majoritaire. Les non-votants
-          sont comptés à part, selon le classement de l&apos;Assemblée.{" "}
+          sont comptés à part, selon le classement de l&apos;Assemblée, qui y range notamment les
+          membres du Gouvernement et la personne qui préside la séance.{" "}
           <a
             href="/methodologie#votes-historiques-des-groupes"
             className="underline hover:text-primary"
@@ -206,8 +213,9 @@ function HowToRead() {
 
 /**
  * Bloc C2 de la page de scrutin : les votes individuels publiés, additionnés par groupe à la date
- * du scrutin. Ce n'est ni le décompte par groupe publié par l'institution (bloc C1), ni une
- * position majoritaire : le composant n'en affiche jamais.
+ * du scrutin. Ce n'est ni le décompte par groupe publié par l'institution (bloc C1), dont il est
+ * le repli quand celui-ci n'est pas affiché, ni une position majoritaire : le composant n'en
+ * affiche jamais.
  */
 export function HistoricalGroupPositions({ view, scrutinDate }: HistoricalGroupPositionsProps) {
   const date = formatDate(scrutinDate);
@@ -215,10 +223,10 @@ export function HistoricalGroupPositions({ view, scrutinDate }: HistoricalGroupP
   if (view.kind === "unavailable") {
     if (view.cause === "legislature-not-covered") {
       return (
-        <MissingData title="Groupes à la date du scrutin pas encore documentés" className="mb-8">
+        <MissingData title="Votes par groupe pas encore documentés" className="mb-8">
           Pour la {view.legislature}
-          <sup>e</sup> législature, PoliGraph ne documente pas encore le groupe de chaque député à
-          la date du scrutin. Le résultat officiel et les votes individuels restent affichés.
+          <sup>e</sup> législature, PoliGraph ne calcule pas encore le vote par groupe. Le résultat
+          officiel et les votes individuels restent affichés.
         </MissingData>
       );
     }
@@ -250,21 +258,21 @@ export function HistoricalGroupPositions({ view, scrutinDate }: HistoricalGroupP
     <Card className="mb-8">
       <CardContent className="pt-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-base font-semibold">Vote de chaque groupe le {date}</h3>
+          <h3 className="text-base font-semibold">Votes par groupe le {date}</h3>
           <DataStatus
             status={view.completeness}
             scope="Décompte par groupe"
             showScope
             description={
               view.completeness === "complete"
-                ? "Tous les groupes de ce scrutin sont présentés et leurs totaux recoupent ceux de l'Assemblée nationale."
+                ? "Tous les groupes de ce scrutin sont présentés, et la somme des votes individuels recoupe le résultat publié par l'Assemblée nationale."
                 : "Certains groupes ou certains votes ne sont pas présentés. Les raisons sont indiquées sous le tableau."
             }
           />
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
-          Votes individuels publiés par l&apos;Assemblée nationale, additionnés selon le groupe de
-          chaque député à la date du scrutin.
+          Calculé par PoliGraph à partir des votes individuels publiés par l&apos;Assemblée
+          nationale, selon le groupe de chaque député le jour du scrutin.
         </p>
         <CountsList rows={view.rows} />
         <CountsTable rows={view.rows} date={date} />
@@ -274,7 +282,7 @@ export function HistoricalGroupPositions({ view, scrutinDate }: HistoricalGroupP
         <SourceLine
           sources={sourcesOf(view.source)}
           consultedAt={view.source.scrutins.fetchedAt}
-          note="Décompte calculé par PoliGraph à partir de ces deux jeux de données"
+          note={sourceNote(view.source)}
           className="mt-3"
         />
       </CardContent>

@@ -111,13 +111,13 @@ function noticesOf(
   if (status.nonInscritVotes > 0) {
     notices.push({
       kind: "non-inscrits",
-      text: `Les députés non inscrits ne forment pas un groupe : ${pluralVotes(status.nonInscritVotes)} de non-inscrits ${status.nonInscritVotes > 1 ? "ne sont pas regroupés" : "n'est pas regroupé"}.`,
+      text: `Les députés non inscrits ne forment pas un groupe : ${pluralVotes(status.nonInscritVotes)} de députés non inscrits ${status.nonInscritVotes > 1 ? "ne figurent" : "ne figure"} dans aucune ligne du tableau.`,
     });
   }
   if (status.excludedConflictVotes > 0) {
     notices.push({
       kind: "excluded-conflict",
-      text: `${pluralVotes(status.excludedConflictVotes)} ${status.excludedConflictVotes > 1 ? "ne sont comptés" : "n'est compté"} dans aucun groupe : les deux jeux de données de l'Assemblée nationale donnent un groupe différent pour ce député à cette date.`,
+      text: `${pluralVotes(status.excludedConflictVotes)} ${status.excludedConflictVotes > 1 ? "ne sont comptés" : "n'est compté"} dans aucun groupe : les deux jeux de données de l'Assemblée nationale donnent un groupe différent pour ${status.excludedConflictVotes > 1 ? "ces députés" : "ce député"} à cette date.`,
     });
   }
   if (status.excludedUnknownGroupVotes > 0) {
@@ -126,14 +126,24 @@ function noticesOf(
       text: `${pluralVotes(status.excludedUnknownGroupVotes)} ${status.excludedUnknownGroupVotes > 1 ? "ne sont comptés" : "n'est compté"} dans aucun groupe : l'Assemblée nationale n'indique pas de groupe pour ${status.excludedUnknownGroupVotes > 1 ? "ces députés" : "ce député"}.`,
     });
   }
-  const shared = new Set(
-    rows.filter((r) => r.sameAbbreviationElsewhere).map((r) => r.abbreviation)
-  );
-  if (shared.size > 0) {
-    const sigles = [...shared].filter((s): s is string => s !== null);
+  // Only when the page itself holds two groups under one abbreviation. The flag alone is true for
+  // every row of an abbreviation that was renamed during the legislature, so on its own it fired on
+  // most pages without pointing at anything the reader sees.
+  const onPage = new Map<string, number>();
+  for (const { abbreviation } of [...rows, ...status.withheldGroups]) {
+    if (abbreviation) onPage.set(abbreviation, (onPage.get(abbreviation) ?? 0) + 1);
+  }
+  const sigles = [
+    ...new Set(
+      rows
+        .filter((r) => r.sameAbbreviationElsewhere && (onPage.get(r.abbreviation ?? "") ?? 0) > 1)
+        .map((r) => r.abbreviation)
+    ),
+  ].filter((s): s is string => s !== null);
+  if (sigles.length > 0) {
     notices.push({
       kind: "renamed-groups",
-      text: `${sigles.length > 1 ? "Les sigles" : "Le sigle"} ${sigles.join(", ")} correspond${sigles.length > 1 ? "ent" : ""} à plus d'un groupe dans cette législature (changement de nom ou de référence). Chaque ligne est celle du groupe référencé ce jour-là, et PoliGraph ne les relie pas entre eux tant que la continuité n'est pas établie.`,
+      text: `${sigles.length > 1 ? "Les sigles" : "Le sigle"} ${sigles.join(", ")} ${sigles.length > 1 ? "désignent" : "désigne"} deux références de groupe de l'Assemblée dans ce scrutin (changement de nom ou de référence). PoliGraph ne les relie pas : chaque ligne reprend une référence telle que l'Assemblée la donne.`,
     });
   }
   return notices;
@@ -235,20 +245,51 @@ export const WITHHELD_GROUP_REASON_TEXT: Record<WithheldGroupReason, string> = {
  * What the groups section of the scrutin page renders. One place for a rule that touches three
  * blocks, so that the old block (positions computed on the CURRENT group of each deputy) never sits
  * next to a dated count that says something else about the same scrutin.
+ *
+ * The dated count is the fallback of the official one: when the table published with the scrutin is
+ * shown, the dated table would repeat its figures (on the 16th and 17th legislatures the two agree
+ * on every group they share), so it is neither read nor shown, and the old block goes away too.
  */
 export function planGroupsSection(input: {
   enabled: boolean;
   chamber: "AN" | "SENAT";
+  /** The official per-group table of the scrutin is shown on the page. */
+  officialGroupsShown: boolean;
+  /** `null` when the dated count was not read (see `officialGroupsShown`). */
   view: HistoricalPositionsView | null;
   hasComputedPositions: boolean;
-}): { showHistorical: boolean; showCurrentAffiliationPositions: boolean } {
-  const { enabled, chamber, view, hasComputedPositions } = input;
-  if (!enabled || chamber !== "AN" || view === null) {
-    return { showHistorical: false, showCurrentAffiliationPositions: hasComputedPositions };
+}): {
+  showHistorical: boolean;
+  showCurrentAffiliationPositions: boolean;
+  /** The groups of this scrutin are covered by the blocks above, so the "not documented" mention of the old block is dropped. */
+  dropsLegacyNotice: boolean;
+} {
+  const { enabled, chamber, officialGroupsShown, view, hasComputedPositions } = input;
+  if (!enabled || chamber !== "AN") {
+    return {
+      showHistorical: false,
+      showCurrentAffiliationPositions: hasComputedPositions,
+      dropsLegacyNotice: false,
+    };
+  }
+  if (officialGroupsShown) {
+    return {
+      showHistorical: false,
+      showCurrentAffiliationPositions: false,
+      dropsLegacyNotice: true,
+    };
+  }
+  if (view === null) {
+    return {
+      showHistorical: false,
+      showCurrentAffiliationPositions: hasComputedPositions,
+      dropsLegacyNotice: false,
+    };
   }
   const supersedes = view.kind === "positions" || view.kind === "withheld";
   return {
     showHistorical: true,
     showCurrentAffiliationPositions: hasComputedPositions && !supersedes,
+    dropsLegacyNotice: true,
   };
 }

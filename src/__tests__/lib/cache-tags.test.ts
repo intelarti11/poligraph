@@ -125,6 +125,13 @@ describe("narrow sub-tags (targeted hub/homepage refresh)", () => {
     const tags = revalidateTagSpy.mock.calls.map((c) => c[0]);
     expect(tags).not.toContain("votes-key");
     expect(tags).not.toContain("homepage");
+    expect(tags).not.toContain("historical-group-positions");
+  });
+
+  it("include the dated group counts, selectable without the global votes purge", () => {
+    expect(revalidateCacheSchema.safeParse({ tags: ["historical-group-positions"] }).success).toBe(
+      true
+    );
   });
 });
 

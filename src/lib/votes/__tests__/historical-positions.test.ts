@@ -182,7 +182,21 @@ describe("buildHistoricalPositionsView : limites explicitées", () => {
     if (view.kind !== "positions") throw new Error("positions attendues");
     const text = view.notices.map((n) => n.text);
     expect(text.some((t) => t.startsWith("1 vote n'est compté dans aucun groupe"))).toBe(true);
-    expect(text.some((t) => t.includes("1 vote de non-inscrits n'est pas regroupé"))).toBe(true);
+    expect(
+      text.some((t) => t.includes("1 vote de députés non inscrits ne figure dans aucune ligne"))
+    ).toBe(true);
+    expect(text.some((t) => t.includes("pour ce député à cette date"))).toBe(true);
+  });
+
+  it("accorde au pluriel : plusieurs votes écartés pour conflit, plusieurs députés", () => {
+    const view = buildHistoricalPositionsView({
+      legislature: 16,
+      data: ok([row()], status({ excludedConflictVotes: 3 })),
+    });
+    if (view.kind !== "positions") throw new Error("positions attendues");
+    const text = view.notices.map((n) => n.text).join(" ");
+    expect(text).toContain("3 votes ne sont comptés dans aucun groupe");
+    expect(text).toContain("pour ces députés à cette date");
   });
 
   it("non-inscrits : dit que ce n'est pas un groupe", () => {
@@ -240,6 +254,56 @@ describe("buildHistoricalPositionsView : limites explicitées", () => {
     expect(notice?.text).toContain("ne les relie pas");
   });
 
+  it("un sigle renommé seul sur la page ne déclenche aucun avis", () => {
+    // Regression: the flag is true for every row of an abbreviation renamed during the
+    // legislature, so the notice used to appear on most pages without naming anything visible.
+    const view = buildHistoricalPositionsView({
+      legislature: 16,
+      data: ok(
+        [
+          row({
+            organRef: "PO1",
+            label: "Socialistes et apparentés",
+            abbreviation: "SOC",
+            sameAbbreviationElsewhere: true,
+          }),
+        ],
+        status({ groupsShown: 1 })
+      ),
+    });
+    if (view.kind !== "positions") throw new Error("positions attendues");
+    expect(view.notices.find((n) => n.kind === "renamed-groups")).toBeUndefined();
+  });
+
+  it("un groupe écarté qui partage le sigle d'une ligne affichée déclenche l'avis", () => {
+    const view = buildHistoricalPositionsView({
+      legislature: 16,
+      data: ok(
+        [
+          row({
+            organRef: "PO1",
+            label: "Socialistes et apparentés",
+            abbreviation: "SOC",
+            sameAbbreviationElsewhere: true,
+          }),
+        ],
+        status({
+          groupsShown: 1,
+          groupsWithheld: 1,
+          withheldGroups: [
+            {
+              label: "Socialistes (autre référence)",
+              abbreviation: "SOC",
+              reason: "NO_ATTESTED_VOTE",
+            },
+          ],
+        })
+      ),
+    });
+    if (view.kind !== "positions") throw new Error("positions attendues");
+    expect(view.notices.find((n) => n.kind === "renamed-groups")?.text).toContain("SOC");
+  });
+
   it("n'invente aucune position majoritaire", () => {
     const view = buildHistoricalPositionsView({ legislature: 16, data: ok() });
     expect(JSON.stringify(view).toLowerCase()).not.toContain("majorit");
@@ -285,42 +349,74 @@ describe("planGroupsSection", () => {
     legislature: 16,
     data: { status: null, rows: [] },
   });
+  const base = { enabled: true, chamber: "AN", officialGroupsShown: false } as const;
 
   it("interrupteur éteint : l'ancien comportement, tel quel", () => {
     for (const hasComputedPositions of [true, false]) {
-      expect(
-        planGroupsSection({ enabled: false, chamber: "AN", view: positions, hasComputedPositions })
-      ).toEqual({ showHistorical: false, showCurrentAffiliationPositions: hasComputedPositions });
+      for (const officialGroupsShown of [true, false]) {
+        expect(
+          planGroupsSection({
+            ...base,
+            enabled: false,
+            officialGroupsShown,
+            view: positions,
+            hasComputedPositions,
+          })
+        ).toEqual({
+          showHistorical: false,
+          showCurrentAffiliationPositions: hasComputedPositions,
+          dropsLegacyNotice: false,
+        });
+      }
     }
   });
 
   it("Sénat : jamais de bloc historique", () => {
     expect(
-      planGroupsSection({
-        enabled: true,
-        chamber: "SENAT",
-        view: positions,
-        hasComputedPositions: true,
-      })
-    ).toEqual({ showHistorical: false, showCurrentAffiliationPositions: true });
+      planGroupsSection({ ...base, chamber: "SENAT", view: positions, hasComputedPositions: true })
+    ).toEqual({
+      showHistorical: false,
+      showCurrentAffiliationPositions: true,
+      dropsLegacyNotice: false,
+    });
   });
 
-  it("décompte daté présenté ou retenu : l'ancien bloc sur le groupe actuel disparaît", () => {
-    for (const view of [positions, withheld]) {
+  it("décompte officiel affiché : ni tableau daté, ni ancien bloc, ni ancienne mention", () => {
+    // Even when a dated view exists, so a stale value can never put two tables on the page.
+    for (const view of [positions, withheld, unavailable, null]) {
       expect(
-        planGroupsSection({ enabled: true, chamber: "AN", view, hasComputedPositions: true })
-      ).toEqual({ showHistorical: true, showCurrentAffiliationPositions: false });
+        planGroupsSection({ ...base, officialGroupsShown: true, view, hasComputedPositions: true })
+      ).toEqual({
+        showHistorical: false,
+        showCurrentAffiliationPositions: false,
+        dropsLegacyNotice: true,
+      });
     }
   });
 
-  it("historique indisponible : l'ancien bloc reste, avec sa propre mise en garde", () => {
-    expect(
-      planGroupsSection({
-        enabled: true,
-        chamber: "AN",
-        view: unavailable,
-        hasComputedPositions: true,
-      })
-    ).toEqual({ showHistorical: true, showCurrentAffiliationPositions: true });
+  it("décompte officiel absent, décompte daté présenté ou retenu : l'ancien bloc disparaît", () => {
+    for (const view of [positions, withheld]) {
+      expect(planGroupsSection({ ...base, view, hasComputedPositions: true })).toEqual({
+        showHistorical: true,
+        showCurrentAffiliationPositions: false,
+        dropsLegacyNotice: true,
+      });
+    }
+  });
+
+  it("décompte officiel absent et historique indisponible : l'ancien bloc reste, avec sa mise en garde", () => {
+    expect(planGroupsSection({ ...base, view: unavailable, hasComputedPositions: true })).toEqual({
+      showHistorical: true,
+      showCurrentAffiliationPositions: true,
+      dropsLegacyNotice: true,
+    });
+  });
+
+  it("décompte daté pas lu : on garde l'ancien comportement", () => {
+    expect(planGroupsSection({ ...base, view: null, hasComputedPositions: true })).toEqual({
+      showHistorical: false,
+      showCurrentAffiliationPositions: true,
+      dropsLegacyNotice: false,
+    });
   });
 });

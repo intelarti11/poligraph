@@ -429,6 +429,17 @@ describeDb("lot 6 public read views on a disposable PostgreSQL", () => {
       });
     });
 
+    it("withheldGroups ne porte que des raisons que la page sait expliquer, cohérent ou non", async () => {
+      // Regression: on the real data the 35 discordant scrutins carried COUNT_MISMATCH here, which
+      // the reader refuses, so the page showed "unavailable" instead of the discordance notice.
+      const explained = ["EXCLUDED_VOTES_PRESENT", "NO_ATTESTED_VOTE", "UNLABELLED_GROUP"];
+      for (const scrutin of ["OK", "BAD", "UNV"]) {
+        const groups = (await status(scrutin)).rows[0].withheldGroups as { reason: string }[];
+        for (const group of groups) expect(explained, `${scrutin}`).toContain(group.reason);
+      }
+      expect((await status("OK")).rows[0].withheldGroups).toHaveLength(2);
+    });
+
     it("l'état d'un scrutin compte, nomme et ne montre aucun vote", async () => {
       const s = (await status("OK")).rows[0];
       expect(s).toMatchObject({
