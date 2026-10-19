@@ -58,10 +58,11 @@ export function HistoricalPositionsMethodology() {
         Pour un scrutin public de l&apos;Assemblée nationale (16e et 17e législatures),
         l&apos;Assemblée publie le décompte par groupe avec le résultat. PoliGraph l&apos;affiche
         tel quel quand il l&apos;a repris et que les chiffres s&apos;additionnent au total du
-        scrutin. Quand ce décompte manque ou ne s&apos;additionne pas, PoliGraph le calcule lui-même
-        : il retrouve le groupe auquel chaque député appartenait le jour du vote, puis compte, pour
-        chaque groupe, les pour, les contre, les abstentions et les non-votants. Le groupe est celui
-        de cette date, pas celui que le député occupe aujourd&apos;hui.
+        scrutin. Quand ce décompte est absent ou ne passe pas ces contrôles, PoliGraph en établit un
+        à partir des votes individuels, si les sources permettent de le vérifier : il retrouve le
+        groupe auquel chaque député appartenait le jour du vote, puis compte, pour chaque groupe,
+        les pour, les contre, les abstentions et les non-votants. Le groupe est celui de cette date,
+        pas celui que le député occupe aujourd&apos;hui.
       </p>
       <p className="text-muted-foreground mb-8">
         Pour les non-votants, PoliGraph reprend le classement de l&apos;Assemblée sans
@@ -88,9 +89,10 @@ export function HistoricalPositionsMethodology() {
         Pourquoi des chiffres peuvent manquer
       </h3>
       <p className="text-muted-foreground mb-4">
-        PoliGraph compare d&apos;abord la somme des votes individuels au résultat publié par
-        l&apos;Assemblée. Un groupe n&apos;est présenté que si les sources concordent. Sinon,
-        PoliGraph n&apos;affiche rien et écrit pourquoi.
+        PoliGraph vérifie d&apos;abord que les votes individuels concordent avec le résultat
+        officiel du scrutin, puis contrôle le groupe de chaque député au moment du vote. Si ces
+        vérifications ne permettent pas d&apos;établir un décompte fiable, les chiffres concernés ne
+        sont pas présentés et la raison est indiquée.
       </p>
       <dl className="mb-8 space-y-3">
         {MISSING_CASES.map(({ title, text }) => (

@@ -73,10 +73,23 @@ describe("méthodologie des votes de groupe à la date du scrutin", () => {
     const text = container.textContent ?? "";
 
     expect(text).toMatch(/l'Assemblée publie le décompte par groupe avec le\s*résultat/);
-    expect(text).toMatch(/Quand ce décompte manque ou ne\s*s'additionne pas, PoliGraph le calcule/);
+    expect(text).toMatch(/Quand ce décompte est absent ou ne passe pas ces\s*contrôles/);
+    // The fallback is not always possible: the text must say it depends on the sources.
+    expect(text).toMatch(/si les sources permettent de le\s*vérifier/);
     // The site holds no scrutin of the 15th legislature: the page must not promise one.
     expect(text).toMatch(/16e et 17e législatures/);
     expect(text).not.toMatch(/15e/);
+  });
+
+  it("distingue le contrôle du scrutin de celui du groupe, et dit ce qui n'est pas présenté", () => {
+    const { container } = render(<HistoricalPositionsMethodology />);
+    const text = container.textContent ?? "";
+
+    expect(text).toMatch(/concordent avec le résultat officiel\s*du scrutin/);
+    expect(text).toMatch(/puis contrôle le groupe de chaque député au moment du\s*vote/);
+    expect(text).toMatch(
+      /les chiffres concernés ne sont pas\s*présentés et la raison est indiquée/
+    );
   });
 
   it("n'attribue aucune cause à l'écart entre les totaux", () => {
