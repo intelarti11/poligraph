@@ -8,6 +8,14 @@ const mocks = vi.hoisted(() => ({
   getOfficialGroups: vi.fn(),
 }));
 
+// These cases cover the page as it stands with the dated group counts off (provenance of the
+// result, order of the blocks, masking of the computed positions). The switch is pinned so they do
+// not depend on the editorial decision: the switched-on page has its own file,
+// historical-groups-section.test.tsx.
+vi.mock("@/config/historical-positions", () => ({
+  HISTORICAL_GROUP_POSITIONS_PUBLIC: false,
+  HISTORICAL_POSITIONS_LEGISLATURES: [15, 16, 17],
+}));
 vi.mock("@/lib/db", () => ({
   db: {
     scrutin: { findUnique: (...args: unknown[]) => mocks.findScrutin(...args), findFirst: vi.fn() },
