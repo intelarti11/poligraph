@@ -270,16 +270,12 @@ export default async function ScrutinPage({ params }: PageProps) {
     notFound();
   }
 
-  const [groupPositions, analysis, officialGroups, historicalData] = await Promise.all([
+  const [groupPositions, analysis, officialGroups] = await Promise.all([
     getScrutinGroupPositions(scrutin.id),
     getScrutinAnalysis(scrutin.id),
     // Official per-group counts only exist for Assemblée nationale scrutins.
     scrutin.chamber === "AN"
       ? getScrutinOfficialGroups(scrutin.id, scrutin.legislature)
-      : Promise.resolve(null),
-    // Dated group counts: read only once the editorial switch is on (src/config/historical-positions.ts).
-    HISTORICAL_GROUP_POSITIONS_PUBLIC && scrutin.chamber === "AN"
-      ? readHistoricalGroupPositions(scrutin.externalId)
       : Promise.resolve(null),
   ]);
 
@@ -312,12 +308,20 @@ export default async function ScrutinPage({ params }: PageProps) {
         scrutin,
       })
     : null;
+  // Dated group counts (src/config/historical-positions.ts): the fallback of the official table,
+  // read only when the switch is on and that table is not shown.
+  const officialGroupsShown = officialGroupsView?.kind === "shown";
+  const historicalData =
+    HISTORICAL_GROUP_POSITIONS_PUBLIC && scrutin.chamber === "AN" && !officialGroupsShown
+      ? await readHistoricalGroupPositions(scrutin.externalId)
+      : null;
   const historicalView = historicalData
     ? buildHistoricalPositionsView({ legislature: scrutin.legislature, data: historicalData })
     : null;
   const groupsPlan = planGroupsSection({
     enabled: HISTORICAL_GROUP_POSITIONS_PUBLIC,
     chamber: scrutin.chamber,
+    officialGroupsShown,
     view: historicalView,
     hasComputedPositions: groupPositions.length > 0,
   });
@@ -596,7 +600,7 @@ export default async function ScrutinPage({ params }: PageProps) {
               </Card>
             )}
             {groupPositions.length === 0 &&
-              !groupsPlan.showHistorical &&
+              !groupsPlan.dropsLegacyNotice &&
               scrutin.chamber === "AN" &&
               scrutin.legislature !== CURRENT_LEGISLATURE && (
                 <MissingData title="Positions calculées non affichées">

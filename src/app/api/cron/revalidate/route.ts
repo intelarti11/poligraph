@@ -12,10 +12,12 @@ const PROFILE_TAGS: readonly string[] = ["politicians", "votes", "factchecks"];
 type CronAllowedTag = SelectableCacheTag;
 
 // Tags a caller may expire at once with `expireNow: true` (no stale entry served while the
-// next request recomputes). « gouvernements » only: its "use cache" entries are nested (the
-// list of governments reads one entry per government), so a stale-while-revalidate recompute
-// of the outer entry could rebuild it from inner entries not yet refreshed.
-const EXPIRE_NOW_TAGS: readonly string[] = ["gouvernements"];
+// next request recomputes). « gouvernements »: its "use cache" entries are nested (the list of
+// governments reads one entry per government), so a stale-while-revalidate recompute of the outer
+// entry could rebuild it from inner entries not yet refreshed. « historical-group-positions »: the
+// way to take a revoked run off the scrutin pages, where serving the stale entry once more is
+// exactly what the revocation is meant to stop.
+const EXPIRE_NOW_TAGS: readonly string[] = ["gouvernements", "historical-group-positions"];
 
 /**
  * POST /api/cron/revalidate

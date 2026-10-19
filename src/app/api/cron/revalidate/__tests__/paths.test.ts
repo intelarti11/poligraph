@@ -73,6 +73,15 @@ describe("POST /api/cron/revalidate : chemins", () => {
     expect(h.revalidateTag).toHaveBeenCalledWith("gouvernements", { expire: 0 });
   });
 
+  it("expire immédiatement les positions historiques des groupes, sans toucher à « votes »", async () => {
+    const res = await POST(req({ tags: ["historical-group-positions"], expireNow: true }));
+
+    expect(res.status).toBe(200);
+    expect(h.revalidateTags).toHaveBeenCalledWith(["historical-group-positions"]);
+    expect(h.revalidateTag).toHaveBeenCalledTimes(1);
+    expect(h.revalidateTag).toHaveBeenCalledWith("historical-group-positions", { expire: 0 });
+  });
+
   it("n'expire rien sans expireNow", async () => {
     await POST(req({ tags: ["gouvernements"] }));
     expect(h.revalidateTag).not.toHaveBeenCalled();

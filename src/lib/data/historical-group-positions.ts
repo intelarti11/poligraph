@@ -87,7 +87,9 @@ export async function getHistoricalGroupPositions(
   scrutinExternalId: string
 ): Promise<Exclude<HistoricalPositionsData, { unreadable: true }>> {
   "use cache";
-  cacheTag("votes");
+  // "votes" so that the daily sync refreshes it with the rest, the narrow tag so that a revoked run
+  // can be expired alone (see NARROW_TAGS).
+  cacheTag("votes", "historical-group-positions");
   cacheLife("synced");
 
   if (!SCRUTIN_EXTERNAL_ID.test(scrutinExternalId)) return { status: null, rows: [] };

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ queryRaw: vi.fn(), cacheTag: vi.fn(), cacheLife: vi.fn() }));
@@ -10,6 +11,7 @@ import {
   getHistoricalGroupPositions,
   readHistoricalGroupPositions,
 } from "@/lib/data/historical-group-positions";
+import { WITHHELD_GROUP_REASON_TEXT } from "@/lib/votes/historical-positions";
 
 const STATUS = {
   legislature: 16,
@@ -117,6 +119,45 @@ describe("getHistoricalGroupPositions", () => {
     await expect(getHistoricalGroupPositions("VTANR5L16V1")).rejects.toThrow();
   });
 
+  it("accepte l'état d'un scrutin discordant, sans groupe écarté ni ligne de groupe", async () => {
+    // The real shape of the 35 discordant scrutins once the view lists group-level reasons only.
+    answer([{ ...STATUS, countCoherence: "COUNT_MISMATCH", groupsShown: 0 }], []);
+    const data = await getHistoricalGroupPositions("VTANR5L16V1927");
+    expect(data.status?.countCoherence).toBe("COUNT_MISMATCH");
+  });
+
+  it("refuse une raison qui n'est pas au niveau du groupe (le SQL ne doit plus la produire)", async () => {
+    answer(
+      [
+        {
+          ...STATUS,
+          withheldGroups: [{ label: "X", abbreviation: null, reason: "COUNT_MISMATCH" }],
+        },
+      ],
+      []
+    );
+    await expect(getHistoricalGroupPositions("VTANR5L16V1927")).rejects.toThrow();
+  });
+
+  it("la liste de raisons du SQL est exactement celle que le lecteur accepte et que la page explique", async () => {
+    // The integration suite is not run in CI: this keeps the three places in step. Before the
+    // fix, the view listed COUNT_MISMATCH here and every discordant scrutin was refused.
+    const sql = readFileSync(
+      "prisma/migrations/manual/2026-10-21-historical-groups-public-read.sql",
+      "utf8"
+    );
+    const list = sql.match(/COALESCE\(b\."reason", 'UNLABELLED_GROUP'\) IN\s*\(([^)]*)\)/);
+    expect(list, "allowlist of reasons not found in the SQL").not.toBeNull();
+    const inSql = [...(list?.[1] ?? "").matchAll(/'([A-Z_]+)'/g)].flatMap((m) =>
+      m[1] ? [m[1]] : []
+    );
+    expect([...inSql].sort()).toEqual(Object.keys(WITHHELD_GROUP_REASON_TEXT).sort());
+    for (const reason of inSql) {
+      answer([{ ...STATUS, withheldGroups: [{ label: "X", abbreviation: null, reason }] }], []);
+      await expect(getHistoricalGroupPositions("VTANR5L16V1")).resolves.toBeDefined();
+    }
+  });
+
   it("refuse un état inconnu de la cohérence des totaux", async () => {
     answer([{ ...STATUS, countCoherence: "SOMETHING_NEW" }], []);
     await expect(getHistoricalGroupPositions("VTANR5L16V1")).rejects.toThrow();
@@ -135,10 +176,10 @@ describe("getHistoricalGroupPositions", () => {
     }
   });
 
-  it("étiquette le cache sur les votes et le profil synchronisé", async () => {
+  it("étiquette le cache sur les votes, sur l'étiquette étroite, et le profil synchronisé", async () => {
     answer([STATUS], [ROW]);
     await getHistoricalGroupPositions("VTANR5L16V2978");
-    expect(mocks.cacheTag).toHaveBeenCalledWith("votes");
+    expect(mocks.cacheTag).toHaveBeenCalledWith("votes", "historical-group-positions");
     expect(mocks.cacheLife).toHaveBeenCalledWith("synced");
   });
 });

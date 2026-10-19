@@ -1,9 +1,10 @@
 /**
- * Branchement du bloc « Vote de chaque groupe » dans la page de scrutin (lot 6).
+ * Branchement du bloc « Votes par groupe » dans la page de scrutin (lot 6).
  *
  * L'interrupteur éditorial est simulé : le test prouve les deux côtés. Éteint, la page est celle
- * d'avant et la couche de lecture n'est jamais appelée. Allumé, chaque état s'affiche, et l'ancien
- * bloc calculé sur le groupe actuel ne coexiste jamais avec un décompte daté.
+ * d'avant et la couche de lecture n'est jamais appelée. Allumé, chaque état s'affiche, l'ancien
+ * bloc calculé sur le groupe actuel ne coexiste jamais avec un décompte daté, et le décompte daté
+ * ne double jamais le décompte officiel : il n'est ni lu ni affiché quand celui-ci est affiché.
  */
 import { render } from "@testing-library/react";
 import type { ReactNode } from "react";
@@ -133,6 +134,36 @@ function status(overrides: Partial<HistoricalScrutinStatus> = {}): HistoricalScr
   };
 }
 
+/** Official per-group table that passes every gate: sums equal the scrutin totals (3, 2, 1). */
+const OFFICIAL_SHOWN = {
+  snapshot: {
+    imported: true,
+    issues: [],
+    rows: [
+      {
+        organeRef: "PO800490",
+        memberCount: 6,
+        forCount: 3,
+        againstCount: 2,
+        abstainCount: 1,
+        nonVoterCount: 0,
+        majorityPosition: "POUR",
+        issues: [],
+      },
+    ],
+  },
+  organes: [
+    {
+      organeRef: "PO800490",
+      label: "Groupe du décompte officiel",
+      abbreviation: "GDO",
+      startDate: null,
+      endDate: null,
+    },
+  ],
+  fetchedAt: new Date("2026-10-18T22:00:00Z"),
+};
+
 async function renderPage() {
   const ui = await ScrutinPage({ params: Promise.resolve({ slug: "scrutin-test" }) });
   return render(ui);
@@ -159,7 +190,7 @@ describe("interrupteur éteint", () => {
   it("la couche de lecture n'est jamais appelée et la page est celle d'avant", async () => {
     const { container } = await renderPage();
     expect(mocks.readHistorical).not.toHaveBeenCalled();
-    expect(text(container)).not.toContain("Vote de chaque groupe");
+    expect(text(container)).not.toContain("Votes par groupe");
     // Ancienne mention pour une législature ancienne sans position calculée.
     expect(text(container)).toContain("Positions calculées non affichées");
   });
@@ -167,6 +198,17 @@ describe("interrupteur éteint", () => {
   it("l'ancien bloc calculé s'affiche comme avant", async () => {
     mocks.getPositions.mockResolvedValue(COMPUTED);
     const { container } = await renderPage();
+    expect(text(container)).toContain("Positions calculées par PoliGraph");
+  });
+});
+
+describe("interrupteur éteint, décompte officiel affiché", () => {
+  it("rien ne change : pas de lecture historique, l'ancien bloc reste", async () => {
+    mocks.getOfficialGroups.mockResolvedValue(OFFICIAL_SHOWN);
+    mocks.getPositions.mockResolvedValue(COMPUTED);
+    const { container } = await renderPage();
+    expect(mocks.readHistorical).not.toHaveBeenCalled();
+    expect(text(container)).toContain("Groupe du décompte officiel");
     expect(text(container)).toContain("Positions calculées par PoliGraph");
   });
 });
@@ -180,7 +222,7 @@ describe("interrupteur allumé", () => {
     mocks.getPositions.mockResolvedValue(COMPUTED);
     const { container } = await renderPage();
     expect(mocks.readHistorical).toHaveBeenCalledWith("VTANR5L16V2978");
-    expect(text(container)).toContain("Vote de chaque groupe le 14 novembre 2023");
+    expect(text(container)).toContain("Votes par groupe le 14 novembre 2023");
     expect(text(container)).toContain("La France insoumise");
     expect(text(container)).not.toContain("Positions calculées par PoliGraph");
     expect(text(container)).not.toContain("Positions calculées non affichées");
@@ -203,8 +245,46 @@ describe("interrupteur allumé", () => {
     mocks.getPositions.mockResolvedValue(COMPUTED);
     mocks.readHistorical.mockResolvedValue({ status: null, rows: [] });
     const { container } = await renderPage();
-    expect(text(container)).toContain("Groupes à la date du scrutin pas encore disponibles");
+    expect(text(container)).toContain("Votes par groupe pas encore disponibles");
     expect(text(container)).toContain("groupe actuel de chaque député");
+  });
+
+  it("décompte officiel affiché : un seul tableau, le daté n'est ni lu ni montré", async () => {
+    mocks.getOfficialGroups.mockResolvedValue(OFFICIAL_SHOWN);
+    mocks.getPositions.mockResolvedValue(COMPUTED);
+    const { container } = await renderPage();
+    expect(mocks.readHistorical).not.toHaveBeenCalled();
+    expect(text(container)).toContain("Décompte officiel par groupe");
+    expect(text(container)).toContain("Groupe du décompte officiel");
+    expect(text(container)).not.toContain("Votes par groupe");
+    expect(text(container)).not.toContain("La France insoumise");
+    // Neither the old block (current group) nor its "not documented" mention.
+    expect(text(container)).not.toContain("Positions calculées par PoliGraph");
+    expect(text(container)).not.toContain("Positions calculées non affichées");
+    expect(container.querySelectorAll("table")).toHaveLength(1);
+  });
+
+  it("décompte officiel non affichable : le décompte daté prend le relais", async () => {
+    mocks.getOfficialGroups.mockResolvedValue({
+      ...OFFICIAL_SHOWN,
+      snapshot: { ...OFFICIAL_SHOWN.snapshot, issues: [{ code: "x" }] },
+    });
+    const { container } = await renderPage();
+    expect(mocks.readHistorical).toHaveBeenCalledWith("VTANR5L16V2978");
+    expect(text(container)).toContain("Décompte officiel par groupe non affiché");
+    expect(text(container)).toContain("Votes par groupe le 14 novembre 2023");
+    expect(text(container)).toContain("La France insoumise");
+  });
+
+  it("décompte officiel affiché et scrutin discordant : pas de message de plus", async () => {
+    mocks.getOfficialGroups.mockResolvedValue(OFFICIAL_SHOWN);
+    mocks.readHistorical.mockResolvedValue({
+      status: status({ countCoherence: "COUNT_MISMATCH" }),
+      rows: [],
+    });
+    const { container } = await renderPage();
+    expect(text(container)).not.toContain("Décompte par groupe non présenté");
+    expect(text(container)).toContain("Groupe du décompte officiel");
   });
 
   it("lecture en échec : la page se rend quand même", async () => {
@@ -220,6 +300,6 @@ describe("interrupteur allumé", () => {
     );
     const { container } = await renderPage();
     expect(mocks.readHistorical).not.toHaveBeenCalled();
-    expect(text(container)).not.toContain("Vote de chaque groupe");
+    expect(text(container)).not.toContain("Votes par groupe");
   });
 });

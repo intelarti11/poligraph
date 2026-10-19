@@ -115,6 +115,11 @@ SELECT
     ) FILTER (
       WHERE b."organKind" = 'GROUP' AND b."label" IS NOT NULL
         AND NOT (b."publishable" AND b."reason" IS NULL AND b."excludedCount" = 0)
+        -- Group-level reasons only. COUNT_MISMATCH, COUNT_UNVERIFIABLE and COUNT_COHERENCE_UNKNOWN
+        -- describe the whole scrutin, which "countCoherence" already says; listing them per group
+        -- made the reader refuse the row of every discordant scrutin.
+        AND COALESCE(b."reason", 'UNLABELLED_GROUP') IN
+          ('EXCLUDED_VOTES_PRESENT', 'NO_ATTESTED_VOTE', 'UNLABELLED_GROUP')
     ),
     '[]'::jsonb
   ) AS "withheldGroups",

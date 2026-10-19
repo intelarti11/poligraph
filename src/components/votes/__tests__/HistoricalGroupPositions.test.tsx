@@ -52,10 +52,10 @@ describe("HistoricalGroupPositions : décompte présenté", () => {
   it("titre daté, introduction sourcée, statut complet", () => {
     const { container } = renderView({ status: status(), rows: [row()] });
     expect(
-      screen.getByRole("heading", { level: 3, name: /Vote de chaque groupe le 14 novembre 2023/ })
+      screen.getByRole("heading", { level: 3, name: /Votes par groupe le 14 novembre 2023/ })
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/additionnés selon le groupe de chaque député à la date/)
+      screen.getByText(/Calculé par PoliGraph à partir des votes individuels publiés/)
     ).toBeInTheDocument();
     expect(container.querySelector('[data-status="complete"]')).toHaveTextContent(
       "Décompte par groupe : Complet"
@@ -79,7 +79,7 @@ describe("HistoricalGroupPositions : décompte présenté", () => {
       .map((c) => c.textContent);
     expect(cells).toEqual(["21", "2", "1", "3"]);
     // La région défilante est atteignable au clavier et nommée.
-    expect(screen.getByRole("region", { name: "Votes de chaque groupe" })).toHaveAttribute(
+    expect(screen.getByRole("region", { name: "Votes par groupe" })).toHaveAttribute(
       "tabindex",
       "0"
     );
@@ -91,9 +91,10 @@ describe("HistoricalGroupPositions : décompte présenté", () => {
       expect(bar).toHaveAttribute("aria-hidden", "true");
     }
     // Version mobile : les quatre décomptes sont écrits.
-    expect(
-      screen.getByText(/Pour 21 · Contre 2 · Abstentions 1 · Non-votants 3/)
-    ).toBeInTheDocument();
+    const list = screen.getByRole("list", { name: "Votes par groupe" });
+    expect(list.textContent).toMatch(/Pour 21 · Contre 2 · Abstentions 1 · Non-votants 3/);
+    // The hyphen of « Non-votants » must not be a line break on a narrow screen.
+    expect(within(list).getByText("Non-votants 3")).toHaveClass("whitespace-nowrap");
   });
 
   it("n'affiche aucune position majoritaire", () => {
@@ -110,7 +111,12 @@ describe("HistoricalGroupPositions : décompte présenté", () => {
     expect(details).not.toBeNull();
     expect(details).not.toHaveAttribute("open");
     expect(
-      within(details as HTMLElement).getByText(/le vote de chaque député, nom par nom/)
+      within(details as HTMLElement).getByText(/celui que le référentiel de l'Assemblée nationale/)
+    ).toBeInTheDocument();
+    // What the Assemblée files under « Non votant » (members of the Government, the person
+    // presiding), checked on its scrutin pages: the reader must not take it for absence.
+    expect(
+      within(details as HTMLElement).getByText(/membres du Gouvernement et la personne qui préside/)
     ).toBeInTheDocument();
     expect(
       within(details as HTMLElement).getByRole("link", { name: "Méthodologie" })
@@ -121,15 +127,28 @@ describe("HistoricalGroupPositions : décompte présenté", () => {
     renderView({ status: status(), rows: [row()] });
     const links = screen.getAllByRole("link").map((a) => [a.textContent, a.getAttribute("href")]);
     expect(links).toContainEqual([
-      "Assemblée nationale, votes nominatifs des scrutins",
+      "Assemblée nationale, Scrutins (données ouvertes)",
       "https://data.assemblee-nationale.fr/scrutins.zip",
     ]);
     expect(links).toContainEqual([
-      "Assemblée nationale, groupes et mandats des députés",
+      "Assemblée nationale, acteurs, mandats et organes (données ouvertes)",
       "https://data.assemblee-nationale.fr/amo.zip",
     ]);
     expect(screen.getByText(/Consulté le 19 octobre 2026/)).toBeInTheDocument();
     expect(screen.getByText(/Décompte calculé par PoliGraph/)).toBeInTheDocument();
+  });
+
+  it("source : la date d'arrêt du fichier des groupes, quand elle existe", () => {
+    renderView({
+      status: status({ affiliationsAsOf: new Date("2026-10-17T00:34:00Z") }),
+      rows: [row()],
+    });
+    expect(screen.getByText(/Groupes et mandats arrêtés au 17 octobre 2026/)).toBeInTheDocument();
+  });
+
+  it("source : pas de date d'arrêt inventée quand le fichier n'en porte pas", () => {
+    renderView({ status: status({ affiliationsAsOf: null }), rows: [row()] });
+    expect(screen.queryByText(/arrêtés au/)).toBeNull();
   });
 
   it("présentation partielle : statut, raisons par groupe, votes exclus, non-inscrits", () => {
@@ -158,7 +177,9 @@ describe("HistoricalGroupPositions : décompte présenté", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/1 vote n'est compté dans aucun groupe/)).toBeInTheDocument();
     expect(
-      screen.getByText(/ne forment pas un groupe : 4 votes de non-inscrits ne sont pas regroupés/)
+      screen.getByText(
+        /ne forment pas un groupe : 4 votes de députés non inscrits ne figurent dans aucune ligne/
+      )
     ).toBeInTheDocument();
   });
 
@@ -181,9 +202,7 @@ describe("HistoricalGroupPositions : décompte présenté", () => {
       ],
     });
     expect(within(screen.getByRole("table")).getAllByRole("rowheader")).toHaveLength(2);
-    expect(
-      screen.getByText(/correspond à plus d'un groupe dans cette législature/)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/désigne deux références de groupe/)).toBeInTheDocument();
   });
 });
 
@@ -227,17 +246,13 @@ describe("HistoricalGroupPositions : cas où rien n'est présenté", () => {
 
   it("historique indisponible : dit que ce n'est pas une absence de vote", () => {
     renderView({ status: null, rows: [] });
-    expect(
-      screen.getByText("Groupes à la date du scrutin pas encore disponibles")
-    ).toBeInTheDocument();
+    expect(screen.getByText("Votes par groupe pas encore disponibles")).toBeInTheDocument();
     expect(screen.getByText(/Ce n'est pas une absence de vote/)).toBeInTheDocument();
   });
 
   it("législature non documentée : jamais de repli vers l'affiliation actuelle", () => {
     const { container } = renderView({ status: status(), rows: [row()] }, 14);
-    expect(
-      screen.getByText("Groupes à la date du scrutin pas encore documentés")
-    ).toBeInTheDocument();
+    expect(screen.getByText("Votes par groupe pas encore documentés")).toBeInTheDocument();
     expect(container.textContent).not.toContain("groupe actuel");
     expect(screen.queryByRole("table")).toBeNull();
   });

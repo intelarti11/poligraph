@@ -40,7 +40,16 @@ export const FROZEN_TAGS = ["elections-municipales-2026"] as const;
  */
 // "territoires" spans the Territoires readers (src/lib/data/territoires.ts), which also carry
 // "politicians" and "elections": a full purge reaches them through those.
-export const NARROW_TAGS = ["votes-key", "homepage", "gouvernements", "territoires"] as const;
+// "historical-group-positions" is the dated group counts of the scrutin page
+// (src/lib/data/historical-group-positions.ts). Selectable so that a revoked run can be taken off
+// the pages at once, without the site-wide "votes" purge.
+export const NARROW_TAGS = [
+  "votes-key",
+  "homepage",
+  "gouvernements",
+  "territoires",
+  "historical-group-positions",
+] as const;
 
 /** Every tag an operator may name explicitly (admin endpoint, cron endpoint). */
 export const SELECTABLE_TAGS = [...ALL_TAGS, ...FROZEN_TAGS, ...NARROW_TAGS] as const;
