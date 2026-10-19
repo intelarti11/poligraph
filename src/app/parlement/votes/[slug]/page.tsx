@@ -37,6 +37,10 @@ import { ScrutinResultCard } from "@/components/votes/ScrutinResultCard";
 import { ScrutinOfficialGroups } from "@/components/votes/ScrutinOfficialGroups";
 import { GroupPositions } from "@/components/votes/GroupPositions";
 import { ScrutinContext } from "@/components/votes/ScrutinContext";
+import { HistoricalGroupPositions } from "@/components/votes/HistoricalGroupPositions";
+import { HISTORICAL_GROUP_POSITIONS_PUBLIC } from "@/config/historical-positions";
+import { readHistoricalGroupPositions } from "@/lib/data/historical-group-positions";
+import { buildHistoricalPositionsView, planGroupsSection } from "@/lib/votes/historical-positions";
 import type { VotePosition } from "@/types";
 import { SITE_URL } from "@/config/site";
 import { ShareBar } from "@/components/ui/ShareBar";
@@ -266,12 +270,16 @@ export default async function ScrutinPage({ params }: PageProps) {
     notFound();
   }
 
-  const [groupPositions, analysis, officialGroups] = await Promise.all([
+  const [groupPositions, analysis, officialGroups, historicalData] = await Promise.all([
     getScrutinGroupPositions(scrutin.id),
     getScrutinAnalysis(scrutin.id),
     // Official per-group counts only exist for Assemblée nationale scrutins.
     scrutin.chamber === "AN"
       ? getScrutinOfficialGroups(scrutin.id, scrutin.legislature)
+      : Promise.resolve(null),
+    // Dated group counts: read only once the editorial switch is on (src/config/historical-positions.ts).
+    HISTORICAL_GROUP_POSITIONS_PUBLIC && scrutin.chamber === "AN"
+      ? readHistoricalGroupPositions(scrutin.externalId)
       : Promise.resolve(null),
   ]);
 
@@ -304,6 +312,15 @@ export default async function ScrutinPage({ params }: PageProps) {
         scrutin,
       })
     : null;
+  const historicalView = historicalData
+    ? buildHistoricalPositionsView({ legislature: scrutin.legislature, data: historicalData })
+    : null;
+  const groupsPlan = planGroupsSection({
+    enabled: HISTORICAL_GROUP_POSITIONS_PUBLIC,
+    chamber: scrutin.chamber,
+    view: historicalView,
+    hasComputedPositions: groupPositions.length > 0,
+  });
 
   // Public title: policy title iff APPROVED + valid, else official (no leak).
   const view = toPublicTitleView(scrutin);
@@ -568,7 +585,10 @@ export default async function ScrutinPage({ params }: PageProps) {
                 fetchedAt={officialGroups.fetchedAt}
               />
             )}
-            {groupPositions.length > 0 && (
+            {groupsPlan.showHistorical && historicalView && (
+              <HistoricalGroupPositions view={historicalView} scrutinDate={scrutin.votingDate} />
+            )}
+            {groupsPlan.showCurrentAffiliationPositions && (
               <Card>
                 <CardContent className="pt-6">
                   <GroupPositions positions={groupPositions} chamber={scrutin.chamber} />
@@ -576,6 +596,7 @@ export default async function ScrutinPage({ params }: PageProps) {
               </Card>
             )}
             {groupPositions.length === 0 &&
+              !groupsPlan.showHistorical &&
               scrutin.chamber === "AN" &&
               scrutin.legislature !== CURRENT_LEGISLATURE && (
                 <MissingData title="Positions calculées non affichées">
