@@ -206,7 +206,8 @@ describe("SQL de la couche de lecture", () => {
   });
 
   it("s'arrête de lui-même si un droit subsiste ou si la RLS d'une table brute est coupée", () => {
-    expect(statements).toContain("RAISE EXCEPTION");
+    expect(statements).toContain("::int");
+    expect(statements).not.toMatch(/\bDO\s+\$/);
     expect(statements).toContain("relrowsecurity");
   });
 });

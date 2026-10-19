@@ -178,35 +178,36 @@ REVOKE ALL ON TABLE "HistoricalPublishedRun", "HistoricalGroupPositionPublic", "
   FROM PUBLIC, anon, authenticated;
 
 -- 5. Self-check: the script fails if a view is readable by PUBLIC, anon or authenticated, or if row
---    level security has been switched off on a raw table.
-DO $$
-DECLARE
-  v_leak int;
-  v_open int;
-BEGIN
-  SELECT count(*) INTO v_leak
+--    level security has been switched off on a raw table. No DO block here (the SEC-06 guard allows
+--    none outside its own migration): a failed cast of the message to int aborts the transaction and
+--    carries the message in the error text.
+SELECT CASE
+  WHEN n > 0 THEN ('public read views: ' || n || ' privilege(s) left to PUBLIC, anon or authenticated')::int
+  ELSE 0
+END AS "privileges_ok"
+FROM (
+  SELECT count(*) AS n
   FROM pg_class c
-  JOIN pg_namespace n ON n.oid = c.relnamespace
+  JOIN pg_namespace ns ON ns.oid = c.relnamespace
   CROSS JOIN LATERAL aclexplode(COALESCE(c.relacl, acldefault('r', c.relowner))) x
   LEFT JOIN pg_roles r ON r.oid = x.grantee
-  WHERE n.nspname = 'public'
+  WHERE ns.nspname = 'public'
     AND c.relname IN ('HistoricalPublishedRun', 'HistoricalGroupPositionPublic', 'HistoricalScrutinPublicStatus')
-    AND (x.grantee = 0 OR r.rolname IN ('anon', 'authenticated'));
-  IF v_leak > 0 THEN
-    RAISE EXCEPTION 'public read views: % privilege(s) left to PUBLIC, anon or authenticated', v_leak;
-  END IF;
+    AND (x.grantee = 0 OR r.rolname IN ('anon', 'authenticated'))
+) leak;
 
-  SELECT count(*) INTO v_open
+SELECT CASE
+  WHEN n > 0 THEN ('public read views: row level security is off on ' || n || ' raw table(s)')::int
+  ELSE 0
+END AS "rls_ok"
+FROM (
+  SELECT count(*) AS n
   FROM pg_class c
-  JOIN pg_namespace n ON n.oid = c.relnamespace
-  WHERE n.nspname = 'public'
+  JOIN pg_namespace ns ON ns.oid = c.relnamespace
+  WHERE ns.nspname = 'public'
     AND c.relname IN ('ScrutinOrganPosition', 'HistoricalResolutionRun', 'HistoricalRunSnapshotPin',
                       'OfficialSourceSnapshot', 'SnapshotDecision', 'ScrutinCountCheck', 'RunExclusion')
-    AND NOT c.relrowsecurity;
-  IF v_open > 0 THEN
-    RAISE EXCEPTION 'public read views: row level security is off on % raw table(s)', v_open;
-  END IF;
-END
-$$;
+    AND NOT c.relrowsecurity
+) open_tables;
 
 COMMIT;
