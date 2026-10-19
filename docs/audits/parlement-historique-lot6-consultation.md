@@ -138,8 +138,9 @@ matérialisait toutes les positions (102 ms) : réécrite avant livraison.
    écrite (`HistoricalPositionsMethodology`). Elle ne s'affiche que si l'interrupteur est allumé,
    pour que la page ne décrive jamais un bloc absent du site. À relire par un humain avant
    activation.
-3. **Définition des non-votants** : le texte dit « ils n'ont pas pris part au vote ». À confirmer
-   contre la documentation de l'Assemblée.
+3. **Non-votants** : aucune définition officielle trouvée en recherche rapide (à confirmer dans la
+   documentation de l'Assemblée). Le bloc et la méthodologie disent seulement que PoliGraph reprend
+   le classement de l'Assemblée sans l'interpréter.
 4. **Relecture humaine d'un échantillon** : une trentaine de scrutins, dont des discordants, des
    groupes renommés de la 16e (sigle SOC) et des scrutins aux votes exclus.
 5. **Redondance avec le décompte officiel par groupe** : pour les scrutins recoupés, les deux

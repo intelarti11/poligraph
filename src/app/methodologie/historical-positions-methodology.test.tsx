@@ -13,29 +13,47 @@ describe("méthodologie des votes de groupe à la date du scrutin", () => {
     vi.resetModules();
   });
 
-  it("nomme les trois notions et refuse la position majoritaire", () => {
-    const { container } = render(<HistoricalPositionsMethodology />);
+  it("répond aux quatre questions, dans l'ordre", () => {
+    render(<HistoricalPositionsMethodology />);
 
-    expect(
-      screen.getByRole("heading", { level: 2, name: "Votes des groupes à la date du scrutin" })
-    ).toBeInTheDocument();
-    expect(container.textContent).toMatch(/publié par l'Assemblée, nom par nom/);
-    expect(container.textContent).toMatch(/addition faite par PoliGraph/);
-    expect(container.textContent).toMatch(/ne calcule aucune position majoritaire/);
-    expect(container.textContent).toMatch(/groupe du référentiel|référentiel de l'Assemblée/);
+    const headings = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+    expect(headings).toEqual([
+      "Que montre le tableau ?",
+      "D'où viennent les chiffres ?",
+      "Pourquoi des chiffres peuvent manquer",
+      "Ce que ces chiffres ne permettent pas de conclure",
+    ]);
+  });
+
+  it("refuse la position majoritaire et garde l'exemple « pour 12, contre 3 »", () => {
+    const { container } = render(<HistoricalPositionsMethodology />);
+    const text = container.textContent ?? "";
+
+    expect(text).toMatch(/n'en calcule\s*aucune/);
+    expect(text).toMatch(/pour 12, contre 3/);
+    expect(text).toMatch(/groupe auquel chaque député appartenait le jour du vote/);
+  });
+
+  it("n'affirme ni certitude absolue ni définition officielle des non-votants", () => {
+    const { container } = render(<HistoricalPositionsMethodology />);
+    const text = container.textContent ?? "";
+
+    expect(text).not.toMatch(/sans doute possible|ne peuvent pas être juste|figées/);
+    expect(text).toMatch(/reprend le classement de l'Assemblée sans\s*l'interpréter/);
+    expect(text).toMatch(/pas la date de publication/);
   });
 
   it("couvre chaque état où le tableau manque", () => {
     render(<HistoricalPositionsMethodology />);
 
     for (const title of [
-      "Totaux qui ne concordent pas",
-      "Totaux impossibles à comparer",
-      "Vote qui ne peut pas être rattaché",
-      "Groupe sans vote attesté",
-      "Non-inscrits",
-      "Groupes renommés",
-      "Pas de données",
+      "Les totaux ne concordent pas",
+      "Les totaux ne peuvent pas être comparés",
+      "Le groupe d'un député est incertain",
+      "Un groupe sans vote pour, contre ou abstention",
+      "Les non-inscrits",
+      "Un groupe renommé",
+      "Pas de données pour ce scrutin",
     ]) {
       expect(screen.getByText(title)).toBeInTheDocument();
     }

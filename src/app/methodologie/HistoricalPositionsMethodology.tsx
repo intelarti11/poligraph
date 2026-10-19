@@ -2,41 +2,41 @@ import Link from "next/link";
 
 export const HISTORICAL_POSITIONS_SECTION_ID = "votes-historiques-des-groupes";
 
-const CASES: { title: string; text: string }[] = [
+const MISSING_CASES: { title: string; text: string }[] = [
   {
-    title: "Totaux qui ne concordent pas",
-    text: "Quand la somme des votes individuels diffère du résultat publié par l'Assemblée pour ce scrutin, aucun tableau n'est affiché. Les deux séries ne peuvent pas être juste en même temps, et PoliGraph ne tranche pas.",
+    title: "Les totaux ne concordent pas",
+    text: "La somme des votes individuels diffère du résultat publié par l'Assemblée pour ce scrutin. Un écart peut venir d'un classement ou d'un périmètre différent. PoliGraph ne peut pas le réconcilier avec assez de certitude, et n'affiche aucun tableau.",
   },
   {
-    title: "Totaux impossibles à comparer",
-    text: "Si le résultat officiel du scrutin n'est pas exploitable, le contrôle n'a pas lieu et rien n'est affiché non plus. Le message le distingue du cas précédent.",
+    title: "Les totaux ne peuvent pas être comparés",
+    text: "Le résultat officiel du scrutin n'est pas exploitable, donc le contrôle n'a pas lieu. Rien n'est affiché, et le message le distingue du cas précédent.",
   },
   {
-    title: "Vote qui ne peut pas être rattaché",
-    text: "Si deux sources se contredisent sur le groupe d'un député ce jour-là, son vote n'est compté dans aucun groupe. Le groupe concerné n'est pas présenté, et le nombre de votes laissés de côté est indiqué.",
+    title: "Le groupe d'un député est incertain",
+    text: "Les données de l'Assemblée donnent des groupes contradictoires, ou aucun groupe, pour un député à cette date. Son vote n'est compté dans aucun groupe, le groupe concerné n'est pas présenté, et le nombre de votes laissés de côté est indiqué.",
   },
   {
-    title: "Groupe sans vote attesté",
-    text: "Un groupe dont aucun membre n'a un vote pour, contre ou abstention publié figure dans la liste des groupes non présentés, avec cette raison.",
+    title: "Un groupe sans vote pour, contre ou abstention",
+    text: "Tous les membres du groupe sont classés non-votants, ou aucun vote n'est enregistré pour lui. Il figure dans la liste des groupes non présentés, avec cette raison.",
   },
   {
-    title: "Non-inscrits",
-    text: "Les députés non inscrits ne forment pas un groupe. Leurs votes ne sont pas additionnés et le tableau le mentionne.",
+    title: "Les non-inscrits",
+    text: "Les députés non inscrits n'appartiennent à aucun groupe, il n'y a donc pas de ligne pour eux. Leurs votes ne disparaissent pas du scrutin : ils sont dans le résultat officiel, et le nombre de votes concernés est mentionné sous le tableau.",
   },
   {
-    title: "Groupes renommés",
-    text: "Quand deux références de l'Assemblée portent le même sigle dans une législature (un groupe renommé en cours de route, par exemple), chacune a sa ligne. PoliGraph n'affirme pas qu'il s'agit du même groupe.",
+    title: "Un groupe renommé",
+    text: "Quand deux références de l'Assemblée portent le même sigle dans une législature, chacune a sa ligne. PoliGraph n'affirme pas qu'il s'agit du même groupe.",
   },
   {
-    title: "Pas de données",
-    text: "Pour une législature non couverte, ou un scrutin sans données contrôlées, le bloc le dit. Ce n'est pas une absence de vote.",
+    title: "Pas de données pour ce scrutin",
+    text: "La législature n'est pas couverte, ou aucune donnée contrôlée n'existe pour ce scrutin. Le bloc le dit. Ce n'est pas une absence de vote.",
   },
 ];
 
 /**
  * Methodology of the dated group counts on the scrutin page. Rendered by the methodology page only
  * while HISTORICAL_GROUP_POSITIONS_PUBLIC is on, so the page never describes a block the site does
- * not show.
+ * not show. Four questions, in the order a reader asks them.
  */
 export function HistoricalPositionsMethodology() {
   return (
@@ -51,40 +51,45 @@ export function HistoricalPositionsMethodology() {
       >
         Votes des groupes à la date du scrutin
       </h2>
+
+      <h3 className="text-xl font-display font-semibold mb-3">Que montre le tableau ?</h3>
       <p className="text-muted-foreground mb-4">
-        Sur la page d{"'"}un scrutin public de l{"'"}Assemblée nationale, PoliGraph additionne les
-        votes de chaque député selon le groupe auquel il appartenait le jour du vote : pour, contre,
-        abstention, non-votants. Les législatures concernées sont les 15e, 16e et 17e. Le groupe est
-        celui du référentiel de l{"'"}Assemblée à cette date, pas celui que le député occupe aujourd
+        Pour un scrutin public de l{"'"}Assemblée nationale (15e, 16e et 17e législatures),
+        PoliGraph retrouve le groupe auquel chaque député appartenait le jour du vote, puis compte
+        combien de membres de chaque groupe ont voté pour, contre, se sont abstenus ou sont classés
+        non-votants. Le groupe est celui de cette date, pas celui que le député occupe aujourd
         {"'"}hui.
       </p>
-
-      <h3 className="text-xl font-display font-semibold mb-3">
-        Ce que le tableau est, et n{"'"}est pas
-      </h3>
-      <p className="text-muted-foreground mb-4">
-        Le vote de chaque député est publié par l{"'"}Assemblée, nom par nom. Le décompte par groupe
-        affiché plus haut sur la page est publié lui aussi par l{"'"}Assemblée. Ce tableau-ci est
-        autre chose : une addition faite par PoliGraph, à partir des votes individuels et des
-        groupes à la date du scrutin. PoliGraph ne calcule aucune position majoritaire. « Pour 12,
-        contre 3 » décrit un groupe divisé, pas une décision du groupe.
-      </p>
       <p className="text-muted-foreground mb-8">
-        Ces chiffres ne servent pas à qualifier le vote d{"'"}un député en particulier. Les
-        non-votants sont comptés à part, ils ne sont rangés ni parmi les pour, ni parmi les contre,
-        ni parmi les abstentions.
+        Pour les non-votants, PoliGraph reprend le classement de l{"'"}Assemblée sans l{"'"}
+        interpréter : il ne dit pas si le député était absent, ou s{"'"}il n{"'"}a pas voulu voter.
+      </p>
+
+      <h3 className="text-xl font-display font-semibold mb-3">D{"'"}où viennent les chiffres ?</h3>
+      <p className="text-muted-foreground mb-8">
+        De deux jeux de données ouverts de l{"'"}Assemblée nationale : les scrutins, avec le vote de
+        chaque député, et les groupes et mandats des députés, avec leurs dates. PoliGraph travaille
+        sur des versions identifiées de ces fichiers, contrôlées puis conservées, pour que chaque
+        chiffre puisse être revérifié. Sous le tableau, la date indiquée est celle où PoliGraph a lu
+        le fichier des scrutins, pas la date de publication par l{"'"}Assemblée. Pour les autres
+        règles de sourcing, voir{" "}
+        <Link href="/sources" className="text-primary hover:underline">
+          Sources et principes éditoriaux
+        </Link>
+        .
       </p>
 
       <h3 className="text-xl font-display font-semibold mb-3">
-        Quand le tableau est incomplet ou absent
+        Pourquoi des chiffres peuvent manquer
       </h3>
       <p className="text-muted-foreground mb-4">
-        PoliGraph compare d{"'"}abord la somme des votes individuels au résultat officiel du
-        scrutin. Un groupe n{"'"}est présenté que si ses votes sont tous attestés et rattachés sans
-        doute possible. Sinon le tableau est partiel ou absent, et la raison est écrite.
+        PoliGraph compare d{"'"}abord la somme des votes individuels au résultat officiel. Un groupe
+        n{"'"}est présenté que lorsque les sources concordent et que ces contrôles sont satisfaits.
+        Sinon, PoliGraph préfère ne rien afficher plutôt que risquer une attribution erronée, et
+        écrit la raison.
       </p>
       <dl className="mb-8 space-y-3">
-        {CASES.map(({ title, text }) => (
+        {MISSING_CASES.map(({ title, text }) => (
           <div key={title}>
             <dt className="font-medium">{title}</dt>
             <dd className="text-sm text-muted-foreground">{text}</dd>
@@ -92,16 +97,14 @@ export function HistoricalPositionsMethodology() {
         ))}
       </dl>
 
-      <h3 className="text-xl font-display font-semibold mb-3">Sources</h3>
+      <h3 className="text-xl font-display font-semibold mb-3">
+        Ce que ces chiffres ne permettent pas de conclure
+      </h3>
       <p className="text-muted-foreground">
-        Deux jeux de données ouverts de l{"'"}Assemblée nationale : les scrutins avec le vote de
-        chaque député, et le référentiel des acteurs et des organes avec leurs dates d{"'"}
-        appartenance. Les archives sont figées et contrôlées avant toute lecture. La date de
-        consultation figure sous chaque tableau. Pour les autres règles de sourcing, voir{" "}
-        <Link href="/sources" className="text-primary hover:underline">
-          Sources et principes éditoriaux
-        </Link>
-        .
+        Ils ne donnent pas la position officielle d{"'"}un groupe, et PoliGraph n{"'"}en calcule
+        aucune. Ils ne disent pas non plus que tous les membres d{"'"}un groupe ont voté de la même
+        façon : « pour 12, contre 3 » décrit un groupe partagé, pas une décision collective. Ils ne
+        qualifient pas le vote d{"'"}un député en particulier.
       </p>
     </section>
   );
