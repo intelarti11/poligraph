@@ -134,10 +134,11 @@ describe("frontière de lecture des positions historiques", () => {
     expect(emitted).toMatch(/Prisma\.sql/);
   });
 
-  it("l'activation publique est une décision éditoriale distincte, éteinte dans cette PR", () => {
-    // Pour activer : décider avec la liste de docs/audits/parlement-historique-lot6-consultation.md,
-    // passer la constante à true et mettre cette attente à jour dans le même changement.
-    expect(HISTORICAL_GROUP_POSITIONS_PUBLIC).toBe(false);
+  it("l'activation publique est une décision éditoriale distincte, prise et consignée", () => {
+    // Allumée le 2026-10-19 après la liste de docs/audits/parlement-historique-lot6-consultation.md.
+    // Pour l'éteindre : passer la constante à false et mettre cette attente à jour dans le même
+    // changement. Le test garde l'interrupteur comme un choix volontaire, jamais un effet de bord.
+    expect(HISTORICAL_GROUP_POSITIONS_PUBLIC).toBe(true);
   });
 });
 

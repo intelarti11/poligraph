@@ -2,8 +2,9 @@
 
 Premier parcours public pour lire ce que les groupes de l'Assemblée nationale ont voté à la date
 d'un scrutin, à partir des runs du lot 5D. Le lot livre l'interface, la couche de lecture et les
-tests. **Il n'active rien** : l'interrupteur est éteint, et le SQL est appliqué mais rien ne le lit encore. La section 6
-est le relevé de préparation de l'activation (audit, recette, cache, GO / NO-GO).
+tests. Le SQL des vues est appliqué sur la base partagée, et l'interrupteur passe à `true` dans la PR
+d'activation. Le déploiement reste un geste manuel depuis le dashboard Vercel. La section 6 est le
+relevé de préparation de l'activation (audit, recette, cache, GO / NO-GO).
 
 ## 1. Audit de l'existant
 
