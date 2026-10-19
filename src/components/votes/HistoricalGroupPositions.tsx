@@ -192,7 +192,10 @@ function HowToRead() {
           Un groupe ne vote pas d&apos;un seul bloc : « Pour 12, Contre 3 » ne dit pas ce que le
           groupe a décidé. PoliGraph n&apos;en tire aucune position majoritaire. Les non-votants
           sont comptés à part, ils n&apos;ont pas pris part au vote.{" "}
-          <a href="/methodologie" className="underline hover:text-primary">
+          <a
+            href="/methodologie#votes-historiques-des-groupes"
+            className="underline hover:text-primary"
+          >
             Méthodologie
           </a>
         </p>

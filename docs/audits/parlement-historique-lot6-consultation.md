@@ -134,8 +134,10 @@ matérialisait toutes les positions (102 ms) : réécrite avant livraison.
 
 1. **Appliquer le SQL** sur la base partagée (geste du propriétaire, par `prisma db execute`, jamais
    `db:push`), puis relire les droits des trois vues.
-2. **Méthodologie** : la page `/methodologie` ne décrit pas encore ces définitions (vote attesté,
-   regroupement, non-votants, exclusions). Le bloc y renvoie : l'écrire d'abord.
+2. **Méthodologie** : la section « Votes des groupes à la date du scrutin » de `/methodologie` est
+   écrite (`HistoricalPositionsMethodology`). Elle ne s'affiche que si l'interrupteur est allumé,
+   pour que la page ne décrive jamais un bloc absent du site. À relire par un humain avant
+   activation.
 3. **Définition des non-votants** : le texte dit « ils n'ont pas pris part au vote ». À confirmer
    contre la documentation de l'Assemblée.
 4. **Relecture humaine d'un échantillon** : une trentaine de scrutins, dont des discordants, des

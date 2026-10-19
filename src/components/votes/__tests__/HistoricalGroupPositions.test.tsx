@@ -114,7 +114,7 @@ describe("HistoricalGroupPositions : décompte présenté", () => {
     ).toBeInTheDocument();
     expect(
       within(details as HTMLElement).getByRole("link", { name: "Méthodologie" })
-    ).toHaveAttribute("href", "/methodologie");
+    ).toHaveAttribute("href", "/methodologie#votes-historiques-des-groupes");
   });
 
   it("source : deux jeux de données de l'Assemblée, date de consultation, signalement", () => {
