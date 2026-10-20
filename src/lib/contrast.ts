@@ -49,6 +49,17 @@ export function getAccessibleTextColor(bgHex: string): "#000000" | "#ffffff" {
   return luminance > 0.179 ? "#000000" : "#ffffff";
 }
 
+/** Opaque color a hex color gives once drawn at `alpha` (0-1) over `base`, e.g. a `${color}20` tint */
+export function tintOver(hex: string, alpha: number, base: string = "#ffffff"): string {
+  const fg = hexToRgb(hex);
+  const bg = hexToRgb(base);
+  const mix = (f: number, b: number) =>
+    Math.round(b + (f - b) * alpha)
+      .toString(16)
+      .padStart(2, "0");
+  return `#${mix(fg.r, bg.r)}${mix(fg.g, bg.g)}${mix(fg.b, bg.b)}`;
+}
+
 /** Darken a hex color by a factor (0-1, where 0 = black) */
 function darkenColor(hex: string, factor: number): string {
   const { r, g, b } = hexToRgb(hex);
@@ -88,4 +99,32 @@ export function ensureContrast(
 
   // Fallback to black if we can't reach the target
   return "#000000";
+}
+
+/**
+ * Lighten a color until it meets the minimum contrast ratio against a dark background.
+ * Counterpart of `ensureContrast` for the dark theme, where party colors are used as text.
+ */
+export function ensureContrastOnDark(
+  color: string,
+  background: string,
+  minRatio: number = 4.5
+): string {
+  if (getContrastRatio(color, background) >= minRatio) {
+    return color;
+  }
+
+  const { r, g, b } = hexToRgb(color);
+  const lift = (v: number, t: number) =>
+    Math.round(v + (255 - v) * t)
+      .toString(16)
+      .padStart(2, "0");
+  for (let t = 0.05; t <= 1; t += 0.05) {
+    const result = `#${lift(r, t)}${lift(g, t)}${lift(b, t)}`;
+    if (getContrastRatio(result, background) >= minRatio) {
+      return result;
+    }
+  }
+
+  return "#ffffff";
 }
