@@ -76,6 +76,18 @@ export default function GovernmentProjectsMethodologyPage() {
             Les trois parts partagent donc le même dénominateur. L{"'"}abstention reste visible,
             mais elle n{"'"}est pas comptée comme un soutien au Gouvernement.
           </p>
+          <p>
+            En 17e législature, le corpus ne comprend actuellement que quelques dizaines de scrutins
+            candidats. Les parts reposent donc sur quelques dizaines d{"'"}observations au plus par
+            groupe, avec un nombre retenu qui varie selon les références disponibles, les données
+            incomplètes et les égalités écartées. Chaque lecture d{"'"}un même projet compte comme
+            un scrutin distinct. Les non-inscrits sont exclus, car ils ne forment pas un groupe
+            parlementaire.
+          </p>
+          <p>
+            La position dominante est calculée par PoliGraph à partir des décomptes officiels par
+            groupe. Elle ne constitue pas une position ou une consigne officielle du groupe.
+          </p>
         </div>
       </section>
 
@@ -108,6 +120,10 @@ export default function GovernmentProjectsMethodologyPage() {
             références sont conservées afin de relier chaque valeur à son scrutin et à son dossier.
           </p>
           <p>
+            Les périodes de validité des organes viennent de l{"'"}archive historique officielle des
+            acteurs, mandats et organes de l{"'"}Assemblée nationale (AMO30).
+          </p>
+          <p>
             <a
               href="https://data.assemblee-nationale.fr/travaux-parlementaires/votes"
               target="_blank"
@@ -132,10 +148,10 @@ export default function GovernmentProjectsMethodologyPage() {
               href={ASSEMBLY_ORGANE_REFS_SOURCE_URL}
               target="_blank"
               rel="noopener noreferrer"
-              aria-label="Données officielles des groupes de l’Assemblée nationale, nouvelle fenêtre"
+              aria-label="Archive historique officielle des acteurs, mandats et organes de l’Assemblée nationale (AMO30), nouvelle fenêtre"
               className="inline-flex min-h-11 items-center text-primary hover:underline"
             >
-              Données officielles des groupes
+              Archive historique des acteurs, mandats et organes (AMO30)
             </a>
           </p>
         </div>

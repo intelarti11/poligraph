@@ -66,25 +66,16 @@ export function GroupCard({ group }: GroupCardProps) {
             </div>
           )}
 
-          {group.stats && group.chamber === "AN" && (
-            <div className="mb-3 grid grid-cols-2 gap-2 text-center">
-              <div>
-                <p className="text-lg font-bold">{Math.round(group.stats.cohesionPct)}%</p>
-                <p className="text-xs text-muted-foreground">Cohésion</p>
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-muted-foreground">Indisponible</p>
-                <p className="text-xs text-muted-foreground">Participation</p>
-              </div>
-            </div>
-          )}
-
           {group.chamber === "AN" && (
             <div className="border-t pt-3">
               <p className="mb-2 text-center text-xs font-medium">
                 Positions sur les projets gouvernementaux
               </p>
-              {group.governmentProjectPositions ? (
+              {group.code === "NI" ? (
+                <p className="text-center text-sm text-muted-foreground">
+                  Non calculé pour les non-inscrits
+                </p>
+              ) : group.governmentProjectPositions ? (
                 <GovernmentProjectPositionBreakdown
                   summary={group.governmentProjectPositions}
                   compact

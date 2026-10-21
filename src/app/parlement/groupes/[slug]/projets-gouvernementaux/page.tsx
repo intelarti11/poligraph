@@ -26,7 +26,9 @@ interface PageProps {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { slug } = await params;
   const group = await getGroupeDetail(slug);
-  if (!group || group.chamber !== "AN") return missingEntityMetadata("Groupe non trouvé");
+  if (!group || group.chamber !== "AN" || group.code === "NI") {
+    return missingEntityMetadata("Groupe non trouvé");
+  }
   return {
     title: "Projets gouvernementaux : " + group.name,
     description:
@@ -73,7 +75,7 @@ function ScrutinRow({ row }: { row: GovernmentProjectPositionRow }) {
 
         {row.position && (
           <p className="mt-3 text-xs text-muted-foreground">
-            Pour : {row.forCount}, abstention : {row.abstainCount}, contre : {row.againstCount}
+            POUR : {row.forCount}, ABSTENTION : {row.abstainCount}, CONTRE : {row.againstCount}
           </p>
         )}
         {row.exclusion && (
@@ -115,7 +117,7 @@ function ScrutinRow({ row }: { row: GovernmentProjectPositionRow }) {
 export default async function GovernmentProjectsPage({ params }: PageProps) {
   const { slug } = await params;
   const group = await getGroupeDetail(slug);
-  if (!group || group.chamber !== "AN") notFound();
+  if (!group || group.chamber !== "AN" || group.code === "NI") notFound();
 
   const data = await getGovernmentProjectPositionsForGroup(group.code);
   if (!data) notFound();

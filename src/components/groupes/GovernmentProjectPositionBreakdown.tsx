@@ -6,9 +6,9 @@ interface GovernmentProjectPositionBreakdownProps {
 }
 
 const POSITIONS = [
-  { key: "POUR", label: "Pour" },
-  { key: "ABSTENTION", label: "Abstention" },
-  { key: "CONTRE", label: "Contre" },
+  { key: "POUR", label: "POUR" },
+  { key: "ABSTENTION", label: "ABSTENTION" },
+  { key: "CONTRE", label: "CONTRE" },
 ] as const;
 
 export function GovernmentProjectPositionBreakdown({

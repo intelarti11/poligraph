@@ -1,9 +1,10 @@
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   getGroupeDetail: vi.fn(),
   getGroupKeyVotes: vi.fn(),
+  getGovernmentProjectPositionsForGroup: vi.fn(async () => null),
   voteCard: vi.fn(),
 }));
 
@@ -12,7 +13,7 @@ vi.mock("@/lib/data/groupes", () => ({
   getGroupKeyVotes: (groupId: string) => mocks.getGroupKeyVotes(groupId),
 }));
 vi.mock("@/lib/data/government-project-positions", () => ({
-  getGovernmentProjectPositionsForGroup: vi.fn(async () => null),
+  getGovernmentProjectPositionsForGroup: mocks.getGovernmentProjectPositionsForGroup,
 }));
 vi.mock("@/components/votes", () => ({
   VoteCard: (props: Record<string, unknown>) => {
@@ -69,5 +70,30 @@ describe("/parlement/groupes/[slug] cartes de votes", () => {
         sourceUrl: "https://www.senat.fr/scrutin-public/2026/scrutin-42.html",
       })
     );
+  });
+
+  it("explique l'absence de position calculée pour les non-inscrits AN", async () => {
+    mocks.getGroupeDetail.mockResolvedValue({
+      id: "group-ni",
+      name: "Non-inscrits",
+      shortName: null,
+      code: "NI",
+      chamber: "AN",
+      color: null,
+      seatCount: 4,
+      stats: [],
+      members: [],
+    });
+    mocks.getGroupKeyVotes.mockResolvedValue([]);
+
+    render(await GroupeDetailPage({ params: Promise.resolve({ slug: "ni" }) }));
+
+    expect(
+      screen.getByText(
+        "Non calculé pour les non-inscrits, qui ne constituent pas un groupe parlementaire."
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Voir les scrutins et les exclusions" })).toBeNull();
+    expect(mocks.getGovernmentProjectPositionsForGroup).not.toHaveBeenCalled();
   });
 });
