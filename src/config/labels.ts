@@ -64,7 +64,9 @@ export const GOVERNMENT_PROJECT_EXCLUSION_LABELS = {
   DOSSIER_LINK_REQUIRES_REVIEW: "Le rattachement au dossier n’est pas confirmé",
   ORIGIN_UNDETERMINED: "L’origine du dossier reste indéterminée",
   ORIGIN_CONFLICT: "Les sources contredisent l’origine gouvernementale",
-  OFFICIAL_SNAPSHOT_DIAGNOSTIC: "La source officielle contient un diagnostic",
+  OFFICIAL_SNAPSHOT_DIAGNOSTIC: "Le décompte importé contient un diagnostic",
+  OFFICIAL_GROUP_COUNTS_WITHHELD:
+    "Les décomptes importés ne peuvent pas être validés avec le référentiel officiel",
   OFFICIAL_GROUPS_MISSING: "Les décomptes officiels des groupes sont absents",
   OFFICIAL_GROUP_TOTALS_INCOMPLETE: "Les décomptes officiels sont incomplets",
   OFFICIAL_GROUP_TOTALS_MISMATCH: "Les décomptes des groupes ne correspondent pas au total",

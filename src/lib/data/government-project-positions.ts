@@ -15,6 +15,7 @@ import {
   type GovernmentProjectPositionSummary,
 } from "@/lib/scrutins/government-project-positions";
 import { getGovernmentScopeExclusion, type ScopeExclusion } from "@/lib/scrutins/government-scope";
+import { officialGroupCountsView } from "@/lib/votes/scrutin-provenance";
 
 export type GovernmentProjectDataExclusion =
   | ScopeExclusion
@@ -22,6 +23,7 @@ export type GovernmentProjectDataExclusion =
   | "OFFICIAL_GROUPS_MISSING"
   | "OFFICIAL_GROUP_TOTALS_INCOMPLETE"
   | "OFFICIAL_GROUP_TOTALS_MISMATCH"
+  | "OFFICIAL_GROUP_COUNTS_WITHHELD"
   | NonNullable<GovernmentProjectPositionResult["exclusion"]>;
 
 export interface GovernmentProjectPositionRow {
@@ -77,52 +79,61 @@ export async function getGovernmentProjectPositionDataset(
   cacheTag("votes", "groupes");
   cacheLife("synced");
 
-  const scrutins = await db.scrutin.findMany({
-    where: {
-      chamber: "AN",
-      legislature,
-      OR: [
-        { title: { startsWith: "l'ensemble du projet", mode: "insensitive" } },
-        { title: { startsWith: "l’ensemble du projet", mode: "insensitive" } },
-      ],
-    },
-    select: {
-      externalId: true,
-      officialDossierRef: true,
-      slug: true,
-      title: true,
-      votingDate: true,
-      sourceUrl: true,
-      codeTypeVote: true,
-      libelleTypeVote: true,
-      votesFor: true,
-      votesAgainst: true,
-      votesAbstain: true,
-      officialGroupsIssues: true,
-      officialGroupsSourceFetchedAt: true,
-      officialGroupCounts: {
-        select: {
-          organeRef: true,
-          forCount: true,
-          againstCount: true,
-          abstainCount: true,
-          majorityPosition: true,
-          issues: true,
+  const [scrutins, organes] = await Promise.all([
+    db.scrutin.findMany({
+      where: {
+        chamber: "AN",
+        legislature,
+        OR: [
+          { title: { startsWith: "l'ensemble du projet", mode: "insensitive" } },
+          { title: { startsWith: "l’ensemble du projet", mode: "insensitive" } },
+        ],
+      },
+      select: {
+        externalId: true,
+        officialDossierRef: true,
+        slug: true,
+        title: true,
+        votingDate: true,
+        sourceUrl: true,
+        codeTypeVote: true,
+        libelleTypeVote: true,
+        votesFor: true,
+        votesAgainst: true,
+        votesAbstain: true,
+        officialGroupsHash: true,
+        officialGroupsIssues: true,
+        officialGroupsSourceFetchedAt: true,
+        officialGroupCounts: {
+          select: {
+            organeRef: true,
+            memberCount: true,
+            forCount: true,
+            againstCount: true,
+            abstainCount: true,
+            nonVoterCount: true,
+            majorityPosition: true,
+            issues: true,
+          },
+        },
+        dossierLegislatif: {
+          select: {
+            externalId: true,
+            slug: true,
+            title: true,
+            sourceUrl: true,
+            origin: true,
+            timeline: true,
+          },
         },
       },
-      dossierLegislatif: {
-        select: {
-          externalId: true,
-          slug: true,
-          title: true,
-          sourceUrl: true,
-          origin: true,
-          timeline: true,
-        },
-      },
-    },
-    orderBy: [{ votingDate: "desc" }, { externalId: "desc" }],
-  });
+      orderBy: [{ votingDate: "desc" }, { externalId: "desc" }],
+    }),
+    db.anOrgan.findMany({
+      where: { legislature },
+      select: { organeRef: true, label: true, abbreviation: true, startDate: true, endDate: true },
+    }),
+  ]);
 
   const officialDossierRefs = [
     ...new Set(
@@ -181,17 +192,29 @@ export async function getGovernmentProjectPositionDataset(
       votesAgainst: scrutin.votesAgainst,
       votesAbstain: scrutin.votesAbstain,
     });
+    const officialView = officialGroupCountsView({
+      snapshot: {
+        imported: scrutin.officialGroupsHash !== null,
+        issues: scrutin.officialGroupsIssues,
+        rows: scrutin.officialGroupCounts,
+      },
+      organes,
+      scrutin,
+    });
     const commonExclusion: GovernmentProjectDataExclusion | null = scopeExclusion
       ? scopeExclusion
       : hasJsonDiagnostics(scrutin.officialGroupsIssues)
         ? "OFFICIAL_SNAPSHOT_DIAGNOSTIC"
-        : totalsExclusion;
+        : (totalsExclusion ??
+          (officialView.kind === "shown" ? null : "OFFICIAL_GROUP_COUNTS_WITHHELD"));
 
     return { scrutin, dossier, commonExclusion, scopeExclusion };
   });
 
   const groups: Record<string, GovernmentProjectGroupData> = {};
   for (const group of getAllGroupConfigs("AN")) {
+    // Non-inscrits are a status, not a collective parliamentary group.
+    if (group.code === "NI") continue;
     const rows: GovernmentProjectPositionRow[] = prepared.map(
       ({ scrutin, dossier, commonExclusion }) => {
         const result = commonExclusion
@@ -204,7 +227,7 @@ export async function getGovernmentProjectPositionDataset(
             }
           : evaluateOfficialGroupPosition(
               scrutin.officialGroupCounts,
-              getAssemblyGroupOrganeRefs(group.code, legislature, scrutin.votingDate)
+              getAssemblyGroupOrganeRefs(group.code, legislature)
             );
         return {
           scrutin: {
