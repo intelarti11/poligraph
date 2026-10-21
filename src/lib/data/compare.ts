@@ -9,7 +9,6 @@ import type { MandateType } from "@/types";
 import {
   getPublicFactCheckWhere,
   PUBLIC_PARTY_WHERE,
-  PUBLIC_POLITICIAN_PUBLICATION_STATUS,
   PUBLIC_POLITICIAN_WHERE,
 } from "@/lib/api/public-contract";
 import {
@@ -571,101 +570,6 @@ async function getPartyForComparison(slugOrId: string) {
   };
 }
 
-// Raw SQL for party-level majority-position comparison
-interface PartyMajorityVoteRow {
-  scrutinId: string;
-  title: string;
-  slug: string | null;
-  votingDate: Date;
-  majorityPosition: string;
-  pour: bigint;
-  contre: bigint;
-  abstention: bigint;
-}
-
-export async function getPartyVoteComparison(leftPartyId: string, rightPartyId: string) {
-  "use cache";
-  cacheTag("votes");
-  cacheLife("synced");
-
-  const [leftRows, rightRows] = await Promise.all([
-    db.$queryRaw<PartyMajorityVoteRow[]>`
-      SELECT
-        v."scrutinId" as "scrutinId",
-        s.title,
-        s.slug,
-        s."votingDate" as "votingDate",
-        SUM(CASE WHEN v.position = 'POUR' THEN 1 ELSE 0 END)::bigint as "pour",
-        SUM(CASE WHEN v.position = 'CONTRE' THEN 1 ELSE 0 END)::bigint as "contre",
-        SUM(CASE WHEN v.position = 'ABSTENTION' THEN 1 ELSE 0 END)::bigint as "abstention",
-        CASE
-          WHEN SUM(CASE WHEN v.position = 'POUR' THEN 1 ELSE 0 END) >= SUM(CASE WHEN v.position = 'CONTRE' THEN 1 ELSE 0 END)
-           AND SUM(CASE WHEN v.position = 'POUR' THEN 1 ELSE 0 END) >= SUM(CASE WHEN v.position = 'ABSTENTION' THEN 1 ELSE 0 END)
-          THEN 'POUR'
-          WHEN SUM(CASE WHEN v.position = 'CONTRE' THEN 1 ELSE 0 END) >= SUM(CASE WHEN v.position = 'ABSTENTION' THEN 1 ELSE 0 END)
-          THEN 'CONTRE'
-          ELSE 'ABSTENTION'
-        END as "majorityPosition"
-      FROM "Vote" v
-      JOIN "Politician" pol ON v."politicianId" = pol.id
-      JOIN "Scrutin" s ON v."scrutinId" = s.id
-      WHERE pol."currentPartyId" = ${leftPartyId}
-        AND pol."publicationStatus" = ${PUBLIC_POLITICIAN_PUBLICATION_STATUS}
-        AND v.position IN ('POUR', 'CONTRE', 'ABSTENTION')
-      GROUP BY v."scrutinId", s.title, s.slug, s."votingDate"
-    `,
-    db.$queryRaw<PartyMajorityVoteRow[]>`
-      SELECT
-        v."scrutinId" as "scrutinId",
-        s.title,
-        s.slug,
-        s."votingDate" as "votingDate",
-        SUM(CASE WHEN v.position = 'POUR' THEN 1 ELSE 0 END)::bigint as "pour",
-        SUM(CASE WHEN v.position = 'CONTRE' THEN 1 ELSE 0 END)::bigint as "contre",
-        SUM(CASE WHEN v.position = 'ABSTENTION' THEN 1 ELSE 0 END)::bigint as "abstention",
-        CASE
-          WHEN SUM(CASE WHEN v.position = 'POUR' THEN 1 ELSE 0 END) >= SUM(CASE WHEN v.position = 'CONTRE' THEN 1 ELSE 0 END)
-           AND SUM(CASE WHEN v.position = 'POUR' THEN 1 ELSE 0 END) >= SUM(CASE WHEN v.position = 'ABSTENTION' THEN 1 ELSE 0 END)
-          THEN 'POUR'
-          WHEN SUM(CASE WHEN v.position = 'CONTRE' THEN 1 ELSE 0 END) >= SUM(CASE WHEN v.position = 'ABSTENTION' THEN 1 ELSE 0 END)
-          THEN 'CONTRE'
-          ELSE 'ABSTENTION'
-        END as "majorityPosition"
-      FROM "Vote" v
-      JOIN "Politician" pol ON v."politicianId" = pol.id
-      JOIN "Scrutin" s ON v."scrutinId" = s.id
-      WHERE pol."currentPartyId" = ${rightPartyId}
-        AND pol."publicationStatus" = ${PUBLIC_POLITICIAN_PUBLICATION_STATUS}
-        AND v.position IN ('POUR', 'CONTRE', 'ABSTENTION')
-      GROUP BY v."scrutinId", s.title, s.slug, s."votingDate"
-    `,
-  ]);
-
-  const rightMap = new Map(rightRows.map((r) => [r.scrutinId, r]));
-
-  return leftRows
-    .filter((l) => rightMap.has(l.scrutinId))
-    .map((l) => {
-      const r = rightMap.get(l.scrutinId)!;
-      return {
-        scrutinId: l.scrutinId,
-        title: l.title,
-        slug: l.slug,
-        votingDate: l.votingDate,
-        leftPosition: l.majorityPosition,
-        rightPosition: r.majorityPosition,
-        leftPour: Number(l.pour),
-        leftContre: Number(l.contre),
-        leftAbstention: Number(l.abstention),
-        rightPour: Number(r.pour),
-        rightContre: Number(r.contre),
-        rightAbstention: Number(r.abstention),
-      };
-    });
-}
-
-export type PartyVoteComparisonRow = Awaited<ReturnType<typeof getPartyVoteComparison>>[number];
-
 async function loadPartyPair(slugA: string, slugB: string) {
   const [left, right] = await Promise.all([
     getPartyForComparison(slugA),
@@ -673,9 +577,9 @@ async function loadPartyPair(slugA: string, slugB: string) {
   ]);
   if (!left || !right) return null;
 
-  const voteComparison = await getPartyVoteComparison(left.party.id, right.party.id);
-
-  return { left, right, voteComparison };
+  // Pas de concordance de votes entre partis : le parti actuel des élus ne dit rien du parti
+  // au jour du vote (docs/audits/parlement-historique-lot0.md, R9).
+  return { left, right };
 }
 
 // ---------------------------------------------------------------------------

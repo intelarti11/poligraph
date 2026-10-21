@@ -12,9 +12,11 @@
  * `COMMUNE_DATA_SYNC_KEY`; any surface rendering a population reads that date
  * instead of announcing a vintage.
  *
- * A single import fills all ~35,000 communes in one pass, so only one vintage
- * exists at a time: provenance is global, not per row. Should several vintages
- * ever coexist, this would need a `populationYear` column instead.
+ * Since lot 1.7 the dated series lives in `CommunePopulation`
+ * (`scripts/sync-populations.ts`, sources in src/config/populations-reference.ts),
+ * which also aligns `Commune.population` on the municipal population in force.
+ * Surfaces that read the series print its vintage; this geo.api.gouv.fr provenance
+ * remains the fallback when a commune has no series row.
  */
 
 export const COMMUNE_DATA_SYNC_KEY = "communes-geo-api";

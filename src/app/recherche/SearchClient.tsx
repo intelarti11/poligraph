@@ -234,13 +234,19 @@ export function SearchClient() {
       fetch(`/api/search/global?q=${encodeURIComponent(query)}`, {
         signal: controller.signal,
       })
-        .then((r) => r.json())
+        .then((r) => {
+          // An error response (429, 5xx) is JSON without the result lists: never feed it to the UI.
+          if (!r.ok) throw new Error(`search failed: ${r.status}`);
+          return r.json();
+        })
         .then((data: SearchResults) => {
           setResults(data);
           setLoading(false);
         })
         .catch((err) => {
-          if (err.name !== "AbortError") setLoading(false);
+          if (err.name === "AbortError") return;
+          setResults(null);
+          setLoading(false);
         });
     }, 250);
 

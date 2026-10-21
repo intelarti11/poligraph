@@ -12,6 +12,7 @@ import {
   getConvictionOnlyWhere,
   getDocumentaryAffairWhere,
 } from "@/lib/affairs/public-filters";
+import { CURRENT_LEGISLATURE } from "@/config/scrutin-importance";
 import { SITE_URL } from "./config";
 import type { RecentlyPosted } from "./dedup";
 import { wasRecentlyPosted } from "./dedup";
@@ -122,6 +123,9 @@ async function divisiveVotes(recent: RecentlyPosted): Promise<TweetDraft[]> {
     const entityId = `votes:${s.slug || s.id}`;
     if (wasRecentlyPosted(recent, entityId)) continue;
     if (s.votes.length < 50) continue;
+    // Le groupe lu ici est le groupe actuel du député : pas pour un scrutin d'une
+    // autre législature (dissolution dans la fenêtre de 30 jours).
+    if (s.chamber === "AN" && s.legislature !== CURRENT_LEGISLATURE) continue;
 
     // Aggregate votes by parliamentary group
     const groupVotes = new Map<

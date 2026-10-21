@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mandateTerritoireHref } from "../mandate-link";
+import { mandateDecisionsHref, mandateTerritoireHref } from "../mandate-link";
 
 const LINKED = { commune: { population: 46_000 } };
 
@@ -49,6 +49,33 @@ describe("mandateTerritoireHref", () => {
     ).toBeNull();
     expect(
       mandateTerritoireHref({ isCurrent: true, constituency: "Rhône (3)", localData: LINKED })
+    ).toBeNull();
+  });
+});
+
+describe("mandateDecisionsHref", () => {
+  const withDecisions = { commune: { population: 1200, decisionsCommuneId: "35238" } };
+
+  it("links a municipal mandate, current or past, once a decision is published", () => {
+    expect(mandateDecisionsHref({ type: "MAIRE", localData: withDecisions })).toBe(
+      "/territoires/communes/35238/decisions"
+    );
+    expect(mandateDecisionsHref({ type: "CONSEILLER_MUNICIPAL", localData: withDecisions })).toBe(
+      "/territoires/communes/35238/decisions"
+    );
+  });
+
+  it("gives no link while the commune has no published decision", () => {
+    expect(
+      mandateDecisionsHref({ type: "MAIRE", localData: { commune: { population: 1200 } } })
+    ).toBeNull();
+    expect(mandateDecisionsHref({ type: "MAIRE", localData: null })).toBeNull();
+  });
+
+  it("never links a non-municipal mandate", () => {
+    expect(mandateDecisionsHref({ type: "DEPUTE", localData: withDecisions })).toBeNull();
+    expect(
+      mandateDecisionsHref({ type: "MAIRE_ARRONDISSEMENT", localData: withDecisions })
     ).toBeNull();
   });
 });

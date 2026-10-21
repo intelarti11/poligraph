@@ -11,10 +11,19 @@ import {
   QuiDecideSection,
 } from "@/components/territoires/CommuneSections";
 import { getCommuneDossier } from "@/lib/data/territoires";
+import { getCommuneElections } from "@/lib/data/territoire-elections";
+import { getCommuneChiffres } from "@/lib/data/territoire-chiffres";
+import { hasChiffres, TerritoireChiffres } from "@/components/territoires/TerritoireChiffres";
+import { communeScrutins } from "@/lib/territoires/commune-elections";
 import { missingEntityMetadata } from "@/lib/seo/not-found-metadata";
 import { territoireCommuneRobotsMetadata } from "@/lib/seo/territoire-robots";
 import { communeDescription, communeTitle } from "@/lib/territoires/commune-display";
-import { territoireCommunePath } from "@/lib/territoires/paths";
+import {
+  territoireCommuneDecisionsPath,
+  territoireCommuneElectionsPath,
+  territoireCommunePath,
+  territoireDepartementPath,
+} from "@/lib/territoires/paths";
 
 // ISR: 24 h backstop; freshness comes from the reader's cache tags.
 export const revalidate = 86400;
@@ -49,8 +58,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
-const ANCHORS = [
-  { href: "#qui-decide", label: "Qui décide ici" },
+const ANCHOR_ELUS = { href: "#qui-decide", label: "Élus et institutions" };
+const ANCHOR_CHIFFRES = { href: "#chiffres", label: "Le territoire en chiffres" };
+const ANCHORS_AFTER = [
   { href: "#elections", label: "Élections" },
   { href: "#sources", label: "Sources et réutilisation" },
 ];
@@ -61,6 +71,26 @@ export default async function TerritoireCommunePage({ params }: PageProps) {
   if (!dossier) notFound();
 
   const { identity } = dossier;
+  // The dossier knows 2026 and the presidential only: the earlier municipales come from the
+  // elections reader, so the count and the lines match the dedicated page.
+  const [elections, chiffres] = await Promise.all([
+    getCommuneElections(identity.inseeCode),
+    getCommuneChiffres(identity.inseeCode),
+  ]);
+  const scrutins = elections?.scrutins ?? communeScrutins(dossier.elections, identity.inseeCode);
+  // No link to a sub-page while it has nothing to show (plan §7).
+  const hasElections = scrutins.length > 0;
+  const anchors = [
+    ANCHOR_ELUS,
+    ...(hasChiffres(chiffres) ? [ANCHOR_CHIFFRES] : []),
+    ...ANCHORS_AFTER,
+    ...(hasElections
+      ? [{ href: territoireCommuneElectionsPath(identity.inseeCode), label: "Tous les scrutins" }]
+      : []),
+    ...(dossier.decisionsPubliees > 0
+      ? [{ href: territoireCommuneDecisionsPath(identity.inseeCode), label: "Décisions" }]
+      : []),
+  ];
   const departmentName = identity.department.name ?? identity.territoireHorsRegion?.name ?? null;
 
   return (
@@ -74,7 +104,7 @@ export default async function TerritoireCommunePage({ params }: PageProps) {
             ? {
                 name: departmentName,
                 ...(identity.department.slug && {
-                  url: `${SITE_URL}/departements/${identity.department.slug}`,
+                  url: `${SITE_URL}${territoireDepartementPath(identity.department.slug)}`,
                 }),
               }
             : undefined
@@ -85,11 +115,11 @@ export default async function TerritoireCommunePage({ params }: PageProps) {
       <div className="container mx-auto max-w-6xl px-4 py-6 md:py-8">
         <nav aria-label="Sections de la page" className="mb-6">
           <ul className="flex flex-wrap gap-2">
-            {ANCHORS.map((a) => (
+            {anchors.map((a) => (
               <li key={a.href}>
                 <a
                   href={a.href}
-                  className="inline-flex min-h-11 items-center rounded-full border bg-card px-4 text-sm font-medium hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                  className="inline-flex min-h-11 items-center rounded-full border border-primary/30 bg-card px-4 text-sm font-medium text-primary hover:bg-primary/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                 >
                   {a.label}
                 </a>
@@ -102,7 +132,8 @@ export default async function TerritoireCommunePage({ params }: PageProps) {
           <div className="min-w-0 space-y-6">
             <QuiDecideSection dossier={dossier} />
             <ParlementSection dossier={dossier} />
-            <ElectionsSection dossier={dossier} />
+            {hasChiffres(chiffres) && <TerritoireChiffres chiffres={chiffres} />}
+            <ElectionsSection dossier={dossier} scrutins={scrutins} />
           </div>
           <CommuneSidebar dossier={dossier} />
         </div>

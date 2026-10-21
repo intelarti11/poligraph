@@ -44,9 +44,14 @@ export function CoverageSummary({
   return (
     <div className="grid divide-y rounded-2xl border bg-card md:grid-cols-3 md:divide-x md:divide-y-0">
       {cells.map((cell) => (
-        <div key={cell.title} className="px-5 py-4">
-          <p className="text-[13px] font-bold">{cell.title}</p>
-          <p className="mt-1 text-[13px] text-muted-foreground">{cell.body}</p>
+        <div key={cell.title} className="px-4 py-2.5 md:px-5 md:py-4">
+          <p className="text-[13px] md:font-bold">
+            <span className="font-bold">{cell.title}</span>
+            <span className="md:hidden"> : </span>
+            <span className="text-muted-foreground md:mt-1 md:block md:font-normal">
+              {cell.body}
+            </span>
+          </p>
         </div>
       ))}
     </div>

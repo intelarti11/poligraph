@@ -3,12 +3,14 @@ import { stripMarkdown } from "@/lib/utils";
 import { SITE_URL } from "@/config/site";
 import {
   getAttributedCertaintyLevel,
+  isAccusedInvolvement,
   CERTAINTY_LABELS,
   CERTAINTY_COLORS,
   type CertaintyLevel,
 } from "@/config/certainty";
 import {
   AFFAIR_CATEGORY_LABELS,
+  getAffairStatusLabel,
   INVOLVEMENT_LABELS,
   INVOLVEMENT_COLORS,
   CATEGORY_TO_SUPER,
@@ -18,7 +20,7 @@ import { AffairStatusNotice } from "@/components/affairs/AffairStatusNotice";
 import { CiteAnchor } from "@/components/ui/CiteAnchor";
 import { citeAnchorId } from "@/lib/cite";
 import { getAffairPartyDisplay, type PartyDisplayRef } from "@/lib/affairs/party-display";
-import type { AffairStatus, AffairCategory, Involvement } from "@/types";
+import type { AffairStatus, AffairCategory, Involvement, JurisdictionOrder } from "@/types";
 
 /**
  * Left-border hex per certainty level, distinct from the super-category
@@ -46,6 +48,8 @@ export interface AffairListingCardData {
   status: AffairStatus;
   involvement: Involvement;
   involvementNote: string | null;
+  /** Absent = pénal. Hors du pénal, l'encart dit que la décision n'est pas une condamnation. */
+  jurisdictionOrder?: JurisdictionOrder;
   category: AffairCategory;
   verdictDate: Date | null;
   startDate: Date | null;
@@ -72,6 +76,10 @@ export function AffairListingCard({ affair, retour, resultCount }: AffairListing
   // Charging certainty pill only for the accused; otherwise the involvement
   // badge carries the politician's role, never a status that is not theirs (#383).
   const certainty = getAttributedCertaintyLevel(affair);
+  // Mis en cause hors du pénal : pas de niveau de certitude, mais le statut et la décision
+  // restent les siens.
+  const accused = isAccusedInvolvement(affair.involvement);
+  const nonPenal = accused && certainty === null;
   const superCat = CATEGORY_TO_SUPER[affair.category];
   const detailBase = `/affaires/${affair.slug ?? affair.id}`;
   const detailHref = (() => {
@@ -108,6 +116,10 @@ export function AffairListingCard({ affair, retour, resultCount }: AffairListing
           >
             <span aria-hidden className="inline-block size-1.5 rounded-full bg-current" />
             {CERTAINTY_LABELS[certainty]}
+          </span>
+        ) : nonPenal ? (
+          <span className="inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold bg-slate-100 text-slate-800 dark:bg-slate-800/50 dark:text-slate-300">
+            {getAffairStatusLabel(affair.status, affair.jurisdictionOrder)}
           </span>
         ) : (
           <span
@@ -180,7 +192,7 @@ export function AffairListingCard({ affair, retour, resultCount }: AffairListing
         {AFFAIR_SUPER_CATEGORY_LABELS[superCat]} · {AFFAIR_CATEGORY_LABELS[affair.category]}
       </p>
 
-      {certainty === null && affair.involvementNote && (
+      {!accused && affair.involvementNote && (
         <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
           <span className="font-medium text-foreground">Rôle : </span>
           {affair.involvementNote}
@@ -190,6 +202,7 @@ export function AffairListingCard({ affair, retour, resultCount }: AffairListing
       <AffairStatusNotice
         status={affair.status}
         involvement={affair.involvement}
+        jurisdictionOrder={affair.jurisdictionOrder}
         className="mt-3"
       />
 
@@ -200,7 +213,7 @@ export function AffairListingCard({ affair, retour, resultCount }: AffairListing
       <div className="mt-3 border-t pt-3">
         {/* The sentence belongs to the person prosecuted: never shown on a card
             where the politician is not that person. */}
-        {certainty !== null && affair.sentence && (
+        {accused && affair.sentence && (
           <p className="mb-1 text-sm font-medium text-foreground">{affair.sentence}</p>
         )}
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">

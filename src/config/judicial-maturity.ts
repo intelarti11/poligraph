@@ -23,6 +23,7 @@ const STATUS_TO_MATURITY: Record<AffairStatus, JudicialMaturity> = {
   PROCES_EN_COURS: "PROCEDURE_VALIDEE",
   // Tier 3: Enquete (complaint-stage, no judicial validation)
   PLAINTE_DEPOSEE: "ENQUETE",
+  SIGNALEMENT_PARQUET: "ENQUETE",
   ENQUETE_PRELIMINAIRE: "ENQUETE",
   // Tier 3bis: Instruction close sans mise en examen (see INSTRUCTION_CLOSE doc above)
   INSTRUCTION_CLOTUREE_SANS_MISE_EN_EXAMEN: "INSTRUCTION_CLOSE",
@@ -52,7 +53,9 @@ export function isJudiciallyValidated(status: AffairStatus): boolean {
 export const MATURITY_LABELS: Record<JudicialMaturity, string> = {
   CONDAMNATION: "Condamnation",
   PROCEDURE_VALIDEE: "Procédure validée par un juge",
-  ENQUETE: "Enquête préliminaire",
+  // Le palier couvre trois statuts : un libellé « Enquête préliminaire » affirmerait faux pour
+  // une plainte déposée ou un signalement au parquet.
+  ENQUETE: "Plainte, signalement ou enquête préliminaire",
   INSTRUCTION_CLOSE: "Instruction clôturée sans mise en examen",
   CLOSE_SANS_CONDAMNATION: "Procédure close sans condamnation",
 };

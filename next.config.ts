@@ -12,7 +12,15 @@ const LEGACY_STATS_REDIRECTS = [
   ["participation", "/statistiques/participation"],
 ] as const;
 
+export const HTML_LIMITED_BOTS =
+  /Googlebot|Google-InspectionTool|Storebot-Google|GoogleOther|[\w-]+-Google|Google-[\w-]+|Chrome-Lighthouse|Slurp|DuckDuckBot|baiduspider|yandex|sogou|bitlybot|tumblr|vkShare|quora link preview|redditbot|ia_archiver|Bingbot|BingPreview|applebot|facebookexternalhit|facebookcatalog|Twitterbot|LinkedInBot|Slackbot|Discordbot|WhatsApp|SkypeUriPreview|Yeti|googleweblight/i;
+
 const nextConfig: NextConfig = {
+  // Next 16 streams the metadata of dynamic pages into <body> for every user agent outside this
+  // list, Googlebot included: the government pages then served their <title>, description and
+  // canonical outside <head>, where Google ignores a canonical. Next's default list plus Google's
+  // own crawlers, so they receive the metadata in <head>. Humans keep streamed metadata.
+  htmlLimitedBots: HTML_LIMITED_BOTS,
   serverExternalPackages: ["jsdom"],
   staticPageGenerationTimeout: 120,
   // Content syncs at most once a day and is invalidated on-demand via
@@ -24,7 +32,7 @@ const nextConfig: NextConfig = {
     synced: { stale: 3600, revalidate: 86400, expire: 604800 },
   },
   outputFileTracingIncludes: {
-    "/departements/[slug]/opengraph-image": ["./public/data/departements.geojson"],
+    "/territoires/departements/[slug]/opengraph-image": ["./public/data/departements.geojson"],
     "/elections/senatoriales-2026": ["./public/data/departements.geojson"],
     "/elections/municipales-2026/communes/[inseeCode]/opengraph-image": [
       "./public/data/departements.geojson",
@@ -163,6 +171,20 @@ const nextConfig: NextConfig = {
         source: "/assemblee",
         destination: "/parlement/dossiers",
         statusCode: 308,
+      },
+      // Departments moved under the Territoires section (#1052). Next appends the query string
+      // (?lettre=, ?page=) to the destination; an unknown slug 404s at the new address.
+      // The bare list has its own rule: with an empty `:path*` the wildcard leaves a trailing
+      // slash, which costs a second hop.
+      {
+        source: "/departements",
+        destination: "/territoires/departements",
+        permanent: true,
+      },
+      {
+        source: "/departements/:path*",
+        destination: "/territoires/departements/:path*",
+        permanent: true,
       },
       {
         source: "/partis/ensemble-pour-la-republique",

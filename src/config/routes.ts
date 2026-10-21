@@ -14,6 +14,8 @@ export const ROUTES = {
   groupeDetail: (slug: string) => `/parlement/groupes/${slug}`,
   groupeGovernmentProjects: (slug: string) => `/parlement/groupes/${slug}/projets-gouvernementaux`,
   governmentProjectsMethodology: "/methodologie/soutien-projets-gouvernementaux",
+  legislatures: "/parlement/assemblee/legislatures",
+  legislature: (n: number) => `/parlement/assemblee/legislatures/${n}`,
 } as const;
 
 /** Stable URLs keep each statistics section server-rendered and indexable. */

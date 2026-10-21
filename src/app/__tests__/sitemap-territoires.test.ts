@@ -23,6 +23,7 @@ import sitemap from "@/app/sitemap";
 import { SITEMAP_SHARD_TAGS } from "@/lib/seo/sitemap-tags";
 import { REGIONS } from "@/config/regions";
 
+const shard0 = () => sitemap({ id: Promise.resolve("0") });
 const shard5 = () => sitemap({ id: Promise.resolve("5") });
 const path = (url: string) => url.replace(/^https?:\/\/[^/]+/, "");
 
@@ -31,7 +32,7 @@ beforeEach(() => {
 });
 
 describe("sitemap : rubrique Territoires", () => {
-  it("annonce l'entrée, les 18 régions et les communes retenues par la requête", async () => {
+  it("annonce l'entrée, la page des données, les 18 régions et les communes retenues", async () => {
     h.queryRaw.mockResolvedValueOnce([
       { id: "75056", lastmod: new Date("2026-10-01T00:00:00Z") },
       { id: "2A004", lastmod: new Date("2026-09-01T00:00:00Z") },
@@ -43,7 +44,8 @@ describe("sitemap : rubrique Territoires", () => {
     for (const region of REGIONS) expect(urls).toContain(`/territoires/regions/${region.slug}`);
     expect(urls).toContain("/territoires/communes/75056");
     expect(urls).toContain("/territoires/communes/2A004");
-    expect(urls).toHaveLength(1 + 18 + 2);
+    expect(urls).toContain("/territoires/donnees");
+    expect(urls).toHaveLength(2 + 4 + 18 + 2);
   });
 
   it("date chaque commune du dernier changement du mandat de son maire", async () => {
@@ -57,10 +59,28 @@ describe("sitemap : rubrique Territoires", () => {
     expect(lastmod("/territoires")).toEqual(new Date("2026-10-01T00:00:00Z"));
   });
 
-  it("garde l'entrée et les régions sans aucune commune indexable", async () => {
+  it("annonce la page des élections seulement pour une commune avec résultats, datée par eux", async () => {
+    h.queryRaw.mockResolvedValueOnce([
+      {
+        id: "35238",
+        lastmod: new Date("2026-10-01T00:00:00Z"),
+        electionsLastmod: new Date("2026-10-12T00:00:00Z"),
+      },
+      { id: "13055", lastmod: new Date("2026-08-01T00:00:00Z"), electionsLastmod: null },
+    ]);
+    const entries = await shard5();
+    const find = (suffix: string) => entries.find((e) => e.url.endsWith(suffix));
+    expect(find("/territoires/communes/35238/elections")?.lastModified).toEqual(
+      new Date("2026-10-12T00:00:00Z")
+    );
+    expect(find("/territoires/communes/13055/elections")).toBeUndefined();
+    expect(find("/territoires/communes/13055")).toBeDefined();
+  });
+
+  it("garde l'entrée, la page des données et les régions sans aucune commune indexable", async () => {
     h.queryRaw.mockResolvedValueOnce([]);
     const urls = (await shard5()).map((e) => path(e.url));
-    expect(urls).toHaveLength(1 + 18);
+    expect(urls).toHaveLength(2 + 4 + 18);
     expect(urls.some((u) => u.startsWith("/territoires/communes/"))).toBe(false);
   });
 
@@ -75,6 +95,28 @@ describe("sitemap : rubrique Territoires", () => {
     h.queryRaw.mockResolvedValueOnce([]);
     await shard5();
     expect(h.cacheTag).toHaveBeenCalledWith(...SITEMAP_SHARD_TAGS[5]);
-    expect(SITEMAP_SHARD_TAGS[5]).toEqual(["politicians", "territoires"]);
+    expect(SITEMAP_SHARD_TAGS[5]).toEqual(["politicians", "territoires", "elections"]);
+  });
+});
+
+describe("sitemap : départements sous /territoires (#1052)", () => {
+  it("annonce la liste et chaque département à leur nouvelle adresse, jamais l'ancienne", async () => {
+    h.queryRaw.mockResolvedValue([]);
+    const urls: string[] = [];
+    for (const id of ["0", "1", "2", "3", "4", "5"]) {
+      urls.push(...(await sitemap({ id: Promise.resolve(id) })).map((e) => path(e.url)));
+    }
+
+    expect(urls).toContain("/territoires/departements");
+    expect(urls).toContain("/territoires/departements/ille-et-vilaine");
+    expect(urls).toContain("/territoires/departements/polynesie-francaise");
+    expect(urls.filter((u) => u.startsWith("/departements"))).toEqual([]);
+  });
+});
+
+describe("sitemap : protocole des décisions des conseils", () => {
+  it("annonce la page de méthodologie dans le shard des pages statiques", async () => {
+    const urls = (await shard0()).map((e) => path(e.url));
+    expect(urls).toContain("/methodologie/decisions-territoires");
   });
 });

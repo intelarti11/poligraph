@@ -104,6 +104,18 @@ describe("computeAlignmentRates", () => {
   });
 });
 
+describe("computeGroupStats : périmètre historique", () => {
+  it("ne lit que les positions des scrutins de la législature du groupe AN", async () => {
+    await computeGroupStats();
+
+    const anCalls = state.db.scrutinGroupPosition.findMany.mock.calls.map(([arg]) => arg.where);
+    expect(anCalls.length).toBeGreaterThan(0);
+    for (const where of anCalls) {
+      expect(where.scrutin).toEqual({ legislature: 17 });
+    }
+  });
+});
+
 describe("computeGroupStats", () => {
   it("crée les métriques valides d'un nouveau groupe avec une participation NULL", async () => {
     const result = await computeGroupStats();

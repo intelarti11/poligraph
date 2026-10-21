@@ -135,7 +135,9 @@
      values are reproducible from the tokens above. */
   --brand-on-surface: oklch(0.66 0.2 25);
   --muted-foreground-strong: oklch(0.68 0 0);
-  --brand-foreground: oklch(0.15 0 0);
+  /* Text on a --brand fill. At 0.15 a 12px badge measured 4.49:1 in axe, just under AA's 4.5:1;
+     0.1 gives 4.7:1. Only text on brand fills reads this token. */
+  --brand-foreground: oklch(0.1 0 0);
   --destructive: oklch(0.65 0.2 25);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
@@ -170,7 +172,14 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans;
+  }
+  /* Outfit pour tous les titres. Une classe utilitaire (font-sans, font-display) l'emporte. */
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
   }
 }
 
@@ -210,6 +219,36 @@
     font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
   }
 
+  /* Échelle des titres (kits graphiques). Tailles en rem pour suivre le zoom du texte, Outfit 700
+     (800 pour le titre de page) : ce sont les deux seules graisses chargées. */
+  .title-page {
+    font-size: 1.875rem;
+    line-height: 1.1;
+    font-weight: 800;
+    letter-spacing: -0.025em;
+  }
+  .title-section {
+    font-size: 1.375rem;
+    line-height: 1.2;
+    font-weight: 700;
+  }
+  .title-card {
+    font-size: 1.125rem;
+    line-height: 1.25;
+    font-weight: 700;
+  }
+  @media (min-width: 40rem) {
+    .title-page {
+      font-size: 2.375rem;
+    }
+    .title-section {
+      font-size: 1.5rem;
+    }
+    .title-card {
+      font-size: 1.25rem;
+    }
+  }
+
   /* Animated underline for navigation links */
   .nav-link-underline {
     position: relative;
@@ -227,6 +266,15 @@
   .nav-link-underline:hover::after {
     width: 100%;
   }
+}
+
+/* Texte du badge de parti : deux variables calculées côté serveur, une par thème. Hors couche
+   pour l'emporter sur la couleur de texte de la variante du Badge. */
+[data-party-badge] {
+  color: var(--party-fg);
+}
+.dark [data-party-badge] {
+  color: var(--party-fg-dark);
 }
 
 /* Global focus-visible styles */

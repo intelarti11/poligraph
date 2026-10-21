@@ -76,6 +76,8 @@ export interface WebDiscoveryStats {
  * never coerced to a neighbour.
  */
 const ONGOING_STATUSES = [
+  "PLAINTE_DEPOSEE",
+  "SIGNALEMENT_PARQUET",
   "ENQUETE_PRELIMINAIRE",
   "INSTRUCTION",
   "MISE_EN_EXAMEN",
@@ -162,7 +164,8 @@ Réponds is_subject = true uniquement si une procédure vise nommément cette pe
 
 SECONDE QUESTION, seulement si is_subject = true : à quel STADE la procédure se trouve-t-elle, d'après cette source et elle seule ?
 
-Procédure en cours : ENQUETE_PRELIMINAIRE, INSTRUCTION, MISE_EN_EXAMEN, RENVOI_TRIBUNAL, PROCES_EN_COURS
+Procédure en cours : PLAINTE_DEPOSEE, SIGNALEMENT_PARQUET, ENQUETE_PRELIMINAIRE, INSTRUCTION, MISE_EN_EXAMEN, RENVOI_TRIBUNAL, PROCES_EN_COURS
+PLAINTE_DEPOSEE : une plainte visant la personne est déposée et la source ne dit pas qu'une enquête est ouverte. SIGNALEMENT_PARQUET : un signalement (article 40) est transmis au parquet et la source ne dit pas qu'une enquête est ouverte. Ni l'un ni l'autre n'est une enquête : ne retiens ENQUETE_PRELIMINAIRE que si la source dit qu'un parquet ou un service d'enquête a ouvert une enquête.
 Condamnation : CONDAMNATION_PREMIERE_INSTANCE, APPEL_EN_COURS, POURVOI_EN_CASSATION, CONDAMNATION_DEFINITIVE. Ces quatre stades supposent une CONDAMNATION prononcée contre la personne.
 Issue favorable : RELAXE, ACQUITTEMENT, NON_LIEU, CLASSEMENT_SANS_SUITE, PRESCRIPTION, INSTRUCTION_CLOTUREE_SANS_MISE_EN_EXAMEN
 
@@ -340,7 +343,10 @@ function orderedWordOverlap(quote: string[], source: string[]): number {
  */
 const STATUS_KEYWORDS: Record<AffairStatus, readonly string[]> = {
   PLAINTE_DEPOSEE: ["plainte", "porte plainte", "depose plainte"],
-  ENQUETE_PRELIMINAIRE: ["enquete", "garde a vue", "signalement", "plainte", "soupcon", "vise par"],
+  SIGNALEMENT_PARQUET: ["signalement", "article 40", "saisit le procureur", "saisi le procureur"],
+  // Ni « signalement » ni « plainte » : un signalement ou une plainte seuls n'attestent pas
+  // une enquête, ils ont leurs propres stades.
+  ENQUETE_PRELIMINAIRE: ["enquete", "garde a vue", "soupcon", "vise par"],
   INSTRUCTION: ["instruction", "information judiciaire"],
   INSTRUCTION_CLOTUREE_SANS_MISE_EN_EXAMEN: [
     "fin d information",

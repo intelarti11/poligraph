@@ -5,6 +5,8 @@ import {
   getContrastRatio,
   getAccessibleTextColor,
   ensureContrast,
+  tintOver,
+  ensureContrastOnDark,
 } from "./contrast";
 
 describe("hexToRgb", () => {
@@ -110,5 +112,42 @@ describe("ensureContrast", () => {
 
   it("falls back to black when target is unreachable", () => {
     expect(ensureContrast("#010101", "#000000", 21)).toBe("#000000");
+  });
+});
+
+describe("tintOver", () => {
+  it("returns the base for a zero alpha and the color for an alpha of 1", () => {
+    expect(tintOver("#FFD600", 0, "#f5f5f5")).toBe("#f5f5f5");
+    expect(tintOver("#FFD600", 1, "#f5f5f5")).toBe("#ffd600");
+  });
+
+  it("matches the surface of a party badge tint on the page background", () => {
+    expect(tintOver("#FFD600", 0x20 / 255, "#f5f5f5")).toBe("#f6f1d6");
+  });
+
+  it("lets ensureContrast reach AA on a tint, where white gave 4.01", () => {
+    const bg = tintOver("#FFD600", 0x20 / 255, "#f5f5f5");
+    const onWhite = ensureContrast("#FFD600", "#ffffff");
+    expect(getContrastRatio(onWhite, bg)).toBeLessThan(4.5);
+    expect(getContrastRatio(ensureContrast("#FFD600", bg), bg)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+describe("ensureContrastOnDark", () => {
+  const dark = tintOver("#0D378A", 0x20 / 255, "#0d0d0d");
+
+  it("keeps a color that already reads on the dark surface", () => {
+    expect(ensureContrastOnDark("#FFD600", "#0d0d0d")).toBe("#FFD600");
+  });
+
+  it("lightens a dark party color until it reaches AA, where it gave 1.7:1", () => {
+    expect(getContrastRatio("#0D378A", dark)).toBeLessThan(2);
+    expect(getContrastRatio(ensureContrastOnDark("#0D378A", dark), dark)).toBeGreaterThanOrEqual(
+      4.5
+    );
+  });
+
+  it("falls back to white when the target is unreachable", () => {
+    expect(ensureContrastOnDark("#010101", "#000000", 21)).toBe("#ffffff");
   });
 });

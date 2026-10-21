@@ -13,11 +13,27 @@ const mocks = vi.hoisted(() => ({
   roundFindMany: vi.fn(),
   electionFindUnique: vi.fn(),
   syncFindUnique: vi.fn(),
+  decisionCount: vi.fn(async () => 0),
+  conseilFindMany: vi.fn(async (_args: { where: Record<string, unknown> }) => [] as unknown[]),
   queryRaw: vi.fn(),
+  populationEnVigueur: vi.fn(),
+  departementVintages: vi.fn(),
+  readIntercommunalites: vi.fn(),
+  readPresidentielles: vi.fn(async () => ({ blocks: [] as unknown[], agregatTerritoire: null })),
 }));
 
 vi.mock("server-only", () => ({}));
+vi.mock("../territoires-intercommunalites", () => ({
+  readIntercommunalites: (code: string) => mocks.readIntercommunalites(code),
+}));
+vi.mock("../territoires-presidentielle", () => ({
+  readCommunePresidentielles: mocks.readPresidentielles,
+}));
 vi.mock("next/cache", () => ({ cacheTag: vi.fn(), cacheLife: vi.fn() }));
+vi.mock("../commune-population", () => ({
+  readPopulationEnVigueur: mocks.populationEnVigueur,
+  readDepartementPopulationVintages: mocks.departementVintages,
+}));
 vi.mock("@/lib/db", () => ({
   db: {
     commune: {
@@ -35,6 +51,8 @@ vi.mock("@/lib/db", () => ({
     communeElectionRound: { findMany: mocks.roundFindMany },
     election: { findUnique: mocks.electionFindUnique },
     syncMetadata: { findUnique: mocks.syncFindUnique },
+    decision: { count: mocks.decisionCount },
+    conseilMembre: { findMany: mocks.conseilFindMany },
     $queryRaw: mocks.queryRaw,
   },
 }));
@@ -119,6 +137,7 @@ const RENNES = {
   constituencyNumber: 1,
   latitude: 48.1159,
   longitude: -1.6884,
+  surfaceHa: 5033.19,
 };
 
 beforeEach(() => {
@@ -133,6 +152,10 @@ beforeEach(() => {
   mocks.candidacyFindMany.mockResolvedValue([]);
   mocks.candidacyCount.mockResolvedValue(0);
   mocks.roundFindMany.mockResolvedValue([]);
+  mocks.populationEnVigueur.mockResolvedValue(null);
+  mocks.departementVintages.mockResolvedValue([]);
+  mocks.conseilFindMany.mockResolvedValue([]);
+  mocks.readIntercommunalites.mockResolvedValue(null);
   serveMandates([]);
 });
 
@@ -203,10 +226,60 @@ describe("fonctions pures", () => {
 });
 
 describe("getCommuneDossier", () => {
+  it("n'annonce aucune intercommunalité avant le premier import", async () => {
+    const dossier = await getCommuneDossier("35238");
+    expect(mocks.readIntercommunalites).toHaveBeenCalledWith("35238");
+    expect(dossier?.intercommunalite).toBeNull();
+    expect(dossier?.coverage.some((c) => c.bloc === "intercommunalite")).toBe(false);
+  });
+
+  it("porte l'intercommunalité et son état dans la matrice de couverture", async () => {
+    const source = { label: "INSEE, EPCI à fiscalité propre au 1er janvier 2026", url: null };
+    const block = {
+      state: "AUCUNE" as const,
+      intercommunalites: [],
+      situationDate: "2026-01-01T00:00:00.000Z",
+      source,
+      lastCheckedAt: null,
+    };
+    mocks.readIntercommunalites.mockResolvedValue(block);
+    const aucune = await getCommuneDossier("35238");
+    expect(aucune?.intercommunalite).toEqual(block);
+    // "Sans objet" is an established fact, not a missing one.
+    expect(aucune?.coverage.find((c) => c.bloc === "intercommunalite")).toEqual({
+      bloc: "intercommunalite",
+      state: "DISPONIBLE",
+      source,
+      date: "2026-01-01T00:00:00.000Z",
+    });
+
+    mocks.readIntercommunalites.mockResolvedValue({
+      ...block,
+      state: "NON_ETABLI",
+      situationDate: null,
+    });
+    const nonEtabli = await getCommuneDossier("35238");
+    expect(nonEtabli?.coverage.find((c) => c.bloc === "intercommunalite")?.state).toBe(
+      "NON_ETABLI"
+    );
+  });
+
   it("refuse un code mal formé sans interroger la base", async () => {
     expect(await getCommuneDossier("../etc")).toBeNull();
     expect(await getCommuneDossier("123")).toBeNull();
     expect(mocks.communeFindUnique).not.toHaveBeenCalled();
+  });
+
+  it("compte les seules décisions publiées de la commune, dans la même lecture", async () => {
+    serveMandates([{ id: "maire", type: "MAIRE" }]);
+    mocks.decisionCount.mockResolvedValueOnce(3);
+
+    const dossier = await getCommuneDossier("35238");
+
+    expect(dossier?.decisionsPubliees).toBe(3);
+    expect(mocks.decisionCount).toHaveBeenCalledWith({
+      where: { communeId: "35238", status: "PUBLISHED" },
+    });
   });
 
   it("établit le maire unique public, avec source et date de prise de fonction", async () => {
@@ -298,11 +371,87 @@ describe("getCommuneDossier", () => {
   it("ne remplace jamais le conseil municipal ni le millésime de population", async () => {
     const dossier = await getCommuneDossier("35238");
 
-    expect(dossier?.conseilMunicipal).toEqual({ state: "NON_ETABLI" });
+    expect(dossier?.conseilMunicipal).toEqual({
+      state: "NON_ETABLI",
+      recordedCount: 0,
+      membres: [],
+      registerDate: null,
+      source: null,
+    });
     expect(dossier?.population.vintage).toBeNull();
     expect(dossier?.population.importedAt).toBe("2026-08-10T09:00:00.000Z");
     expect(dossier?.maire.state).toBe("ABSENT");
     expect(dossier?.coverage.find((c) => c.bloc === "conseilMunicipal")?.state).toBe("NON_ETABLI");
+  });
+
+  it("restitue la superficie de la commune avec sa source, sans nommer de producteur", async () => {
+    const dossier = await getCommuneDossier("35238");
+    expect(dossier?.surface.hectares).toBe(5033.19);
+    expect(dossier?.surface.source.label).not.toMatch(/IGN/);
+    expect(dossier?.surface.source.url).toContain("geo.api.gouv.fr");
+  });
+
+  it("lit le conseil municipal du registre, maire puis adjoints par rang, sans lien de fiche", async () => {
+    const row = (lastName: string, functionLabel: string | null) => ({
+      lastName,
+      firstName: "A",
+      subdivisionLabel: null,
+      functionLabel,
+      registerDate: new Date("2026-08-11T12:00:00Z"),
+    });
+    mocks.conseilFindMany.mockResolvedValue([
+      row("Zed", null),
+      row("Trois", "3ème adjoint au Maire"),
+      row("Maire", "Maire"),
+      row("Un", "1er adjoint au Maire"),
+    ]);
+
+    const dossier = await getCommuneDossier("35238");
+
+    expect(dossier?.conseilMunicipal.state).toBe("DISPONIBLE");
+    expect(dossier?.conseilMunicipal.recordedCount).toBe(4);
+    expect(dossier?.conseilMunicipal.membres.map((m) => m.lastName)).toEqual([
+      "Maire",
+      "Un",
+      "Trois",
+      "Zed",
+    ]);
+    expect(mocks.conseilFindMany.mock.calls[0]?.[0].where).toEqual({
+      niveau: "MUNICIPAL",
+      territoryCode: "35238",
+    });
+    expect(dossier?.coverage.find((c) => c.bloc === "conseilMunicipal")?.state).toBe("DISPONIBLE");
+  });
+
+  it("date la population par la série en vigueur, avec sa source et sa date de vérification", async () => {
+    const vintage = {
+      millesime: 2023,
+      effectiveFrom: "2026-01-01",
+      producer: "INSEE",
+      sourceLabel: "INSEE, populations de référence 2023",
+      sourceUrl: "https://www.insee.fr/fr/statistiques/8680726",
+      importedAt: "2026-10-11T08:00:00.000Z",
+    };
+    mocks.populationEnVigueur.mockResolvedValue({
+      value: 230000,
+      vintage,
+      verifiedAt: "2026-12-01T06:00:00.000Z",
+    });
+
+    const dossier = await getCommuneDossier("35238");
+
+    expect(mocks.populationEnVigueur).toHaveBeenCalledWith("35238");
+    expect(dossier?.population).toEqual({
+      value: 230000,
+      vintage,
+      importedAt: "2026-12-01T06:00:00.000Z",
+      source: { label: vintage.sourceLabel, url: vintage.sourceUrl },
+    });
+    expect(dossier?.coverage.find((c) => c.bloc === "population")).toMatchObject({
+      state: "DISPONIBLE",
+      source: { url: vintage.sourceUrl },
+      date: "2026-12-01T06:00:00.000Z",
+    });
   });
 
   it("ne désigne aucun député pour une commune PLM", async () => {
@@ -422,6 +571,30 @@ describe("getCommuneDossier", () => {
     const block = (await getCommuneDossier("35238"))?.elections.municipales2026;
     expect(block?.state).toBe("NON_ETABLI");
   });
+  it("porte la présidentielle de la commune et sa ligne de couverture", async () => {
+    const absent = await getCommuneDossier("35238");
+    expect(absent?.elections.presidentielles.blocks).toEqual([]);
+    expect(absent?.coverage.find((c) => c.bloc === "presidentielle")?.state).toBe("ABSENT");
+
+    mocks.readPresidentielles.mockResolvedValueOnce({
+      blocks: [
+        {
+          electionSlug: "presidentielle-2022",
+          sources: [{ round: 1, label: "Ministère", url: "https://x", publishedAt: "2022-04-14" }],
+          importedAt: "2026-10-12T08:00:00.000Z",
+        },
+      ],
+      agregatTerritoire: null,
+    });
+    const present = await getCommuneDossier("35238");
+    expect(mocks.readPresidentielles).toHaveBeenLastCalledWith("35238", "35");
+    expect(present?.coverage.find((c) => c.bloc === "presidentielle")).toEqual({
+      bloc: "presidentielle",
+      state: "DISPONIBLE",
+      source: { label: "Ministère", url: "https://x" },
+      date: "2026-10-12T08:00:00.000Z",
+    });
+  });
 });
 
 describe("getDepartementTerritoire", () => {
@@ -470,6 +643,92 @@ describe("getDepartementTerritoire", () => {
     // Mandats exécutifs saisis à la main : rien d'enregistré ne veut pas dire « pas de président ».
     expect(result?.presidence.state).toBe("NON_ETABLI");
     expect(result?.conseil.state).toBe("NON_ETABLI");
+    expect(mocks.departementVintages).toHaveBeenCalledWith("13");
+    expect(result?.populationVintages).toEqual([]);
+  });
+});
+
+describe("getRegionTerritoire, conseil régional", () => {
+  it("range la présidence puis les vice-présidences par rang, puis l'ordre alphabétique", async () => {
+    mocks.communeGroupBy.mockResolvedValue([]);
+    mocks.mandateGroupBy.mockResolvedValue([]);
+    mocks.mandateCount.mockResolvedValue(0);
+    const row = (lastName: string, functionLabel: string | null) => ({
+      lastName,
+      firstName: "A",
+      subdivisionLabel: "Finistère",
+      functionLabel,
+      registerDate: new Date("2026-08-11T12:00:00Z"),
+    });
+    mocks.conseilFindMany.mockResolvedValue([
+      row("Zed", null),
+      row("Bon", "10ème Vice-président du conseil régional"),
+      row("Alp", null),
+      row("Chef", "Présidente du conseil régional"),
+      row("Deux", "2ème Vice-président du conseil régional"),
+    ]);
+
+    const region = await getRegionTerritoire("bretagne");
+
+    expect(region?.conseil.state).toBe("DISPONIBLE");
+    expect(region?.conseil.recordedCount).toBe(5);
+    expect(region?.conseil.membres.map((m) => m.lastName)).toEqual([
+      "Chef",
+      "Deux",
+      "Bon",
+      "Alp",
+      "Zed",
+    ]);
+    expect(region?.conseil.registerDate).toBe("2026-08-11T12:00:00.000Z");
+    expect(mocks.conseilFindMany.mock.calls[0]?.[0].where).toEqual({
+      niveau: "REGIONAL",
+      territoryCode: "53",
+    });
+    // Aucun mandat saisi : la présidence vient du registre, sans fiche associée.
+    expect(region?.presidence.person).toBeNull();
+    expect(region?.presidence.registre).toEqual({
+      fullName: "A Chef",
+      title: "Présidente du conseil régional",
+    });
+    expect(region?.coverage.find((c) => c.bloc === "presidence")?.state).toBe("DISPONIBLE");
+  });
+
+  it("garde une présidence établie par un mandat, sans la remplacer par le registre", async () => {
+    mocks.communeGroupBy.mockResolvedValue([]);
+    mocks.mandateGroupBy.mockResolvedValue([]);
+    mocks.mandateCount.mockResolvedValue(0);
+    mocks.mandateFindMany.mockImplementation(async (args: { where: { type?: string } }) =>
+      args.where.type === "PRESIDENT_REGION"
+        ? [
+            {
+              title: "Président du conseil régional",
+              lastConfirmedAt: null,
+              source: "RNE",
+              politician: {
+                slug: "titulaire",
+                fullName: "Titulaire Saisi",
+                photoUrl: null,
+                civility: null,
+                publicationStatus: "PUBLISHED",
+              },
+            },
+          ]
+        : []
+    );
+    mocks.conseilFindMany.mockResolvedValue([
+      {
+        lastName: "Autre",
+        firstName: "Nom",
+        subdivisionLabel: null,
+        functionLabel: "Président du conseil régional",
+        registerDate: new Date("2026-08-11T12:00:00Z"),
+      },
+    ]);
+
+    const region = await getRegionTerritoire("bretagne");
+
+    expect(region?.presidence.state).toBe("ETABLI");
+    expect(region?.presidence.registre).toBeNull();
   });
 });
 
@@ -493,7 +752,13 @@ describe("getRegionTerritoire", () => {
     expect(region?.departements.find((d) => d.code === "29")?.communeCount).toBe(0);
     expect(region?.communeCount).toBe(676);
     expect(region?.presidence.state).toBe("NON_ETABLI");
-    expect(region?.conseil).toEqual({ state: "NON_ETABLI", recordedCount: 0 });
+    expect(region?.conseil).toEqual({
+      state: "NON_ETABLI",
+      recordedCount: 0,
+      membres: [],
+      registerDate: null,
+      source: null,
+    });
     const presidenceWhere = mocks.mandateFindMany.mock.calls.find(
       ([args]) => args.where.type === "PRESIDENT_REGION"
     )?.[0].where;

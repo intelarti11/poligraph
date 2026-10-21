@@ -19,6 +19,9 @@ import { computeJudicialCounts } from "@/lib/politicians/judicial-counts";
 import { isAccusedInvolvement } from "@/config/certainty";
 import { buildPoliticianSignals } from "@/lib/politicians/signals";
 import { buildSourceLinks } from "@/lib/politicians/external-sources";
+import { partitionMandatesForDisplay } from "@/lib/mandates/overlaps";
+import { ParliamentaryPath } from "@/components/politicians/ParliamentaryPath";
+import type { ParliamentaryPathRow } from "@/lib/politicians/parliamentary-path";
 import type {
   PoliticianDossier,
   PoliticianIdentity,
@@ -56,6 +59,8 @@ export interface PoliticianProfileBodyProps {
   isChamberPresident: boolean;
   /** « gouvernements » feature flag: links ministerial mandates to their government page. */
   governmentsEnabled?: boolean;
+  /** Assemblée nationale legislatures of this person, read by the page. Empty or absent: no section. */
+  parliamentaryPath?: ParliamentaryPathRow[];
 }
 
 export function PoliticianProfileBody({
@@ -67,8 +72,10 @@ export function PoliticianProfileBody({
   isActiveParliamentarian,
   isChamberPresident,
   governmentsEnabled = false,
+  parliamentaryPath = [],
 }: PoliticianProfileBodyProps) {
   const { affairs, factCheckMentions, dossierAuthors } = dossier;
+  const displayableMandates = partitionMandatesForDisplay(politician.mandates).displayable;
 
   const voteData = voteStats?.voteData ?? null;
   const parliamentaryCard = voteStats?.parliamentaryCard ?? null;
@@ -92,7 +99,7 @@ export function PoliticianProfileBody({
 
   const signals = buildPoliticianSignals({
     slug: politician.slug,
-    mandatesCount: politician.mandates.length,
+    mandatesCount: displayableMandates.length,
     votesTotal: voteData ? voteData.stats.total : null,
     hasVotesTab: Boolean((voteData && voteData.stats.total > 0) || parliamentaryCard),
     hasFactchecksTab: factCheckMentions.length > 0,
@@ -178,7 +185,7 @@ export function PoliticianProfileBody({
                 {dossierAuthors.length > 0 && (
                   <Card id="dossiers">
                     <CardHeader>
-                      <h2 className="leading-none font-semibold flex items-center gap-2">
+                      <h2 className="title-card flex items-center gap-2">
                         <FileText className="h-5 w-5 text-muted-foreground" />
                         Propositions de loi ({dossierAuthors.length})
                       </h2>
@@ -232,10 +239,15 @@ export function PoliticianProfileBody({
                   birthDate={politician.birthDate}
                   deathDate={politician.deathDate}
                 />
-                {politician.mandates.length > 0 && (
+                <ParliamentaryPath
+                  rows={parliamentaryPath}
+                  slug={politician.slug}
+                  fullName={politician.fullName}
+                />
+                {displayableMandates.length > 0 && (
                   <Card>
                     <CardHeader>
-                      <h2 className="leading-none font-semibold">Mandats</h2>
+                      <h2 className="title-card">Mandats</h2>
                       <p className="text-xs text-muted-foreground mt-1">
                         Liste des mandats nationaux et européens connus. Les mandats locaux (maire,
                         conseiller, etc.) peuvent ne pas être listés.
@@ -243,7 +255,7 @@ export function PoliticianProfileBody({
                     </CardHeader>
                     <CardContent>
                       <MandateTimeline
-                        mandates={politician.mandates}
+                        mandates={displayableMandates}
                         civility={politician.civility}
                         governmentsEnabled={governmentsEnabled}
                       />
@@ -281,9 +293,7 @@ export function PoliticianProfileBody({
               ) : isActiveParliamentarian ? (
                 <Card id="declarations">
                   <CardHeader>
-                    <h2 className="text-lg font-semibold">
-                      Déclarations d&apos;intérêts et d&apos;activités
-                    </h2>
+                    <h2 className="title-card">Déclarations d&apos;intérêts et d&apos;activités</h2>
                   </CardHeader>
                   <CardContent>
                     <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg p-4">

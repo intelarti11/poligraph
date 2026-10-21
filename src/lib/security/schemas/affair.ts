@@ -6,6 +6,7 @@ import { z } from "zod/v4";
 // `AffairEventType`, not to `AffairStatus`. Guarded by a test (#511).
 export const VALID_STATUSES = [
   "PLAINTE_DEPOSEE",
+  "SIGNALEMENT_PARQUET",
   "ENQUETE_PRELIMINAIRE",
   "INSTRUCTION",
   "INSTRUCTION_CLOTUREE_SANS_MISE_EN_EXAMEN",
@@ -45,7 +46,7 @@ const VALID_CATEGORIES = [
  * ordre que la modération ne peut pas poser, et une valeur absente de Prisma
  * passe Zod pour échouer en base. Gardé par un test.
  */
-export const VALID_JURISDICTION_ORDERS = ["PENAL", "FINANCIER", "ADMINISTRATIF"] as const;
+export const VALID_JURISDICTION_ORDERS = ["PENAL", "FINANCIER", "ADMINISTRATIF", "CIVIL"] as const;
 
 export const quickUpdateAffairSchema = z.object({
   status: z.enum(VALID_STATUSES).optional(),

@@ -7,7 +7,14 @@ import { Spinner } from "@/components/ui/spinner";
 import { InfoTooltip } from "@/components/ui/info-tooltip";
 
 export type SortOption = "prominence" | "alpha" | "alpha-desc" | "recent";
-export type MandateFilter = "" | "depute" | "senateur" | "gouvernement" | "dirigeants" | "maire";
+export type MandateFilter =
+  | ""
+  | "depute"
+  | "senateur"
+  | "depute_europeen"
+  | "gouvernement"
+  | "dirigeants"
+  | "maire";
 export type StatusFilter = "" | "active" | "former"; // kept for backward compat — unused in UI
 
 const SORT_OPTIONS: Record<SortOption, string> = {
@@ -21,6 +28,7 @@ const MANDATE_OPTIONS: Record<MandateFilter, string> = {
   "": "Tous les mandats",
   depute: "Députés",
   senateur: "Sénateurs",
+  depute_europeen: "Eurodéputés",
   gouvernement: "Gouvernement",
   dirigeants: "Dirigeants de parti",
   maire: "Maires",
@@ -36,6 +44,7 @@ interface FilterBarProps {
   counts: {
     deputes: number;
     senateurs: number;
+    eurodeputes: number;
     gouvernement: number;
     dirigeants: number;
     maires: number;
@@ -71,13 +80,15 @@ export function FilterBar({
           ? counts.deputes
           : value === "senateur"
             ? counts.senateurs
-            : value === "gouvernement"
-              ? counts.gouvernement
-              : value === "dirigeants"
-                ? counts.dirigeants
-                : value === "maire"
-                  ? counts.maires
-                  : null;
+            : value === "depute_europeen"
+              ? counts.eurodeputes
+              : value === "gouvernement"
+                ? counts.gouvernement
+                : value === "dirigeants"
+                  ? counts.dirigeants
+                  : value === "maire"
+                    ? counts.maires
+                    : null;
       return {
         value,
         label: count !== null ? `${label} (${count})` : label,
@@ -101,6 +112,7 @@ export function FilterBar({
           value={currentSort}
           onChange={(v) => updateParams({ sort: v === "alpha" ? "" : v })}
           options={sortOptions}
+          selectClassName="h-11"
         />
       </div>
 
@@ -114,13 +126,14 @@ export function FilterBar({
           value={currentMandate}
           onChange={(v) => updateParams({ mandate: v })}
           options={mandateOptions}
+          selectClassName="h-11"
         />
       </div>
 
       {/* Conviction filters: probité et financement politique, cumulés en « l'un ou l'autre » */}
       <label
         htmlFor="conviction-toggle"
-        className="flex items-center gap-2 min-h-11 text-sm text-muted-foreground cursor-pointer whitespace-nowrap"
+        className="flex items-center gap-2 min-h-11 text-sm text-muted-foreground cursor-pointer sm:whitespace-nowrap"
         title="Condamnation définitive pour atteinte à la probité"
       >
         <input
@@ -134,7 +147,7 @@ export function FilterBar({
       </label>
       <label
         htmlFor="financing-toggle"
-        className="flex items-center gap-2 min-h-11 text-sm text-muted-foreground cursor-pointer whitespace-nowrap"
+        className="flex items-center gap-2 min-h-11 text-sm text-muted-foreground cursor-pointer sm:whitespace-nowrap"
         title="Condamnation définitive pour financement illégal de campagne ou de parti"
       >
         <input

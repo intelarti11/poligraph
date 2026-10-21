@@ -21,6 +21,7 @@ import { getPublicPresidentialCandidates } from "@/lib/data/presidential-candida
 import { getPublicMeasureStatsByCandidacy } from "@/lib/data/measures";
 import { loadPresidentialReaderGuideIndex } from "@/lib/data/presidential-reader-guides";
 import { getPresidentialAffairs } from "@/lib/data/presidentielle-affaires";
+import { indexableLegislatureNumbers } from "@/lib/seo/legislature-robots";
 import {
   presidentialReaderGuidePath,
   presidentialReaderGuidesPath,
@@ -33,10 +34,15 @@ import {
 import { TERRITOIRE_COMMUNE_MIN_POPULATION } from "@/lib/seo/territoire-robots";
 import { PUBLIC_POLITICIAN_PUBLICATION_STATUS } from "@/lib/api/public-contract";
 import { REGIONS } from "@/config/regions";
+import { REPERE_METHODES, repereMethodePath } from "@/config/territoire-methodes";
 import {
+  TERRITOIRES_DONNEES_PATH,
   TERRITOIRES_PATH,
   territoireCommunePath,
+  territoireCommuneElectionsPath,
   territoireRegionPath,
+  territoireDepartementPath,
+  TERRITOIRES_DEPARTEMENTS_PATH,
 } from "@/lib/territoires/paths";
 
 export async function generateSitemaps() {
@@ -157,13 +163,25 @@ async function buildStaticAndPoliticiansSitemap(): Promise<MetadataRoute.Sitemap
       priority: 0.8,
     },
     {
+      url: `${SITE_URL}/parlement/assemblee/legislatures`,
+      lastModified: new Date(),
+      changeFrequency: "monthly",
+      priority: 0.7,
+    },
+    ...indexableLegislatureNumbers().map((n) => ({
+      url: `${SITE_URL}/parlement/assemblee/legislatures/${n}`,
+      lastModified: new Date(),
+      changeFrequency: "monthly" as const,
+      priority: 0.6,
+    })),
+    {
       url: `${SITE_URL}/mon-depute`,
       lastModified: new Date(),
       changeFrequency: "monthly",
       priority: 0.8,
     },
     {
-      url: `${SITE_URL}/departements`,
+      url: `${SITE_URL}${TERRITOIRES_DEPARTEMENTS_PATH}`,
       lastModified: new Date(),
       changeFrequency: "weekly",
       priority: 0.8,
@@ -250,6 +268,12 @@ async function buildStaticAndPoliticiansSitemap(): Promise<MetadataRoute.Sitemap
     },
     {
       url: `${SITE_URL}/methodologie/sources-medias`,
+      lastModified: new Date(),
+      changeFrequency: "monthly",
+      priority: 0.6,
+    },
+    {
+      url: `${SITE_URL}/methodologie/decisions-territoires`,
       lastModified: new Date(),
       changeFrequency: "monthly",
       priority: 0.6,
@@ -671,7 +695,7 @@ async function buildAffairsPartiesElectionsDepartmentsSitemap(): Promise<Metadat
         }));
 
   const departmentPages: MetadataRoute.Sitemap = Object.values(DEPARTMENTS).map((dept) => ({
-    url: `${SITE_URL}/departements/${getDepartmentSlug(dept.name)}`,
+    url: `${SITE_URL}${territoireDepartementPath(getDepartmentSlug(dept.name))}`,
     lastModified: new Date(),
     changeFrequency: "weekly" as const,
     priority: 0.6,
@@ -804,8 +828,13 @@ async function buildTerritoiresSitemap(): Promise<MetadataRoute.Sitemap> {
   cacheTag(...SITEMAP_SHARD_TAGS[5]);
   cacheLife("synced");
 
-  const communes = await db.$queryRaw<Array<{ id: string; lastmod: Date }>>(Prisma.sql`
-    SELECT c."id", maire."lastmod"
+  const communes = await db.$queryRaw<
+    Array<{ id: string; lastmod: Date; electionsLastmod: Date | null }>
+  >(Prisma.sql`
+    SELECT c."id", maire."lastmod",
+      (
+        SELECT MAX(r."updatedAt") FROM "CommuneElectionRound" r WHERE r."communeId" = c."id"
+      ) AS "electionsLastmod"
     FROM "Commune" c
     JOIN (
       SELECT ml."communeId", MAX(m."updatedAt") AS "lastmod"
@@ -837,6 +866,19 @@ async function buildTerritoiresSitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "weekly" as const,
       priority: 0.8,
     },
+    {
+      url: `${SITE_URL}${TERRITOIRES_DONNEES_PATH}`,
+      lastModified: sectionLastmod ?? new Date(),
+      changeFrequency: "monthly" as const,
+      priority: 0.4,
+    },
+    // Static method pages of "Le territoire en chiffres".
+    ...REPERE_METHODES.map((m) => ({
+      url: `${SITE_URL}${repereMethodePath(m.slug)}`,
+      lastModified: sectionLastmod ?? new Date(),
+      changeFrequency: "monthly" as const,
+      priority: 0.4,
+    })),
     ...REGIONS.map((region) => ({
       url: `${SITE_URL}${territoireRegionPath(region.slug)}`,
       lastModified: sectionLastmod ?? new Date(),
@@ -849,5 +891,15 @@ async function buildTerritoiresSitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "monthly" as const,
       priority: 0.5,
     })),
+    // Dedicated elections page: same commune set, and only when results are recorded, so the
+    // sitemap never lists a page that answers 404. Its lastmod follows the results, not the mayor.
+    ...communes
+      .filter((c) => c.electionsLastmod != null)
+      .map((c) => ({
+        url: `${SITE_URL}${territoireCommuneElectionsPath(c.id)}`,
+        lastModified: c.electionsLastmod as Date,
+        changeFrequency: "monthly" as const,
+        priority: 0.4,
+      })),
   ];
 }

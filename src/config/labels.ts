@@ -81,16 +81,60 @@ export const GOVERNMENT_PROJECT_EXCLUSION_LABELS = {
  * Ordre de juridiction, libellé pour la modération.
  *
  * Le libellé dit la conséquence, pas seulement le nom : un modérateur qui pose
- * FINANCIER doit savoir que l'affaire sortira des compteurs publics.
+ * FINANCIER doit savoir que l'affaire ne sera comptée dans aucun total public (nombre d'élus
+ * condamnés, d'élus mis en cause, totaux par parti).
  */
 export const JURISDICTION_ORDER_LABELS: Record<JurisdictionOrder, string> = {
   PENAL: "Pénal",
-  FINANCIER: "Financier (Cour des comptes), hors compteurs",
-  ADMINISTRATIF: "Administratif, hors compteurs",
+  FINANCIER: "Financier (Cour des comptes) : non pénal, jamais compté dans les totaux",
+  ADMINISTRATIF: "Administratif : non pénal, jamais compté dans les totaux",
+  CIVIL: "Civil, prud'homal ou commercial : non pénal, jamais compté dans les totaux",
 };
+
+/**
+ * Libellé de statut d'une affaire selon l'ordre de juridiction. Hors du pénal, le mot
+ * « condamnation » se lirait comme une condamnation pénale : on parle de décision.
+ */
+const NON_PENAL_STATUS_LABELS: Partial<Record<AffairStatus, string>> = {
+  CONDAMNATION_PREMIERE_INSTANCE: "Décision de première instance",
+  POURVOI_EN_CASSATION: "Décision non définitive, pourvoi en cassation en cours",
+  CONDAMNATION_DEFINITIVE: "Décision définitive",
+};
+
+const NON_PENAL_STATUS_DESCRIPTIONS: Partial<Record<AffairStatus, string>> = {
+  CONDAMNATION_PREMIERE_INSTANCE:
+    "Une juridiction non pénale a rendu sa décision, mais un recours est encore possible. Ce n'est pas une condamnation pénale.",
+  POURVOI_EN_CASSATION:
+    "Une juridiction non pénale a statué en appel, et un pourvoi a été formé. Ce n'est pas une condamnation pénale.",
+  CONDAMNATION_DEFINITIVE:
+    "Une juridiction non pénale a rendu une décision définitive. Ce n'est pas une condamnation pénale.",
+};
+
+export function getAffairStatusDescription(
+  status: AffairStatus,
+  jurisdictionOrder: JurisdictionOrder = "PENAL"
+): string {
+  if (jurisdictionOrder !== "PENAL") {
+    const description = NON_PENAL_STATUS_DESCRIPTIONS[status];
+    if (description) return description;
+  }
+  return AFFAIR_STATUS_DESCRIPTIONS[status];
+}
+
+export function getAffairStatusLabel(
+  status: AffairStatus,
+  jurisdictionOrder: JurisdictionOrder = "PENAL"
+): string {
+  if (jurisdictionOrder !== "PENAL") {
+    const label = NON_PENAL_STATUS_LABELS[status];
+    if (label) return label;
+  }
+  return AFFAIR_STATUS_LABELS[status];
+}
 
 export const AFFAIR_STATUS_LABELS: Record<AffairStatus, string> = {
   PLAINTE_DEPOSEE: "Plainte déposée",
+  SIGNALEMENT_PARQUET: "Signalement au parquet",
   ENQUETE_PRELIMINAIRE: "Enquête préliminaire",
   INSTRUCTION: "Instruction en cours",
   INSTRUCTION_CLOTUREE_SANS_MISE_EN_EXAMEN: "Instruction clôturée, sans mise en examen",
@@ -110,6 +154,7 @@ export const AFFAIR_STATUS_LABELS: Record<AffairStatus, string> = {
 
 export const AFFAIR_STATUS_COLORS: Record<AffairStatus, string> = {
   PLAINTE_DEPOSEE: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300",
+  SIGNALEMENT_PARQUET: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300",
   ENQUETE_PRELIMINAIRE: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300",
   INSTRUCTION: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300",
   INSTRUCTION_CLOTUREE_SANS_MISE_EN_EXAMEN:
@@ -132,6 +177,8 @@ export const AFFAIR_STATUS_COLORS: Record<AffairStatus, string> = {
 
 export const AFFAIR_STATUS_DESCRIPTIONS: Record<AffairStatus, string> = {
   PLAINTE_DEPOSEE: "Une plainte a été déposée. Aucune enquête n'est connue à ce stade.",
+  SIGNALEMENT_PARQUET:
+    "Un signalement a été transmis au parquet. Aucune enquête n'est connue à ce stade.",
   ENQUETE_PRELIMINAIRE:
     "Le parquet a ordonné une enquête pour vérifier les faits. Aucune mise en cause formelle.",
   INSTRUCTION:
@@ -160,6 +207,7 @@ export const AFFAIR_STATUS_DESCRIPTIONS: Record<AffairStatus, string> = {
 // Indicates if presumption of innocence reminder is needed
 export const AFFAIR_STATUS_NEEDS_PRESUMPTION: Record<AffairStatus, boolean> = {
   PLAINTE_DEPOSEE: true,
+  SIGNALEMENT_PARQUET: true,
   ENQUETE_PRELIMINAIRE: true,
   INSTRUCTION: true,
   INSTRUCTION_CLOTUREE_SANS_MISE_EN_EXAMEN: true,

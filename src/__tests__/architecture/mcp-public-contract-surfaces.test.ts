@@ -109,12 +109,11 @@ const PARTY_SURFACES = [
   "src/app/api/votes/stats/route.ts",
   "src/app/carte/page.tsx",
   "src/app/comparer/page.tsx",
-  "src/app/comparer/votes/page.tsx",
   "src/app/declarations-et-patrimoine/page.tsx",
   // Commune-list variants of the department page: same body and same deputies and senators
   // block (party badges included) as the page itself, through departement-page.tsx.
-  "src/app/departements/[slug]/communes/[lettre]/[page]/page.tsx",
-  "src/app/departements/[slug]/page.tsx",
+  "src/app/territoires/departements/[slug]/communes/[lettre]/[page]/page.tsx",
+  "src/app/territoires/departements/[slug]/page.tsx",
   "src/app/elections/[slug]/page.tsx",
   "src/app/elections/municipales-2026/carte/page.tsx",
   "src/app/elections/municipales-2026/communes/[inseeCode]/page.tsx",
@@ -173,6 +172,12 @@ const PARTY_SURFACES = [
   // `getCommuneDossier` only and render no party data.
   "src/app/territoires/communes/[code]/opengraph-image.tsx",
   "src/app/territoires/communes/[code]/page.tsx",
+  // Decisions sub-page: `getCommuneDossier` for the robots verdict only, and the decisions reader,
+  // which selects decision, institution, source and mayor name fields. No party data.
+  "src/app/territoires/communes/[code]/decisions/page.tsx",
+  // Elections sub-page: `getCommuneDossier` through `getCommuneElections`, which keeps list names,
+  // head-of-list names, candidate names and shares. No party read, no label, no colour.
+  "src/app/territoires/communes/[code]/elections/page.tsx",
   // Territoires entry, search and region pages: flagged through the same territoires readers
   // (and `getElections` on the region page, which selects election rows only). No party data.
   "src/app/territoires/page.tsx",

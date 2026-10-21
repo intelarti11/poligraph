@@ -550,4 +550,30 @@ describe("syncScrutinsAN official group metadata", () => {
     expect(dbMock.$transaction).not.toHaveBeenCalled();
     expect(syncMock.syncMetadata.markCompleted).not.toHaveBeenCalled();
   });
+
+  // 2026-10-17: the 16th archive holds a Congrès vote (VTCGR5L16V1, numero 1) beside the
+  // 4 105 Assemblée ones. Imported, it would become an AN scrutin with the link of AN scrutin 1.
+  it.each([
+    ["regular sync", false],
+    ["official-groups-only", true],
+  ])("skips Congrès votes in %s mode", async (_label, officialGroupsOnly) => {
+    extractZipMock.mockImplementation((_zipPath: string, destination: string) => {
+      const jsonDir = join(destination, "json");
+      mkdirSync(jsonDir, { recursive: true });
+      const congres = {
+        scrutin: { ...rawScrutin.scrutin, uid: "VTCGR5L16V1", numero: "1", legislature: "16" },
+      };
+      writeFileSync(join(jsonDir, "VTCGR5L16V1.json"), JSON.stringify(congres));
+    });
+
+    const result = await syncScrutinsAN(16, false, false, false, officialGroupsOnly);
+
+    expect(result.errors).toEqual([]);
+    expect(result.scrutinsSkipped).toBe(1);
+    expect(result.scrutinsProcessed).toBe(0);
+    expect(dbMock.scrutin.findUnique).not.toHaveBeenCalled();
+    expect(dbMock.scrutin.create).not.toHaveBeenCalled();
+    expect(dbMock.scrutin.update).not.toHaveBeenCalled();
+    expect(writeVotesMock).not.toHaveBeenCalled();
+  });
 });

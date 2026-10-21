@@ -28,7 +28,6 @@ describe("getAffairNoticeVariant — sélection par statut et involvement", () =
 
   it("procédures en cours : présomption d'innocence", () => {
     for (const s of [
-      "PLAINTE_DEPOSEE",
       "ENQUETE_PRELIMINAIRE",
       "INSTRUCTION",
       "MISE_EN_EXAMEN",
@@ -37,6 +36,18 @@ describe("getAffairNoticeVariant — sélection par statut et involvement", () =
     ] as const) {
       expect(getAffairNoticeVariant(s, "DIRECT")).toBe("presumption");
     }
+  });
+
+  it("plainte ou signalement seuls : jamais « procédure en cours »", () => {
+    for (const s of ["PLAINTE_DEPOSEE", "SIGNALEMENT_PARQUET"] as const) {
+      expect(getAffairNoticeVariant(s, "DIRECT")).toBe("no_inquiry");
+    }
+    const { getByRole } = render(
+      <AffairStatusNotice status="SIGNALEMENT_PARQUET" involvement="DIRECT" />
+    );
+    const text = getByRole("note").textContent ?? "";
+    expect(text).toContain("aucune enquête n'est connue");
+    expect(text).not.toContain("en cours");
   });
 
   it("non mis en cause : encart de rôle, jamais un encart à charge (I5)", () => {
@@ -87,6 +98,58 @@ describe("AffairStatusNotice — wordings validés (RGPD art. 10)", () => {
     const note = getByRole("note");
     expect(note.getAttribute("data-variant")).toBe("not_accused");
     expect(note.textContent).toContain("ni mise en cause, ni poursuivie");
+  });
+});
+
+describe("décision non pénale (civile, administrative, financière)", () => {
+  it("une décision civile n'est jamais lue comme une condamnation pénale", () => {
+    expect(getAffairNoticeVariant("CONDAMNATION_DEFINITIVE", "DIRECT", "CIVIL")).toBe("non_penal");
+    expect(
+      getAffairNoticeVariant("CONDAMNATION_PREMIERE_INSTANCE", "DIRECT", "ADMINISTRATIF")
+    ).toBe("non_penal");
+    const { getByRole } = render(
+      <AffairStatusNotice
+        status="CONDAMNATION_DEFINITIVE"
+        involvement="DIRECT"
+        jurisdictionOrder="CIVIL"
+      />
+    );
+    const text = getByRole("note").textContent ?? "";
+    expect(text).toContain("Décision non pénale");
+    expect(text).toContain("Elle n'est pas pénale");
+    expect(text).not.toContain("voies de recours");
+  });
+
+  it("une décision non pénale non définitive dit qu'un recours reste possible", () => {
+    const { getByRole } = render(
+      <AffairStatusNotice
+        status="CONDAMNATION_PREMIERE_INSTANCE"
+        involvement="DIRECT"
+        jurisdictionOrder="CIVIL"
+      />
+    );
+    expect(getByRole("note").textContent).toContain("La décision n'est pas définitive");
+  });
+
+  it("une procédure non pénale en cours garde la présomption d'innocence (retour Codex #1108)", () => {
+    for (const s of ["INSTRUCTION", "PROCES_EN_COURS"] as const) {
+      expect(getAffairNoticeVariant(s, "DIRECT", "CIVIL")).toBe("presumption");
+    }
+    const { getByRole } = render(
+      <AffairStatusNotice status="PROCES_EN_COURS" involvement="DIRECT" jurisdictionOrder="CIVIL" />
+    );
+    const text = getByRole("note").textContent ?? "";
+    expect(text).toContain("présumée innocente");
+    expect(text).toContain("Procédure non pénale");
+  });
+
+  it("l'ordre pénal garde ses encarts, y compris sans ordre précisé", () => {
+    expect(getAffairNoticeVariant("CONDAMNATION_DEFINITIVE", "DIRECT", "PENAL")).toBe("definitive");
+    expect(getAffairNoticeVariant("CONDAMNATION_DEFINITIVE", "DIRECT")).toBe("definitive");
+  });
+
+  it("une personne non mise en cause garde l'encart de rôle, quel que soit l'ordre", () => {
+    expect(getAffairNoticeVariant("RELAXE", "VICTIM", "CIVIL")).toBe("not_accused");
   });
 });
 

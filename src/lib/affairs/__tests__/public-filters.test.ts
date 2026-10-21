@@ -11,6 +11,7 @@ import {
 /** Statuts qui ne doivent JAMAIS apparaître dans un agrégat à charge. */
 const EXCLUDED_STATUSES = [
   "PLAINTE_DEPOSEE",
+  "SIGNALEMENT_PARQUET",
   "ENQUETE_PRELIMINAIRE",
   "RELAXE",
   "ACQUITTEMENT",

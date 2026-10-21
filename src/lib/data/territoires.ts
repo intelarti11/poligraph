@@ -7,6 +7,10 @@ import {
   PUBLIC_POLITICIAN_WHERE,
 } from "@/lib/api/public-contract";
 import { getMaireStatus, type MaireStatus } from "@/lib/data/elus";
+import {
+  readIntercommunalites,
+  type IntercommunaliteBlock,
+} from "@/lib/data/territoires-intercommunalites";
 import { DEPARTMENTS, getDepartmentName, getDepartmentSlug } from "@/config/departments";
 import {
   REGIONS,
@@ -24,7 +28,17 @@ import {
   type CollectiviteParticuliere,
 } from "@/config/collectivites-particulieres";
 import { COMMUNE_DATA_SYNC_KEY, COMMUNE_POPULATION_SOURCE } from "@/config/communes";
+import { DEPUTE_UNIQUE_MAX_POPULATION } from "@/config/populations-reference";
+import {
+  readDepartementPopulationVintages,
+  readPopulationEnVigueur,
+  type PopulationVintage,
+} from "./commune-population";
 import { DATA_SOURCE_LABELS, DATA_SOURCE_URLS } from "@/config/labels";
+import {
+  readCommunePresidentielles,
+  type CommunePresidentielles,
+} from "@/lib/data/territoires-presidentielle";
 
 /**
  * Readers of the Territoires section (#1052): commune dossier, region, department, entry page,
@@ -33,7 +47,8 @@ import { DATA_SOURCE_LABELS, DATA_SOURCE_URLS } from "@/config/labels";
  * Dependencies and invalidation
  * -----------------------------
  * The cached readers below read Commune, Mandate (+ MandateLocal), Politician (publication
- * status), Candidacy, ElectoralList, CommuneElectionRound, Election and SyncMetadata. Each one is
+ * status), Candidacy, ElectoralList, CommuneElectionRound, Election, SyncMetadata and
+ * CommuneIntercommunalite (+ Intercommunalite). Each one is
  * tagged with the tags the existing write paths already purge, so no new purge point is needed:
  *
  * - `politicians`: purged by `invalidateEntity("politician" | "mandate")`, which the admin
@@ -42,6 +57,7 @@ import { DATA_SOURCE_LABELS, DATA_SOURCE_URLS } from "@/config/labels";
  *   withdrawn from publication therefore leaves these pages on the next purge, without waiting for
  *   an RNE import. The RNE import itself (`npm run sync:rne:maires`, manual) purges nothing: its
  *   writes surface with the next daily `politicians` purge, or an operator purge of `territoires`.
+ *   The intercommunality import (`npm run sync:intercommunalites`, manual) works the same way.
  * - `elections`: purged by `invalidateEntity("election")` and by `revalidateAll()` after a sync.
  * - `elections-municipales-2026`: the frozen results tag, purged only by an operator.
  * - `territoires`: operator-selectable (`NARROW_TAGS`), purges every reader here at once.
@@ -76,7 +92,7 @@ export interface PersonRef {
 export interface DepartmentRef {
   code: string;
   name: string | null;
-  /** `/departements/<slug>`; null for codes without a department page (984, 989). */
+  /** `/territoires/departements/<slug>`; null for codes without a department page (984, 989). */
   slug: string | null;
 }
 
@@ -95,6 +111,8 @@ export type CoverageBloc =
   | "deputes"
   | "senateurs"
   | "municipales2026"
+  | "intercommunalite"
+  | "presidentielle"
   | "departements"
   | "presidence"
   | "conseil"
@@ -138,12 +156,17 @@ const MUNICIPALES_2026_SLUG = "municipales-2026";
  */
 const PLM_COMMUNES = new Set(["75056", "69123", "13055"]);
 
-/** From this population on, a single recorded constituency is never shown as established. */
-export const DEPUTE_UNIQUE_MAX_POPULATION = 20_000;
+export { DEPUTE_UNIQUE_MAX_POPULATION };
 
 const COG_SOURCE: SourceRef = {
   label: "Code officiel géographique (INSEE), via geo.api.gouv.fr",
   url: COMMUNE_POPULATION_SOURCE.url,
+};
+
+/** The documentation of the API does not name the producer of `surface`: none is claimed. */
+const SURFACE_SOURCE: SourceRef = {
+  label: "geo.api.gouv.fr, surface de la commune",
+  url: "https://geo.api.gouv.fr/decoupage-administratif/communes",
 };
 
 const POPULATION_SOURCE: SourceRef = {
@@ -339,14 +362,14 @@ export interface CommuneDossier {
   maire: MaireBlock;
   /** Arrondissement or sector mayors (PLM), public profiles only. Empty elsewhere. */
   mairesSecteur: MaireSecteur[];
-  conseilMunicipal: {
-    /** The current composition is not in the base: never substituted by ballot results. */
-    state: "NON_ETABLI";
-  };
+  /** From the RNE council file; never substituted by ballot results when absent. */
+  conseilMunicipal: ConseilBlock;
+  /** Surface in hectares from geo.api.gouv.fr; null until imported or when the source has none. */
+  surface: { hectares: number | null; source: SourceRef };
   population: {
     value: number | null;
-    /** The vintage is not published by the source: never claim one. */
-    vintage: null;
+    /** Vintage in force (CommunePopulation). Null: geo.api.gouv.fr figure, vintage unknown. */
+    vintage: PopulationVintage | null;
     importedAt: string | null;
     source: SourceRef;
   };
@@ -372,7 +395,11 @@ export interface CommuneDossier {
     };
     senateurs: { state: BlockState; senateurs: ParlementaireRef[] };
   };
-  elections: { municipales2026: MunicipalesBlock | null };
+  elections: { municipales2026: MunicipalesBlock | null; presidentielles: CommunePresidentielles };
+  /** Null until the first intercommunality import: no block is shown then. */
+  intercommunalite: IntercommunaliteBlock | null;
+  /** Published curated decisions concerning the commune (#1052, lot 2). 0 hides the link. */
+  decisionsPubliees: number;
   coverage: CoverageEntry[];
 }
 
@@ -603,6 +630,7 @@ async function readCommuneDossier(inseeCode: string): Promise<CommuneDossier | n
       constituencyNumber: true,
       latitude: true,
       longitude: true,
+      surfaceHa: true,
     },
   });
   if (!commune) return null;
@@ -611,9 +639,21 @@ async function readCommuneDossier(inseeCode: string): Promise<CommuneDossier | n
   const importedAt = await getCommunesImportDate();
   const maire = await readMaire(inseeCode);
   const mairesSecteur = await readMairesSecteur(inseeCode);
+  const conseilMunicipal = await readConseil("MUNICIPAL", inseeCode);
   const departmentDeputies = await readParlementaires("DEPUTE", commune.departmentCode);
   const senateurs = await readParlementaires("SENATEUR", commune.departmentCode);
   const municipales2026 = await readMunicipales2026(inseeCode);
+  const populationEnVigueur = await readPopulationEnVigueur(inseeCode);
+  const populationSource: SourceRef = populationEnVigueur
+    ? { label: populationEnVigueur.vintage.sourceLabel, url: populationEnVigueur.vintage.sourceUrl }
+    : POPULATION_SOURCE;
+  const populationImportedAt = populationEnVigueur?.verifiedAt ?? importedAt;
+  const decisionsPubliees = await db.decision.count({
+    where: { communeId: inseeCode, status: "PUBLISHED" },
+  });
+  const intercommunalite = await readIntercommunalites(inseeCode);
+  const presidentielles = await readCommunePresidentielles(inseeCode, commune.departmentCode);
+  const lastPresidentielle = presidentielles.blocks[0];
 
   const plusieursCirconscriptions = PLM_COMMUNES.has(inseeCode);
   const circo = commune.constituencyNumber;
@@ -663,12 +703,17 @@ async function readCommuneDossier(inseeCode: string): Promise<CommuneDossier | n
           },
         ]
       : []),
-    { bloc: "conseilMunicipal", state: "NON_ETABLI", source: null, date: null },
+    {
+      bloc: "conseilMunicipal",
+      state: conseilMunicipal.state,
+      source: conseilMunicipal.source,
+      date: conseilMunicipal.registerDate,
+    },
     {
       bloc: "population",
-      state: commune.population != null ? "DISPONIBLE" : "ABSENT",
-      source: POPULATION_SOURCE,
-      date: importedAt,
+      state: (populationEnVigueur?.value ?? commune.population) != null ? "DISPONIBLE" : "ABSENT",
+      source: populationSource,
+      date: populationImportedAt,
     },
     {
       bloc: "deputes",
@@ -689,9 +734,32 @@ async function readCommuneDossier(inseeCode: string): Promise<CommuneDossier | n
       source: municipales2026 ? municipales2026.source : null,
       date: municipales2026?.round2Date ?? municipales2026?.round1Date ?? null,
     },
+    ...(intercommunalite
+      ? [
+          {
+            bloc: "intercommunalite" as const,
+            // "Sans objet" is an established fact too: the commune belongs to none.
+            state:
+              intercommunalite.state === "NON_ETABLI"
+                ? ("NON_ETABLI" as const)
+                : ("DISPONIBLE" as const),
+            source: intercommunalite.source,
+            date: intercommunalite.situationDate,
+          },
+        ]
+      : []),
+    {
+      bloc: "presidentielle",
+      state: lastPresidentielle ? "DISPONIBLE" : "ABSENT",
+      source: lastPresidentielle?.sources[0]
+        ? { label: lastPresidentielle.sources[0].label, url: lastPresidentielle.sources[0].url }
+        : null,
+      date: lastPresidentielle?.importedAt ?? null,
+    },
   ];
 
   return {
+    decisionsPubliees,
     identity: {
       inseeCode: commune.id,
       name: commune.name,
@@ -708,12 +776,13 @@ async function readCommuneDossier(inseeCode: string): Promise<CommuneDossier | n
     },
     maire,
     mairesSecteur,
-    conseilMunicipal: { state: "NON_ETABLI" },
+    conseilMunicipal,
+    surface: { hectares: commune.surfaceHa, source: SURFACE_SOURCE },
     population: {
-      value: commune.population,
-      vintage: null,
-      importedAt,
-      source: POPULATION_SOURCE,
+      value: populationEnVigueur?.value ?? commune.population,
+      vintage: populationEnVigueur?.vintage ?? null,
+      importedAt: populationImportedAt,
+      source: populationSource,
     },
     parlement: {
       deputes: {
@@ -726,7 +795,8 @@ async function readCommuneDossier(inseeCode: string): Promise<CommuneDossier | n
       },
       senateurs: { state: senateurs.length > 0 ? "DISPONIBLE" : "ABSENT", senateurs },
     },
-    elections: { municipales2026 },
+    elections: { municipales2026, presidentielles },
+    intercommunalite,
     coverage,
   };
 }
@@ -739,6 +809,11 @@ export interface PresidenceBlock {
   title: string | null;
   lastConfirmedAt: string | null;
   source: SourceRef | null;
+  /**
+   * President named by the RNE council file when no executive mandate is recorded: a name only,
+   * never linked to a profile. Null when a mandate establishes the presidency.
+   */
+  registre: { fullName: string; title: string | null } | null;
 }
 
 /**
@@ -766,6 +841,109 @@ async function readPresidence(where: Prisma.MandateWhereInput): Promise<Presiden
     title: holder?.title ?? null,
     lastConfirmedAt: iso(holder?.lastConfirmedAt),
     source: holder ? sourceOf(holder.source) : null,
+    registre: null,
+  };
+}
+
+// ═══ Council members (RNE) ══════════════════════════════════════
+
+export interface ConseilMembreRef {
+  lastName: string;
+  firstName: string;
+  /** Section départementale (regional) or canton (departmental) label. */
+  subdivisionLabel: string | null;
+  functionLabel: string | null;
+}
+
+export interface ConseilBlock {
+  state: BlockState;
+  /** Lines of the register for this council: serving members, vacancies are not listed. */
+  recordedCount: number;
+  /** Holders of a function first (president, then vice-presidents by rank), then alphabetical. */
+  membres: ConseilMembreRef[];
+  /** Publication date of the RNE file the lines come from. */
+  registerDate: string | null;
+  source: SourceRef | null;
+}
+
+const RNE_CONSEILS_SOURCE: SourceRef = {
+  label: "Répertoire national des élus, ministère de l'Intérieur",
+  url: "https://www.data.gouv.fr/datasets/repertoire-national-des-elus-1",
+};
+
+/** "Président" first, then "1er", "2ème"... Vice-présidents, then any other function. */
+export function functionRank(label: string | null): number {
+  if (!label) return 1000;
+  if (/^présidente?\b/i.test(label) || /^maire$/i.test(label)) return 0;
+  const m = label.match(/^(\d+)(?:er|ère|ème|e)\b/i);
+  if (m) return Number(m[1]);
+  return 500;
+}
+
+async function readConseil(
+  niveau: "MUNICIPAL" | "DEPARTEMENTAL" | "REGIONAL",
+  territoryCode: string
+): Promise<ConseilBlock> {
+  const empty: ConseilBlock = {
+    state: "NON_ETABLI",
+    recordedCount: 0,
+    membres: [],
+    registerDate: null,
+    source: null,
+  };
+  let rows;
+  try {
+    rows = await db.conseilMembre.findMany({
+      where: { niveau, territoryCode },
+      select: {
+        lastName: true,
+        firstName: true,
+        subdivisionLabel: true,
+        functionLabel: true,
+        registerDate: true,
+      },
+      // The largest councils: 209 seats (Île-de-France region), 163 (Paris).
+      take: 300,
+    });
+  } catch (error) {
+    // Table not created yet (manual SQL applied after the code ships): not established.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2021") {
+      return empty;
+    }
+    throw error;
+  }
+  if (rows.length === 0) return empty;
+
+  const membres = rows
+    .map(({ registerDate: _registerDate, ...m }) => m)
+    .sort(
+      (a, b) =>
+        functionRank(a.functionLabel) - functionRank(b.functionLabel) ||
+        a.lastName.localeCompare(b.lastName, "fr") ||
+        a.firstName.localeCompare(b.firstName, "fr")
+    );
+  return {
+    state: "DISPONIBLE",
+    recordedCount: rows.length,
+    membres,
+    registerDate: iso(rows[0]?.registerDate),
+    source: RNE_CONSEILS_SOURCE,
+  };
+}
+
+/** Falls back on the president the register lists, keeping an established presidency as is. */
+function withRegisterPresident(
+  presidence: PresidenceBlock,
+  conseil: ConseilBlock
+): PresidenceBlock {
+  if (presidence.state === "ETABLI") return presidence;
+  const first = conseil.membres[0];
+  if (!first || functionRank(first.functionLabel) !== 0) return presidence;
+  return {
+    ...presidence,
+    registre: { fullName: `${first.firstName} ${first.lastName}`, title: first.functionLabel },
+    source: conseil.source,
+    lastConfirmedAt: conseil.registerDate,
   };
 }
 
@@ -787,8 +965,7 @@ export interface RegionTerritoire {
   departements: RegionDepartement[];
   communeCount: number;
   presidence: PresidenceBlock;
-  /** Regional councillors are not synced: the composition is never established (NON_ETABLI). */
-  conseil: { state: BlockState; recordedCount: number };
+  conseil: ConseilBlock;
   coverage: CoverageEntry[];
 }
 
@@ -845,7 +1022,7 @@ async function readRegionTerritoire(regionCode: string): Promise<RegionTerritoir
   // No structured region key exists on PRESIDENT_REGION rows (MandateLocal.regionCode is empty).
   // The department code identifies the region only when the region has a single department
   // (the five DROM); otherwise the region name carried by `constituency` is the only key.
-  const presidence = await readPresidence({
+  const mandatePresidence = await readPresidence({
     type: "PRESIDENT_REGION",
     OR: [
       { constituency: region.name },
@@ -854,13 +1031,8 @@ async function readRegionTerritoire(regionCode: string): Promise<RegionTerritoir
         : []),
     ],
   });
-  const conseillers = await db.mandate.count({
-    where: {
-      type: "CONSEILLER_REGIONAL",
-      isCurrent: true,
-      localData: { regionCode: region.code },
-    },
-  });
+  const conseil = await readConseil("REGIONAL", region.code);
+  const presidence = withRegisterPresident(mandatePresidence, conseil);
 
   const departements = region.departmentCodes
     .map((code) => ({
@@ -873,8 +1045,6 @@ async function readRegionTerritoire(regionCode: string): Promise<RegionTerritoir
 
   const communeCount = departements.reduce((n, d) => n + d.communeCount, 0);
   const importedAt = await getCommunesImportDate();
-  // Councillors are not synced either: zero recorded says nothing about the council.
-  const conseilState: BlockState = "NON_ETABLI";
 
   return {
     region: {
@@ -887,17 +1057,18 @@ async function readRegionTerritoire(regionCode: string): Promise<RegionTerritoir
     departements,
     communeCount,
     presidence,
-    conseil: { state: conseilState, recordedCount: conseillers },
+    conseil,
     coverage: [
       { bloc: "departements", state: "DISPONIBLE", source: REGION_SOURCE, date: null },
       { bloc: "communes", state: "DISPONIBLE", source: COG_SOURCE, date: importedAt },
       {
         bloc: "presidence",
-        state: presidence.state === "ETABLI" ? "DISPONIBLE" : presidence.state,
+        state:
+          presidence.state === "ETABLI" || presidence.registre ? "DISPONIBLE" : presidence.state,
         source: presidence.source,
         date: presidence.lastConfirmedAt,
       },
-      { bloc: "conseil", state: conseilState, source: null, date: null },
+      { bloc: "conseil", state: conseil.state, source: conseil.source, date: conseil.registerDate },
     ],
   };
 }
@@ -917,6 +1088,8 @@ export interface DepartementTerritoire {
   territoireHorsRegion: { code: string; name: string; statut: string } | null;
   collectivitesParticulieres: CollectiviteParticuliere[];
   communeCount: number;
+  /** Population vintages in force across the department's communes, most common first. */
+  populationVintages: (PopulationVintage & { communes: number })[];
   /** Exact count per initial letter (accents folded), letters without communes omitted. */
   letterCounts: Record<string, number>;
   communes: {
@@ -930,7 +1103,7 @@ export interface DepartementTerritoire {
   };
   presidence: PresidenceBlock;
   /** Departmental councillors are not synced: partial at best, always NON_ETABLI. */
-  conseil: { state: BlockState; recordedCount: number };
+  conseil: ConseilBlock;
   parlement: { deputeCount: number; senateurCount: number };
   coverage: CoverageEntry[];
 }
@@ -1031,15 +1204,12 @@ async function readDepartementTerritoire(
     };
   });
 
-  const presidence = await readPresidence({ type: "PRESIDENT_DEPARTEMENT", departmentCode });
-  const conseillers = await db.mandate.count({
-    where: { type: "CONSEILLER_DEPARTEMENTAL", isCurrent: true, departmentCode },
-  });
+  const mandatePresidence = await readPresidence({ type: "PRESIDENT_DEPARTEMENT", departmentCode });
+  const conseil = await readConseil("DEPARTEMENTAL", departmentCode);
+  const presidence = withRegisterPresident(mandatePresidence, conseil);
   const deputes = await countParlementairesByDepartment("DEPUTE", [departmentCode]);
   const senateurs = await countParlementairesByDepartment("SENATEUR", [departmentCode]);
   const importedAt = await getCommunesImportDate();
-  // Councillors are not synced either: zero recorded says nothing about the council.
-  const conseilState: BlockState = "NON_ETABLI";
 
   return {
     department: departmentRef(departmentCode),
@@ -1047,10 +1217,11 @@ async function readDepartementTerritoire(
     territoireHorsRegion: getTerritoireHorsRegion(departmentCode),
     collectivitesParticulieres: getCollectivitesForDepartment(departmentCode),
     communeCount,
+    populationVintages: await readDepartementPopulationVintages(departmentCode),
     letterCounts,
     communes: { letter, page, pageSize: DEPARTEMENT_PAGE_SIZE, total, totalPages, rows },
     presidence,
-    conseil: { state: conseilState, recordedCount: conseillers },
+    conseil,
     parlement: {
       deputeCount: deputes.get(departmentCode) ?? 0,
       senateurCount: senateurs.get(departmentCode) ?? 0,
@@ -1059,11 +1230,12 @@ async function readDepartementTerritoire(
       { bloc: "communes", state: "DISPONIBLE", source: COG_SOURCE, date: importedAt },
       {
         bloc: "presidence",
-        state: presidence.state === "ETABLI" ? "DISPONIBLE" : presidence.state,
+        state:
+          presidence.state === "ETABLI" || presidence.registre ? "DISPONIBLE" : presidence.state,
         source: presidence.source,
         date: presidence.lastConfirmedAt,
       },
-      { bloc: "conseil", state: conseilState, source: null, date: null },
+      { bloc: "conseil", state: conseil.state, source: conseil.source, date: conseil.registerDate },
     ],
   };
 }

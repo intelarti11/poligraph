@@ -1,9 +1,9 @@
 /**
  * Génère les contours SVG décoratifs de la rubrique Territoires depuis les GeoJSON du dépôt.
  *
- * Entrées : public/data/departements.geojson (polygones) et public/data/domtom.geojson
- * (aujourd'hui des points seulement : aucun contour ultramarin n'en sort, voir
- * public/data/README.md).
+ * Entrées : public/data/departements.geojson (métropole) et public/data/outremer.geojson
+ * (DROM et COM, produit par `npm run territoires:outremer`, provenance dans
+ * public/data/outremer-provenance.json et public/data/README.md).
  * Sortie : src/config/territoires-shapes.ts, committé. Le script est déterministe : le
  * relancer sans changer les GeoJSON ne produit aucun diff.
  *
@@ -14,6 +14,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { format, resolveConfig } from "prettier";
 import { DEPARTMENTS } from "../src/config/departments";
+import { getRegionForDepartment } from "../src/config/regions";
 import { projectLonLat, type FrameTransform } from "../src/lib/territoires/shape-projection";
 
 const ROOT = join(__dirname, "..");
@@ -35,12 +36,36 @@ interface FrameSpec {
   padding: number;
   tolerance: number;
   minArea: number;
+  /**
+   * Draw the islands below `minArea` as a small dot instead of dropping them, so an
+   * archipelago (Polynesia, Wallis-et-Futuna) keeps every island it is made of.
+   */
+  smallAsDot?: boolean;
 }
 
 const DEPARTMENT_FRAME: FrameSpec = { size: 300, padding: 6, tolerance: 0.6, minArea: 6 };
 const REGION_FRAME: FrameSpec = { size: 300, padding: 6, tolerance: 0.7, minArea: 6 };
 const FRANCE_FRAME: FrameSpec = { size: 600, padding: 4, tolerance: 0.6, minArea: 3 };
 const FRANCE_MINI_FRAME: FrameSpec = { size: 240, padding: 2, tolerance: 0.6, minArea: 1.5 };
+/**
+ * Overseas department or collectivity, each in its own frame. Dots only where the islands are
+ * the territory (Polynesia spans about 2,300 km, most of its islands are atolls a few
+ * kilometres wide): around New Caledonia the islets would only blur the coastline.
+ */
+const OVERSEAS_FRAME: FrameSpec = DEPARTMENT_FRAME;
+const ARCHIPELAGO_FRAME: FrameSpec = { ...DEPARTMENT_FRAME, smallAsDot: true };
+const ARCHIPELAGOS = new Set(["986", "987"]);
+/** The five DROM insets under metropolitan France, as on official French maps. */
+const DROM_CODES = ["971", "972", "973", "974", "976"] as const;
+const INSET_SIZE = 108;
+const INSET_GAP = 15;
+const INSET_FRAME: FrameSpec = {
+  size: INSET_SIZE,
+  padding: 8,
+  tolerance: 0.5,
+  minArea: 1,
+  smallAsDot: true,
+};
 /** Below this extent (viewBox units of the inset), a highlighted department also gets a halo. */
 const SMALL_EXTENT = 8;
 
@@ -140,14 +165,15 @@ function ringArea(ring: Ring): number {
 /**
  * Path data with integer coordinates: absolute `M` per ring, then relative `l` deltas, which
  * roughly halves the bytes. Deltas come from already-rounded points, so rounding never drifts.
- * Tiny islands below `minArea` are dropped, except the largest ring of the feature, which is
- * always kept so a small territory (Paris in the mini map) never loses its outline.
+ * Tiny islands below `minArea` are dropped (or become dots with `smallAsDot`), except the
+ * largest ring of the feature, which is always kept so a small territory (Paris in the mini
+ * map) never loses its outline.
  */
 function toPath(polygons: Ring[][], transform: FrameTransform, spec: FrameSpec): string {
   const [k, tx, ty] = transform;
-  const rings: { ring: Ring; area: number }[] = [];
+  const rings: { ring: Ring; framed: Ring; area: number; hole: boolean }[] = [];
   for (const polygon of polygons) {
-    for (const ring of polygon) {
+    for (const [index, ring] of polygon.entries()) {
       const framed = ring.map(([x, y]) => [x * k + tx, y * k + ty] as [number, number]);
       const simplified = simplify(framed, spec.tolerance);
       const rounded: Ring = [];
@@ -161,14 +187,26 @@ function toPath(polygons: Ring[][], transform: FrameTransform, spec: FrameSpec):
       if (rounded.length > 1 && first && last && first[0] === last[0] && first[1] === last[1]) {
         rounded.pop();
       }
-      rings.push({ ring: rounded, area: ringArea(framed) });
+      rings.push({ ring: rounded, framed, area: ringArea(framed), hole: index > 0 });
     }
   }
   const largest = Math.max(...rings.map((r) => r.area));
   const parts: string[] = [];
-  for (const { ring, area } of rings) {
+  const dots = new Set<string>();
+  for (const { ring, framed, area, hole } of rings) {
+    if (area < spec.minArea && area !== largest) {
+      if (spec.smallAsDot && !hole) {
+        const [cx, cy] = centre(framed);
+        // One dot per 4-unit cell: the motus of one atoll make a single mark.
+        const cell = `${Math.round(cx / 4)},${Math.round(cy / 4)}`;
+        if (!dots.has(cell)) {
+          dots.add(cell);
+          parts.push(`M${Math.round(cx)} ${Math.round(cy) - 2}l2 2-2 2-2-2z`);
+        }
+      }
+      continue;
+    }
     if (ring.length < 3) continue;
-    if (area < spec.minArea && area !== largest) continue;
     let d = `M${ring[0]![0]} ${ring[0]![1]}l`;
     for (let i = 1; i < ring.length; i++) {
       const dx = ring[i]![0] - ring[i - 1]![0];
@@ -178,6 +216,12 @@ function toPath(polygons: Ring[][], transform: FrameTransform, spec: FrameSpec):
     parts.push(`${d}z`);
   }
   return parts.join("");
+}
+
+function centre(ring: Ring): [number, number] {
+  const xs = ring.map((p) => p[0]);
+  const ys = ring.map((p) => p[1]);
+  return [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2];
 }
 
 function groupOutline(features: Feature[], spec: FrameSpec) {
@@ -210,38 +254,81 @@ function smallAnchors(features: Feature[], spec: FrameSpec): Record<string, [num
   return anchors;
 }
 
+/**
+ * The five DROM in a row of boxes under metropolitan France, as on official French maps. Each
+ * territory has its own frame (never a shared projection with metropolitan France), centred in
+ * its box. Paths are already in the coordinates of the France viewBox, extended downwards.
+ */
+function dromInsets(outreMer: Feature[], franceViewBox: string) {
+  const [, , width, height] = franceViewBox.split(" ").map(Number) as [
+    number,
+    number,
+    number,
+    number,
+  ];
+  const rowWidth = DROM_CODES.length * INSET_SIZE + (DROM_CODES.length - 1) * INSET_GAP;
+  const left = Math.round((width - rowWidth) / 2);
+  const top = height + INSET_GAP;
+  const boxes = DROM_CODES.map((code, i) => {
+    const feature = outreMer.find((f) => f.properties.code === code);
+    const region = getRegionForDepartment(code);
+    if (!feature || !region) throw new Error(`Cartouche impossible pour ${code}`);
+    const polygons = projectedPolygons(feature);
+    const { transform, viewBox } = frameFor([polygons], INSET_FRAME);
+    const [, , w, h] = viewBox.split(" ").map(Number) as [number, number, number, number];
+    const x = left + i * (INSET_SIZE + INSET_GAP);
+    const dx = x + Math.round((INSET_SIZE - w) / 2);
+    const dy = top + Math.round((INSET_SIZE - h) / 2);
+    const [k, tx, ty] = transform;
+    const shifted: FrameTransform = [k, round6(tx + dx), round6(ty + dy)];
+    return {
+      code,
+      region: region.name,
+      box: [x, top, INSET_SIZE, INSET_SIZE] as [number, number, number, number],
+      d: toPath(polygons, shifted, INSET_FRAME),
+    };
+  });
+  return { viewBox: `0 0 ${width} ${top + INSET_SIZE + 2}`, boxes };
+}
+
 function byCode(a: Feature, b: Feature): number {
   return a.properties.code.localeCompare(b.properties.code);
 }
 
 async function main() {
   const metropole = readFeatures("public/data/departements.geojson").sort(byCode);
-  const outreMer = readFeatures("public/data/domtom.geojson").sort(byCode);
+  const outreMer = readFeatures("public/data/outremer.geojson").sort(byCode);
 
   const unknown = [...metropole, ...outreMer].filter((f) => !DEPARTMENTS[f.properties.code]);
   if (unknown.length) {
     throw new Error(`Codes absents de DEPARTMENTS : ${unknown.map((f) => f.properties.code)}`);
   }
 
-  const withOutline = [...metropole, ...outreMer].filter((f) => f.geometry.type !== "Point");
   const pointsOnly = outreMer.filter((f) => f.geometry.type === "Point");
+  if (pointsOnly.length) {
+    throw new Error(`Points sans contour : ${pointsOnly.map((f) => f.properties.code)}`);
+  }
 
   const departmentOutlines: Record<
     string,
     { viewBox: string; transform: FrameTransform; d: string }
   > = {};
-  for (const feature of withOutline) {
-    const polygons = projectedPolygons(feature);
-    const { transform, viewBox } = frameFor([polygons], DEPARTMENT_FRAME);
-    departmentOutlines[feature.properties.code] = {
-      viewBox,
-      transform,
-      d: toPath(polygons, transform, DEPARTMENT_FRAME),
-    };
+  for (const [features, defaultSpec] of [
+    [metropole, DEPARTMENT_FRAME],
+    [outreMer, OVERSEAS_FRAME],
+  ] as const) {
+    for (const feature of features) {
+      const spec = ARCHIPELAGOS.has(feature.properties.code) ? ARCHIPELAGO_FRAME : defaultSpec;
+      const polygons = projectedPolygons(feature);
+      const { transform, viewBox } = frameFor([polygons], spec);
+      departmentOutlines[feature.properties.code] = {
+        viewBox,
+        transform,
+        d: toPath(polygons, transform, spec),
+      };
+    }
   }
 
-  // Regions only from metropolitan polygons: overseas regions are single departments and
-  // have no outline today.
   const regionNames = [...new Set(metropole.map((f) => DEPARTMENTS[f.properties.code]!.region))];
   regionNames.sort((a, b) => a.localeCompare(b, "fr"));
   const regionOutlines: Record<string, ReturnType<typeof groupOutline>> = {};
@@ -249,8 +336,21 @@ async function main() {
     const members = metropole.filter((f) => DEPARTMENTS[f.properties.code]!.region === name);
     regionOutlines[name] = groupOutline(members, REGION_FRAME);
   }
+  // Each DROM region is a single department: its outline is the department's, keyed by the
+  // region name of src/config/regions.ts (DEPARTMENTS files them all under "DOM-TOM").
+  for (const code of DROM_CODES) {
+    const region = getRegionForDepartment(code);
+    const outline = departmentOutlines[code];
+    if (!region || !outline) throw new Error(`Région ou contour absent pour ${code}`);
+    regionOutlines[region.name] = {
+      viewBox: outline.viewBox,
+      transform: outline.transform,
+      departments: { [code]: outline.d },
+    };
+  }
 
   const france = groupOutline(metropole, FRANCE_FRAME);
+  const insets = dromInsets(outreMer, france.viewBox);
   const franceMini = {
     ...groupOutline(metropole, FRANCE_MINI_FRAME),
     smallAnchors: smallAnchors(metropole, FRANCE_MINI_FRAME),
@@ -262,6 +362,7 @@ async function main() {
       Object.fromEntries(Object.entries(departmentOutlines).map(([c, o]) => [c, o.d])),
     ],
     ["France", france.departments],
+    ["cartouches", Object.fromEntries(insets.boxes.map((b) => [b.code, b.d]))],
     ["France vignette", franceMini.departments],
   ] as const) {
     const empty = Object.entries(record).filter(([, d]) => !d);
@@ -273,16 +374,20 @@ async function main() {
  * Ne pas modifier à la main : relancer le script.
  *
  * Contours décoratifs (aria-hidden) de la rubrique Territoires. Provenance des tracés :
- * public/data/departements.geojson, identique géométrie par géométrie au fichier
- * departements-version-simplifiee.geojson de github.com/gregoiredavid/france-geojson,
- * lui-même dérivé d'IGN Admin Express COG (édition 2018), Licence Ouverte Etalab.
- * Détail dans public/data/README.md.
+ * - métropole : public/data/departements.geojson, identique géométrie par géométrie au fichier
+ *   departements-version-simplifiee.geojson de github.com/gregoiredavid/france-geojson,
+ *   lui-même dérivé d'IGN Admin Express COG (édition 2018), Licence Ouverte Etalab ;
+ * - outre-mer : public/data/outremer.geojson. IGN ADMIN EXPRESS COG CARTO PE 2026 (Licence
+ *   Ouverte) pour 971 à 978, Gouvernement de la Nouvelle-Calédonie (Licence Ouverte) pour 988,
+ *   Section Cadastre-Topographie de la Polynésie française (CC-BY) pour 987, Natural Earth
+ *   (domaine public) pour 986.
+ * Détail et attribution : public/data/README.md et public/data/outremer-provenance.json.
  *
  * Projection : Mercator sphérique puis transformation affine propre à chaque cadre
- * (src/lib/territoires/shape-projection.ts). Coordonnées entières.
+ * (src/lib/territoires/shape-projection.ts). Chaque territoire d'outre-mer a son propre cadre.
+ * Coordonnées entières. Outre-mer : les îles trop petites pour être tracées sont des points.
  *
- * Contour absent : ${pointsOnly.map((f) => f.properties.code).join(", ") || "aucun"} (domtom.geojson ne
- * contient que des points pour ces codes), ainsi que toutes les COM.
+ * Sans contour : TAAF (984) et Clipperton (989), qui n'ont pas de page département.
  */`;
 
   const source = `${header}
@@ -309,6 +414,16 @@ export const REGION_OUTLINES: Readonly<Record<string, TerritoryGroupOutline>> = 
 
 /** Metropolitan France, every department, for the entry page and region highlights. */
 export const FRANCE_OUTLINE: TerritoryGroupOutline = ${JSON.stringify(france)};
+
+/**
+ * The five DROM as insets under FRANCE_OUTLINE: \`viewBox\` is the France viewBox extended
+ * downwards, \`box\` the inset frame [x, y, width, height] and \`d\` the outline, both in that
+ * viewBox. \`region\` is the region name of src/config/regions.ts.
+ */
+export const FRANCE_DROM_INSETS: {
+  viewBox: string;
+  boxes: readonly { code: string; region: string; box: readonly [number, number, number, number]; d: string }[];
+} = ${JSON.stringify(insets)};
 
 /**
  * Lighter metropolitan France for a small inset (about 100 px wide). \`smallAnchors\` holds the
@@ -343,11 +458,9 @@ export function projectInDepartment(
   console.log(
     `  ${regionNames.length} régions, France ${kb(JSON.stringify(france))} Ko, vignette ${kb(JSON.stringify(franceMini))} Ko`
   );
-  if (pointsOnly.length) {
-    console.log(
-      `  sans contour (points seulement) : ${pointsOnly.map((f) => f.properties.code).join(", ")}`
-    );
-  }
+  console.log(
+    `  outre-mer : ${outreMer.map((f) => f.properties.code).join(", ")}, cartouches ${kb(JSON.stringify(insets))} Ko`
+  );
 }
 
 main().catch((error) => {

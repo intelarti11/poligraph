@@ -21,9 +21,27 @@ import { ExternalLink, Calendar, Users, FileText } from "lucide-react";
 import { StatusBadge } from "@/components/legislation";
 import { ArticleJsonLd } from "@/components/seo/JsonLd";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { MissingData } from "@/components/ui/MissingData";
+import { currentAffiliationLabel } from "@/lib/votes/current-affiliation";
+import { publicVotes } from "@/lib/votes/public-voters";
+import { CURRENT_LEGISLATURE } from "@/config/scrutin-importance";
 import { getScrutinGroupPositions, getScrutinAnalysis } from "@/lib/data/groupes";
+import { getScrutinOfficialGroups } from "@/lib/data/scrutin-official-groups";
+import {
+  officialGroupCountsView,
+  officialSourceOf,
+  voteCoverageView,
+  type RecordedPositions,
+} from "@/lib/votes/scrutin-provenance";
+import { DataStatus } from "@/components/parlement/legislature";
+import { ScrutinResultCard } from "@/components/votes/ScrutinResultCard";
+import { ScrutinOfficialGroups } from "@/components/votes/ScrutinOfficialGroups";
 import { GroupPositions } from "@/components/votes/GroupPositions";
 import { ScrutinContext } from "@/components/votes/ScrutinContext";
+import { HistoricalGroupPositions } from "@/components/votes/HistoricalGroupPositions";
+import { HISTORICAL_GROUP_POSITIONS_PUBLIC } from "@/config/historical-positions";
+import { readHistoricalGroupPositions } from "@/lib/data/historical-group-positions";
+import { buildHistoricalPositionsView, planGroupsSection } from "@/lib/votes/historical-positions";
 import type { VotePosition } from "@/types";
 import { SITE_URL } from "@/config/site";
 import { ShareBar } from "@/components/ui/ShareBar";
@@ -151,12 +169,14 @@ const getScrutinWithRedirect = cache(async function getScrutinWithRedirect(slugO
   }
 
   // 4. Try by numeric part of externalId (e.g., "5283") - legacy URL
-  // External IDs are like "VTANR5L17V5283" - we match the number part
+  // External IDs are like "VTANR5L17V5283" - we match the number part. The same number
+  // exists in several legislatures: the most recent one wins.
   if (/^\d+$/.test(slugOrId)) {
     scrutin = await db.scrutin.findFirst({
       where: {
         externalId: { endsWith: `V${slugOrId}` },
       },
+      orderBy: { legislature: "desc" },
       include: includeOptions,
     });
     if (scrutin) {
@@ -251,15 +271,20 @@ export default async function ScrutinPage({ params }: PageProps) {
     notFound();
   }
 
-  const [groupPositions, analysis] = await Promise.all([
+  const [groupPositions, analysis, officialGroups] = await Promise.all([
     getScrutinGroupPositions(scrutin.id),
     getScrutinAnalysis(scrutin.id),
+    // Official per-group counts only exist for Assemblée nationale scrutins.
+    scrutin.chamber === "AN"
+      ? getScrutinOfficialGroups(scrutin.id, scrutin.legislature)
+      : Promise.resolve(null),
   ]);
 
   const isKeyVote = !!scrutin.importance?.isKeyVote;
 
-  // Group votes by position
-  const votesByPosition = scrutin.votes.reduce(
+  // Names on the page: public politicians only. The coverage below still counts every stored row.
+  const namedVotes = publicVotes(scrutin.votes);
+  const votesByPosition = namedVotes.reduce(
     (acc, vote) => {
       if (!acc[vote.position]) {
         acc[vote.position] = [];
@@ -267,22 +292,49 @@ export default async function ScrutinPage({ params }: PageProps) {
       acc[vote.position].push(vote);
       return acc;
     },
-    {} as Record<VotePosition, typeof scrutin.votes>
+    {} as Record<VotePosition, typeof namedVotes>
   );
 
   const total = scrutin.votesFor + scrutin.votesAgainst + scrutin.votesAbstain;
-  const forPercent = total > 0 ? (scrutin.votesFor / total) * 100 : 0;
-  const againstPercent = total > 0 ? (scrutin.votesAgainst / total) * 100 : 0;
-  const abstainPercent = total > 0 ? (scrutin.votesAbstain / total) * 100 : 0;
+
+  const source = officialSourceOf(scrutin.sourceUrl, scrutin.chamber);
+  const recorded: RecordedPositions = { POUR: 0, CONTRE: 0, ABSTENTION: 0, NON_VOTANT: 0 };
+  for (const vote of scrutin.votes) {
+    if (vote.position in recorded) recorded[vote.position as keyof RecordedPositions]++;
+  }
+  const coverage = voteCoverageView(recorded, scrutin);
+  const officialGroupsView = officialGroups
+    ? officialGroupCountsView({
+        snapshot: officialGroups.snapshot,
+        organes: officialGroups.organes,
+        scrutin,
+      })
+    : null;
+  // Dated group counts (src/config/historical-positions.ts): the fallback of the official table,
+  // read only when the switch is on and that table is not shown.
+  const officialGroupsShown = officialGroupsView?.kind === "shown";
+  const historicalData =
+    HISTORICAL_GROUP_POSITIONS_PUBLIC && scrutin.chamber === "AN" && !officialGroupsShown
+      ? await readHistoricalGroupPositions(scrutin.externalId)
+      : null;
+  const historicalView = historicalData
+    ? buildHistoricalPositionsView({ legislature: scrutin.legislature, data: historicalData })
+    : null;
+  const groupsPlan = planGroupsSection({
+    enabled: HISTORICAL_GROUP_POSITIONS_PUBLIC,
+    chamber: scrutin.chamber,
+    officialGroupsShown,
+    view: historicalView,
+    hasComputedPositions: groupPositions.length > 0,
+  });
 
   // Public title: policy title iff APPROVED + valid, else official (no leak).
   const view = toPublicTitleView(scrutin);
   const displayTitle = view.mode === "policy" ? view.policyTitle : view.officialTitle;
 
-  // Motion de censure: special threshold-based display (289 = absolute majority of 577 deputies).
-  // Detected against the OFFICIAL title (logic, not display).
+  // Motion de censure: special threshold-based display. Detected against the OFFICIAL title
+  // (logic, not display).
   const isMotionDeCensure = /motion\s+de\s+censure/i.test(scrutin.title);
-  const CENSURE_THRESHOLD = 289;
 
   return (
     <>
@@ -413,196 +465,154 @@ export default async function ScrutinPage({ params }: PageProps) {
           </Link>
         )}
 
-        {/* Context: Citizen Impact, Analysis, Votes détaillés (tabbed) */}
+        {/* A. Résultat officiel */}
+        <ScrutinResultCard
+          votesFor={scrutin.votesFor}
+          votesAgainst={scrutin.votesAgainst}
+          votesAbstain={scrutin.votesAbstain}
+          source={source}
+          isMotionDeCensure={isMotionDeCensure}
+        />
+
+        {/* Synthèse PoliGraph, enjeux et B. Votes individuels (tabbed) */}
         <ScrutinContext
           summary={scrutin.summary}
           citizenImpact={scrutin.citizenImpact}
           analysis={analysis}
           isKeyVote={isKeyVote}
           votesDetailSlot={
-            scrutin.votes.length > 0 ? (
-              <div className="grid md:grid-cols-2 lg:grid-cols-5 gap-6">
-                {(["POUR", "CONTRE", "ABSTENTION", "NON_VOTANT", "ABSENT"] as VotePosition[]).map(
-                  (position) => {
-                    const votes = votesByPosition[position] || [];
-                    return (
-                      <Card key={position}>
-                        <CardHeader className="pb-2">
-                          <div className="flex items-center justify-between">
-                            <CardTitle className="text-base">
-                              <VotePositionBadge position={position} />
-                            </CardTitle>
-                            <span className="text-sm text-muted-foreground">{votes.length}</span>
-                          </div>
-                        </CardHeader>
-                        <CardContent>
-                          {votes.length > 0 ? (
-                            <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                              {votes.map((vote) => (
-                                <Link
-                                  key={vote.id}
-                                  href={`/politiques/${vote.politician.slug}`}
-                                  className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted transition-colors"
-                                >
-                                  <PoliticianAvatar
-                                    photoUrl={vote.politician.photoUrl}
-                                    blobPhotoUrl={vote.politician.blobPhotoUrl}
-                                    firstName={vote.politician.firstName}
-                                    lastName={vote.politician.lastName}
-                                    size="sm"
-                                  />
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium">
-                                      {vote.politician.fullName}
-                                    </p>
-                                    {(() => {
-                                      const group =
-                                        vote.politician.mandates[0]?.parliamentaryData
-                                          ?.parliamentaryGroup;
-                                      if (group) {
-                                        return (
-                                          <p
-                                            className="text-xs text-muted-foreground"
-                                            title={group.name}
-                                          >
-                                            {group.code}
-                                          </p>
-                                        );
-                                      }
-                                      if (vote.politician.currentParty) {
-                                        return (
-                                          <p
-                                            className="text-xs text-muted-foreground"
-                                            title={vote.politician.currentParty.name}
-                                          >
-                                            {vote.politician.currentParty.shortName}
-                                          </p>
-                                        );
-                                      }
-                                      return null;
-                                    })()}
-                                  </div>
-                                </Link>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-sm text-muted-foreground text-center py-4">
-                              Aucun député
-                            </p>
-                          )}
-                        </CardContent>
-                      </Card>
-                    );
-                  }
-                )}
+            <div>
+              <div className="mb-4 space-y-1">
+                <p className="flex flex-wrap items-center gap-2 text-sm">
+                  <DataStatus
+                    status={coverage.status}
+                    scope="Votes individuels"
+                    showScope
+                    label={coverage.label}
+                    description={coverage.description}
+                  />
+                </p>
+                <p className="text-sm text-muted-foreground">{coverage.summary}</p>
               </div>
-            ) : undefined
+              {namedVotes.length > 0 ? (
+                <>
+                  <p className="mb-4 text-sm text-muted-foreground">
+                    Le groupe ou le parti indiqué sous chaque nom est l&apos;affiliation actuelle du
+                    député. Il peut différer de celle qu&apos;il avait le jour du vote.
+                  </p>
+                  <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {(["POUR", "CONTRE", "ABSTENTION", "NON_VOTANT"] as VotePosition[]).map(
+                      (position) => {
+                        const votes = votesByPosition[position] || [];
+                        return (
+                          <Card key={position}>
+                            <CardHeader className="pb-2">
+                              <div className="flex items-center justify-between">
+                                <CardTitle className="text-base">
+                                  <VotePositionBadge position={position} />
+                                </CardTitle>
+                                <span className="text-sm text-muted-foreground">
+                                  {votes.length}
+                                </span>
+                              </div>
+                            </CardHeader>
+                            <CardContent>
+                              {votes.length > 0 ? (
+                                <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                                  {votes.map((vote) => (
+                                    <Link
+                                      key={vote.id}
+                                      href={`/politiques/${vote.politician.slug}`}
+                                      className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted transition-colors"
+                                    >
+                                      <PoliticianAvatar
+                                        photoUrl={vote.politician.photoUrl}
+                                        blobPhotoUrl={vote.politician.blobPhotoUrl}
+                                        firstName={vote.politician.firstName}
+                                        lastName={vote.politician.lastName}
+                                        size="sm"
+                                      />
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium">
+                                          {vote.politician.fullName}
+                                        </p>
+                                        {(() => {
+                                          const label = currentAffiliationLabel({
+                                            group:
+                                              vote.politician.mandates[0]?.parliamentaryData
+                                                ?.parliamentaryGroup,
+                                            party: vote.politician.currentParty,
+                                          });
+                                          if (!label) return null;
+                                          return (
+                                            <p
+                                              className="text-xs text-muted-foreground"
+                                              title={label.title}
+                                            >
+                                              {label.text}
+                                            </p>
+                                          );
+                                        })()}
+                                      </div>
+                                    </Link>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-sm text-muted-foreground text-center py-4">
+                                  Aucun vote enregistré
+                                </p>
+                              )}
+                            </CardContent>
+                          </Card>
+                        );
+                      }
+                    )}
+                  </div>
+                  <p className="mt-4 text-sm text-muted-foreground">
+                    La source ne liste pas les parlementaires absents. L&apos;absence d&apos;un nom
+                    dans ces colonnes n&apos;indique ni une abstention ni une absence.
+                  </p>
+                </>
+              ) : null}
+            </div>
           }
         />
 
-        {/* Group Positions */}
-        {groupPositions.length > 0 && (
-          <Card className="mb-8">
-            <CardContent className="pt-6">
-              <GroupPositions positions={groupPositions} />
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Results summary */}
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle>Résultat du vote</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isMotionDeCensure ? (
-              <div className="space-y-4">
-                {/* Threshold bar for motion de censure */}
-                <div className="relative">
-                  <div className="h-8 bg-muted rounded-lg overflow-hidden">
-                    <div
-                      className={`h-full flex items-center justify-center text-white text-sm font-medium ${
-                        scrutin.result === "ADOPTED" ? "bg-red-500" : "bg-red-400"
-                      }`}
-                      style={{
-                        width: `${Math.min((scrutin.votesFor / CENSURE_THRESHOLD) * 100, 100)}%`,
-                      }}
-                    >
-                      {scrutin.votesFor}
-                    </div>
-                  </div>
-                  {/* Threshold marker */}
-                  <div
-                    className="absolute top-0 h-8 border-r-2 border-dashed border-foreground/60"
-                    style={{ left: "100%" }}
-                  />
-                </div>
-
-                <div className="flex flex-wrap justify-between text-sm">
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-red-400" />
-                    <span>{scrutin.votesFor} voix pour la censure</span>
-                  </div>
-                  <span className="text-muted-foreground tabular-nums">
-                    {CENSURE_THRESHOLD} nécessaires (majorité absolue)
-                  </span>
-                </div>
-
-                <p className="text-xs text-muted-foreground">
-                  Une motion de censure n{"'"}est adoptée que si elle recueille la majorité absolue
-                  des députés ({CENSURE_THRESHOLD}/577). Seuls les députés favorables à la censure
-                  votent.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {/* Vote bar */}
-                <div className="flex h-8 rounded-lg overflow-hidden">
-                  <div
-                    className="bg-green-500 flex items-center justify-center text-white text-sm font-medium"
-                    style={{ width: `${forPercent}%` }}
-                  >
-                    {scrutin.votesFor > 0 && scrutin.votesFor}
-                  </div>
-                  <div
-                    className="bg-red-500 flex items-center justify-center text-white text-sm font-medium"
-                    style={{ width: `${againstPercent}%` }}
-                  >
-                    {scrutin.votesAgainst > 0 && scrutin.votesAgainst}
-                  </div>
-                  <div
-                    className="bg-yellow-500 flex items-center justify-center text-white text-sm font-medium"
-                    style={{ width: `${abstainPercent}%` }}
-                  >
-                    {scrutin.votesAbstain > 0 && scrutin.votesAbstain}
-                  </div>
-                </div>
-
-                {/* Legend */}
-                <div className="flex flex-wrap justify-center gap-6 text-sm">
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-green-500" />
-                    <span>
-                      Pour: {scrutin.votesFor} ({forPercent.toFixed(1)}%)
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-red-500" />
-                    <span>
-                      Contre: {scrutin.votesAgainst} ({againstPercent.toFixed(1)}%)
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 rounded-full bg-yellow-500" />
-                    <span>
-                      Abstention: {scrutin.votesAbstain} ({abstainPercent.toFixed(1)}%)
-                    </span>
-                  </div>
-                </div>
-              </div>
+        {/* C. Groupes : décompte officiel, puis positions calculées */}
+        {(officialGroupsView || groupPositions.length > 0 || scrutin.chamber === "AN") && (
+          <section aria-labelledby="scrutin-groups-title" className="mb-8">
+            <h2 id="scrutin-groups-title" className="mb-4 text-lg font-semibold">
+              Groupes parlementaires
+            </h2>
+            {officialGroupsView && officialGroups && (
+              <ScrutinOfficialGroups
+                view={officialGroupsView}
+                source={source}
+                fetchedAt={officialGroups.fetchedAt}
+              />
             )}
-          </CardContent>
-        </Card>
+            {groupsPlan.showHistorical && historicalView && (
+              <HistoricalGroupPositions view={historicalView} scrutinDate={scrutin.votingDate} />
+            )}
+            {groupsPlan.showCurrentAffiliationPositions && (
+              <Card>
+                <CardContent className="pt-6">
+                  <GroupPositions positions={groupPositions} chamber={scrutin.chamber} />
+                </CardContent>
+              </Card>
+            )}
+            {groupPositions.length === 0 &&
+              !groupsPlan.dropsLegacyNotice &&
+              scrutin.chamber === "AN" &&
+              scrutin.legislature !== CURRENT_LEGISLATURE && (
+                <MissingData title="Positions calculées non affichées">
+                  L&apos;appartenance des députés aux groupes de la {scrutin.legislature}
+                  <sup>e</sup> législature n&apos;est pas encore documentée. Le résultat officiel et
+                  les votes individuels enregistrés restent disponibles sur cette page.
+                </MissingData>
+              )}
+          </section>
+        )}
 
         {/* Contextual link to the thematic landing (descriptive anchor: the
             theme badge above only carries the bare label). */}

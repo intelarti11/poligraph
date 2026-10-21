@@ -14,8 +14,13 @@ import {
   maireSince,
   territoireLabel,
 } from "@/lib/territoires/commune-display";
-import { TERRITOIRES_PATH, territoireRegionPath } from "@/lib/territoires/paths";
+import {
+  TERRITOIRES_PATH,
+  territoireRegionPath,
+  territoireDepartementPath,
+} from "@/lib/territoires/paths";
 import { formatDate } from "@/lib/utils";
+import { populationVintageLabel } from "@/lib/territoires/population-label";
 
 /**
  * Navy banner of the Territoires commune page. Always navy with light text, in both themes: the
@@ -39,7 +44,9 @@ function crumbsFor(identity: CommuneDossier["identity"]): Crumb[] {
   }
   crumbs.push({
     label: territoireLabel(identity),
-    href: identity.department.slug ? `/departements/${identity.department.slug}` : undefined,
+    href: identity.department.slug
+      ? territoireDepartementPath(identity.department.slug)
+      : undefined,
   });
   crumbs.push({ label: identity.name });
   return crumbs;
@@ -254,9 +261,21 @@ export function CommuneHero({ dossier }: { dossier: CommuneDossier }) {
                   population.value != null ? formatPopulation(population.value) : "Non disponible"
                 }
                 detail={
-                  population.value != null
-                    ? "Source INSEE via geo.api.gouv.fr"
-                    : "Aucune population enregistrée pour cette commune."
+                  population.value == null ? (
+                    "Aucune population enregistrée pour cette commune."
+                  ) : population.vintage ? (
+                    <a
+                      href={population.vintage.sourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline underline-offset-2 hover:text-white"
+                    >
+                      {populationVintageLabel(population.vintage)}
+                      <span className="sr-only"> (nouvel onglet)</span>
+                    </a>
+                  ) : (
+                    "Source INSEE via geo.api.gouv.fr"
+                  )
                 }
               />
               <ParlementFact deputes={parlement.deputes} />

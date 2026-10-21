@@ -11,6 +11,8 @@ import { LEFT_MARGIN, RIGHT_MARGIN } from "./types";
 import { computeDuration, computeOverlapOffsets, mandateAffiliation } from "./utils";
 import { DesktopTimeline } from "./DesktopTimeline";
 import { MobileTimeline } from "./MobileTimeline";
+import { MandateOverlapNotice } from "./MandateOverlapNotice";
+import { partitionMandatesForDisplay } from "@/lib/mandates/overlaps";
 
 export function CareerTimeline({
   mandates,
@@ -19,6 +21,10 @@ export function CareerTimeline({
   birthDate: _birthDate,
   deathDate,
 }: CareerTimelineProps) {
+  const displayableMandates = useMemo(
+    () => partitionMandatesForDisplay(mandates).displayable,
+    [mandates]
+  );
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(900);
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
@@ -51,7 +57,7 @@ export function CareerTimeline({
     const now = new Date();
     const careerDates: Date[] = [];
 
-    mandates.forEach((m) => {
+    displayableMandates.forEach((m) => {
       careerDates.push(new Date(m.startDate));
       if (m.endDate) careerDates.push(new Date(m.endDate));
     });
@@ -98,7 +104,7 @@ export function CareerTimeline({
       .range([LEFT_MARGIN, renderWidth - RIGHT_MARGIN]);
 
     return { minDate, maxDate, xScale: scale, renderWidth };
-  }, [mandates, partyHistory, affairs, deathDate, containerWidth]);
+  }, [displayableMandates, partyHistory, affairs, deathDate, containerWidth]);
 
   // ─── Year markers ───────────────────────────────────────────────────
   const yearMarkers = useMemo(() => {
@@ -114,8 +120,8 @@ export function CareerTimeline({
 
   // ─── Mandate rows (grouped by category) ────────────────────────────
   const mandateRows = useMemo(() => {
-    const rowMap = new Map<number, typeof mandates>();
-    mandates.forEach((m) => {
+    const rowMap = new Map<number, typeof displayableMandates>();
+    displayableMandates.forEach((m) => {
       const row = getMandateRow(m.type);
       if (!rowMap.has(row)) rowMap.set(row, []);
       rowMap.get(row)!.push(m);
@@ -124,7 +130,7 @@ export function CareerTimeline({
     const ordered: {
       row: number;
       label: string;
-      mandates: typeof mandates;
+      mandates: typeof displayableMandates;
       overlapOffsets: Map<string, number>;
       maxLanes: number;
     }[] = [];
@@ -144,7 +150,7 @@ export function CareerTimeline({
       }
     }
     return ordered;
-  }, [mandates]);
+  }, [displayableMandates]);
 
   // ─── Timeline affairs ───────────────────────────────────────────────
   const timelineAffairs = useMemo((): TimelineAffair[] => {
@@ -233,33 +239,39 @@ export function CareerTimeline({
   // ─── Desktop: Horizontal Timeline ──────────────────────────────────
   if (isDesktop) {
     return (
-      <DesktopTimeline
-        containerRef={containerRef}
-        renderWidth={renderWidth}
-        tooltip={tooltip}
-        xScale={xScale}
-        yearMarkers={yearMarkers}
-        mandates={mandates}
-        mandateRows={mandateRows}
-        timelineAffairs={timelineAffairs}
-        partyHistory={partyHistory}
-        deathDate={deathDate}
-        minDate={minDate}
-        maxDate={maxDate}
-        onMandateHover={handleMandateHover}
-        onAffairHover={handleAffairHover}
-        onHideTooltip={hideTooltip}
-      />
+      <div className="space-y-4">
+        <MandateOverlapNotice mandates={mandates} />
+        <DesktopTimeline
+          containerRef={containerRef}
+          renderWidth={renderWidth}
+          tooltip={tooltip}
+          xScale={xScale}
+          yearMarkers={yearMarkers}
+          mandates={displayableMandates}
+          mandateRows={mandateRows}
+          timelineAffairs={timelineAffairs}
+          partyHistory={partyHistory}
+          deathDate={deathDate}
+          minDate={minDate}
+          maxDate={maxDate}
+          onMandateHover={handleMandateHover}
+          onAffairHover={handleAffairHover}
+          onHideTooltip={hideTooltip}
+        />
+      </div>
     );
   }
 
   // ─── Mobile: Vertical Timeline ─────────────────────────────────────
   return (
-    <MobileTimeline
-      mandates={mandates}
-      partyHistory={partyHistory}
-      timelineAffairs={timelineAffairs}
-      deathDate={deathDate}
-    />
+    <div className="space-y-4">
+      <MandateOverlapNotice mandates={mandates} />
+      <MobileTimeline
+        mandates={displayableMandates}
+        partyHistory={partyHistory}
+        timelineAffairs={timelineAffairs}
+        deathDate={deathDate}
+      />
+    </div>
   );
 }

@@ -8,6 +8,11 @@ import {
 } from "@/config/certainty";
 import { AFFAIR_SUPER_CATEGORY_LABELS, type AffairSuperCategory } from "@/config/labels";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { HISTORICAL_GROUP_POSITIONS_PUBLIC } from "@/config/historical-positions";
+import {
+  HISTORICAL_POSITIONS_SECTION_ID,
+  HistoricalPositionsMethodology,
+} from "./HistoricalPositionsMethodology";
 
 export const metadata: Metadata = {
   title: "Méthodologie de Poligraph",
@@ -29,6 +34,7 @@ const CERTAINTY_STATUSES: Record<CertaintyLevel, string[]> = {
   PRONONCE: ["Condamnation en première instance", "Appel en cours"],
   EN_COURS: [
     "Plainte déposée",
+    "Signalement au parquet",
     "Enquête préliminaire",
     "Instruction",
     "Mise en examen",
@@ -119,6 +125,15 @@ export default function MethodologiePage() {
           </span>
         </Link>
         <Link
+          href="/methodologie/decisions-territoires"
+          className="rounded-xl border border-border p-4 hover:border-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        >
+          <span className="block font-bold">Décisions des conseils</span>
+          <span className="mt-1 block text-sm text-muted-foreground">
+            Protocole du pilote : communes, actes retenus, sources et relecture.
+          </span>
+        </Link>
+        <Link
           href="#candidatures-presidentielle-2027"
           className="rounded-xl border border-border p-4 hover:border-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
         >
@@ -127,7 +142,20 @@ export default function MethodologiePage() {
             Statuts de déclaration, sources et distinction avec la candidature officielle.
           </span>
         </Link>
+        {HISTORICAL_GROUP_POSITIONS_PUBLIC && (
+          <Link
+            href={`#${HISTORICAL_POSITIONS_SECTION_ID}`}
+            className="rounded-xl border border-border p-4 hover:border-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+          >
+            <span className="block font-bold">Votes des groupes à la date du scrutin</span>
+            <span className="mt-1 block text-sm text-muted-foreground">
+              Ce que l{"'"}addition par groupe montre, ses limites et ses sources.
+            </span>
+          </Link>
+        )}
       </nav>
+
+      {HISTORICAL_GROUP_POSITIONS_PUBLIC && <HistoricalPositionsMethodology />}
 
       <section
         id="candidatures-presidentielle-2027"

@@ -1,6 +1,7 @@
 import { GROUP_POSITION_LABELS } from "@/config/labels";
 import { getPartyColor } from "@/config/party-colors";
 import type { ScrutinGroupPositionData } from "@/lib/data/groupes";
+import { COMPUTED_POSITIONS_SHORT_NOTE } from "@/lib/votes/scrutin-provenance";
 import type { GroupPosition } from "@/types";
 
 interface CardGroupPositionsProps {
@@ -16,9 +17,9 @@ const HEADER_DOT_VAR: Record<GroupPosition, string> = {
 };
 
 const COLUMN_ARIA_LABEL: Record<GroupPosition, string> = {
-  POUR: "Groupes ayant voté pour",
-  CONTRE: "Groupes ayant voté contre",
-  ABSTENTION: "Groupes s'étant abstenus",
+  POUR: "Groupes dont la position calculée est pour",
+  CONTRE: "Groupes dont la position calculée est contre",
+  ABSTENTION: "Groupes dont la position calculée est l'abstention",
 };
 
 function MiniPill({ gp }: { gp: ScrutinGroupPositionData }) {
@@ -82,6 +83,7 @@ export function CardGroupPositions({ positions }: CardGroupPositionsProps) {
 
   return (
     <div>
+      <p className="mb-2 text-xs text-muted-foreground">{COMPUTED_POSITIONS_SHORT_NOTE}</p>
       {/* Desktop: 3 columns, empty columns omitted */}
       <div className="hidden md:grid md:grid-cols-3 gap-3">
         {nonEmpty.map((pos) => (

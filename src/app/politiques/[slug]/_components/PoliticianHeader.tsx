@@ -1,10 +1,17 @@
+import type { CSSProperties } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { PoliticianAvatar } from "@/components/politicians/PoliticianAvatar";
 import { FollowButton } from "@/components/politicians/FollowButton";
 import { CopyableId } from "@/components/politicians/CopyableId";
 import { PARTY_ROLE_LABELS, feminizePartyRole } from "@/config/labels";
-import { ensureContrast } from "@/lib/contrast";
+import { ensureContrast, ensureContrastOnDark, tintOver } from "@/lib/contrast";
+
+// --background (oklch(0.97 0 0) en clair, oklch(0.16 0 0) en sombre) : le badge de parti est une
+// teinte posée sur le fond de page, le texte se calcule donc contre cette teinte dans chaque thème.
+const PAGE_BACKGROUND = "#f5f5f5";
+const PAGE_BACKGROUND_DARK = "#0d0d0d";
+const PARTY_TINT_ALPHA = 0x20 / 255;
 import { formatDate } from "@/lib/utils";
 import type { PartyRole } from "@/generated/prisma";
 import { PoliticianContactLinks } from "./PoliticianContactLinks";
@@ -63,7 +70,7 @@ export function PoliticianHeader({ politician, currentGroup }: PoliticianHeaderP
   const feminine = politician.civility === "Mme";
 
   return (
-    <div className="flex items-start gap-6 mb-8">
+    <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6 mb-8">
       <PoliticianAvatar
         photoUrl={politician.photoUrl}
         blobPhotoUrl={politician.blobPhotoUrl}
@@ -71,9 +78,9 @@ export function PoliticianHeader({ politician, currentGroup }: PoliticianHeaderP
         lastName={politician.lastName}
         size="lg"
       />
-      <div className="min-w-0">
-        <div className="flex items-center gap-3 mb-2">
-          <h1 className="text-3xl font-display font-extrabold tracking-tight">
+      <div className="min-w-0 w-full sm:flex-1">
+        <div className="flex flex-wrap items-center gap-3 mb-2">
+          <h1 className="min-w-0 break-words text-3xl font-display font-extrabold tracking-tight">
             {politician.fullName}
           </h1>
           <FollowButton slug={politician.slug} />
@@ -81,17 +88,30 @@ export function PoliticianHeader({ politician, currentGroup }: PoliticianHeaderP
 
         <div className="flex flex-wrap items-center gap-2">
           {currentParty && (
-            <Link href={currentParty.slug ? `/partis/${currentParty.slug}` : "/partis"}>
+            <Link
+              href={currentParty.slug ? `/partis/${currentParty.slug}` : "/partis"}
+              className="min-w-0 max-w-full"
+            >
               <Badge
-                className="text-sm hover:opacity-80 transition-opacity cursor-pointer whitespace-normal text-center"
-                style={{
-                  backgroundColor: currentParty.color ? `${currentParty.color}20` : undefined,
-                  color: currentParty.color
-                    ? ensureContrast(currentParty.color, "#ffffff")
-                    : undefined,
-                }}
+                data-party-badge
+                className="block max-w-full text-sm hover:opacity-80 transition-opacity cursor-pointer whitespace-normal break-words"
+                style={
+                  currentParty.color
+                    ? ({
+                        backgroundColor: `${currentParty.color}20`,
+                        "--party-fg": ensureContrast(
+                          currentParty.color,
+                          tintOver(currentParty.color, PARTY_TINT_ALPHA, PAGE_BACKGROUND)
+                        ),
+                        "--party-fg-dark": ensureContrastOnDark(
+                          currentParty.color,
+                          tintOver(currentParty.color, PARTY_TINT_ALPHA, PAGE_BACKGROUND_DARK)
+                        ),
+                      } as CSSProperties)
+                    : undefined
+                }
               >
-                <span className="opacity-70 mr-1">Parti :</span>
+                <span className="mr-1">Parti :</span>
                 {currentParty.name}
               </Badge>
             </Link>
@@ -99,14 +119,21 @@ export function PoliticianHeader({ politician, currentGroup }: PoliticianHeaderP
 
           {currentGroup && (
             <Badge
+              data-party-badge
               variant="outline"
-              className="text-sm"
-              style={{
-                borderColor: currentGroup.color || undefined,
-                color: currentGroup.color
-                  ? ensureContrast(currentGroup.color, "#ffffff")
-                  : undefined,
-              }}
+              className="block max-w-full text-sm whitespace-normal break-words"
+              style={
+                currentGroup.color
+                  ? ({
+                      borderColor: currentGroup.color,
+                      "--party-fg": ensureContrast(currentGroup.color, PAGE_BACKGROUND),
+                      "--party-fg-dark": ensureContrastOnDark(
+                        currentGroup.color,
+                        PAGE_BACKGROUND_DARK
+                      ),
+                    } as CSSProperties)
+                  : undefined
+              }
               title={currentGroup.name}
             >
               Groupe : {currentGroup.name} ({currentGroup.code})
@@ -114,7 +141,11 @@ export function PoliticianHeader({ politician, currentGroup }: PoliticianHeaderP
           )}
 
           {activeRoles.map((entry) => (
-            <Badge key={entry.id} variant="outline" className="text-sm">
+            <Badge
+              key={entry.id}
+              variant="outline"
+              className="block max-w-full text-sm whitespace-normal break-words"
+            >
               {feminizePartyRole(PARTY_ROLE_LABELS[entry.role], politician.civility)}
               {entry.party.shortName !== currentParty?.shortName && ` · ${entry.party.shortName}`}
             </Badge>

@@ -56,11 +56,14 @@ export function ScrutinContext({
   }
 
   return (
-    <Tabs defaultValue="en-bref" className="mb-8">
+    <Tabs
+      defaultValue={hasEnBref ? "en-bref" : showEnjeuxTab ? "enjeux" : "votes"}
+      className="mb-8"
+    >
       <TabsList variant="line">
         {hasEnBref && <TabsTrigger value="en-bref">En bref</TabsTrigger>}
         {showEnjeuxTab && <TabsTrigger value="enjeux">Les enjeux</TabsTrigger>}
-        {votesDetailSlot && <TabsTrigger value="votes">Votes détaillés</TabsTrigger>}
+        {votesDetailSlot && <TabsTrigger value="votes">Votes individuels</TabsTrigger>}
       </TabsList>
 
       {hasEnBref && (
@@ -178,6 +181,10 @@ function EnjeuxContent({ analysis }: { analysis: ScrutinAnalysisData }) {
         <p className="text-xs text-purple-600 dark:text-purple-400 mt-4">
           Synthèse Mistral - Sources :{" "}
           {ANALYSIS_SOURCE_TYPE_LABELS[analysis.sourceType as AnalysisSourceType]}
+        </p>
+        <p className="text-xs text-muted-foreground mt-1">
+          Les groupes cités reposent sur l&apos;appartenance actuelle des députés, non datée au
+          moment du vote.
         </p>
       </CardContent>
     </Card>

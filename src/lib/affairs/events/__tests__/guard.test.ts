@@ -102,11 +102,6 @@ describe("checkEventPublishable", () => {
       /issue/i,
     ],
     [
-      "condamnation de presse sans corroboration",
-      { ...pressConviction, corroborationUrl: null },
-      /seconde source/i,
-    ],
-    [
       "corroboration sur le même hôte",
       { ...pressConviction, corroborationUrl: "https://lemonde.fr/autre" },
       /autre média|même/i,
@@ -241,6 +236,22 @@ describe("checkEventPublishable : seconde source du même média (L4)", () => {
   });
 });
 
+describe("checkEventPublishable : une seule source suffit pour une condamnation de presse", () => {
+  it("publie sans seconde source quand le média est admis", () => {
+    expect(checkEventPublishable({ ...pressConviction, corroborationUrl: null })).toEqual([]);
+  });
+
+  it("refuse toujours une source de presse hors liste, seconde source ou non", () => {
+    expect(
+      checkEventPublishable({
+        ...pressConviction,
+        sourceUrl: "https://www.aol.com/a",
+        corroborationUrl: null,
+      })
+    ).not.toEqual([]);
+  });
+});
+
 describe("checkEventPublishable : hôtes interdits ajoutés (L5)", () => {
   it.each([
     "linkedin.com",
@@ -311,6 +322,8 @@ describe("checkEventPublishable : listes blanches de sources", () => {
     "https://la1ere.franceinfo.fr/a",
     "https://www.sudouest.fr/a",
     "https://mesinfos.fr/auvergne-rhone-alpes/a",
+    "https://www.lnc.nc/article/a",
+    "https://outremers360.com/bassin-pacifique-appli/a",
   ])("accepte %s comme presse", (sourceUrl) => {
     expect(checkEventPublishable({ ...held, sourceUrl, sourceKind: "PRESS" })).toEqual([]);
   });

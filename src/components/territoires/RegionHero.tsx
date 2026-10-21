@@ -1,8 +1,12 @@
 import Link from "next/link";
 import type { RegionTerritoire } from "@/lib/data/territoires";
-import { TERRITOIRES_PATH } from "@/lib/territoires/paths";
+import { TERRITOIRES_PATH, territoireDepartementPath } from "@/lib/territoires/paths";
 import { cn, formatDate } from "@/lib/utils";
-import { BandeauFilAriane, BandeauSurtitre, EntreeRegionBandeau } from "./EntreeRegionBandeau";
+import {
+  BandeauFilAriane,
+  BandeauSurtitre,
+  RubriqueBandeau,
+} from "@/components/ui/RubriqueBandeau";
 import { TerritoryShape } from "./TerritoryShape";
 import { formatCompte, formatNombre } from "@/lib/territoires/format";
 
@@ -25,10 +29,15 @@ function Fait({
 
 export function RegionHero({ data }: { data: RegionTerritoire }) {
   const { region, presidence, communeCount, departements } = data;
+  const departementPathByCode = new Map(
+    departements.flatMap((d) =>
+      d.slug ? [[d.code, territoireDepartementPath(d.slug)] as const] : []
+    )
+  );
   const presidenceDate = presidence.lastConfirmedAt ? formatDate(presidence.lastConfirmedAt) : null;
 
   return (
-    <EntreeRegionBandeau labelledBy="region-titre">
+    <RubriqueBandeau labelledBy="region-titre">
       <BandeauFilAriane
         items={[{ label: "Territoires", href: TERRITOIRES_PATH }, { label: region.name }]}
       />
@@ -45,11 +54,15 @@ export function RegionHero({ data }: { data: RegionTerritoire }) {
           </h1>
           <p className="mt-2 text-white/85">Chef-lieu : {region.chefLieu.name}</p>
         </div>
-        {!region.outreMer && (
-          <div className="w-24 shrink-0 sm:w-40 lg:w-56">
-            <TerritoryShape kind="region" region={region.name} tone="marine" />
-          </div>
-        )}
+        <div className="w-24 shrink-0 sm:w-40 lg:w-56">
+          {/* Decorative mouse shortcut with the department name on hover; the list is below. */}
+          <TerritoryShape
+            kind="region"
+            region={region.name}
+            tone="marine"
+            departementHref={(code) => departementPathByCode.get(code)}
+          />
+        </div>
       </div>
 
       <dl className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -80,11 +93,19 @@ export function RegionHero({ data }: { data: RegionTerritoire }) {
                 </span>
               )}
             </>
+          ) : presidence.registre ? (
+            <>
+              <span className="font-display text-lg font-bold">{presidence.registre.fullName}</span>
+              <span className="mt-1 block text-xs text-white/80">
+                D{"'"}après le registre national des élus
+                {presidenceDate ? `, publié le ${presidenceDate}` : ""}
+              </span>
+            </>
           ) : (
             <span className="font-medium">Présidence non établie dans nos données</span>
           )}
         </Fait>
       </dl>
-    </EntreeRegionBandeau>
+    </RubriqueBandeau>
   );
 }

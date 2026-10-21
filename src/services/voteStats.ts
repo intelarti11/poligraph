@@ -1,3 +1,4 @@
+import { isGroupStatsPublishable } from "@/lib/votes/group-attribution";
 import { cacheTag, cacheLife } from "next/cache";
 import { db } from "@/lib/db";
 import { Chamber, MandateType } from "@/generated/prisma";
@@ -835,6 +836,10 @@ export interface GroupDynamicsStats {
 }
 
 async function getGroupDynamicsStats(chamber: "AN" | "SENAT"): Promise<GroupDynamicsStats[]> {
+  // Statistiques AN persistées calculées avec des positions d'autres législatures :
+  // masquées jusqu'au recalcul contrôlé (src/lib/votes/group-attribution.ts).
+  if (!isGroupStatsPublishable(chamber)) return [];
+
   const legislature = chamber === "AN" ? 17 : 2023;
 
   const stats = await db.parliamentaryGroupStats.findMany({

@@ -50,7 +50,7 @@ export async function generateMetadata({ searchParams }: PageProps): Promise<Met
   const params = Object.fromEntries(Object.entries(sp).map(([k, v]) => [k, first(v)]));
   const title = "Gouvernements français : composition et ministres";
   const description =
-    "Composition de chaque gouvernement publié : qui a exercé quelle fonction et à quelles dates, avec l'acte officiel de chaque nomination.";
+    "Composition de chaque gouvernement publié : qui a exercé quelle fonction et à quelles dates, avec les actes officiels qui l'établissent.";
   return {
     title,
     description,
@@ -158,8 +158,8 @@ export default async function GouvernementsPage({ searchParams }: PageProps) {
             Gouvernements
           </h1>
           <p className="mt-3 text-base leading-relaxed text-muted-foreground">
-            Qui a exercé quelle fonction, dans quel gouvernement, avec l&apos;acte officiel de
-            chaque nomination.
+            Qui a exercé quelle fonction, dans quel gouvernement, avec les actes officiels qui
+            l&apos;établissent.
           </p>
         </div>
 
@@ -290,6 +290,7 @@ export default async function GouvernementsPage({ searchParams }: PageProps) {
                               fullName={g.primeMinister.fullName}
                               size="sm"
                               className="size-12"
+                              fixedPx={48}
                             />
                           </div>
                           <div className="min-w-0 flex-1">

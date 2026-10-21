@@ -34,6 +34,7 @@ const LEGISLATURE = 17;
 // Each run extracts into its own directory: a fixed path let one run delete the
 // archive another was still reading (see the concurrency test).
 const TEMP_DIR_PREFIX = "scrutins-an-";
+const AN_SCRUTIN_UID = /^VTANR5L\d+V\d+$/;
 const ZIP_URL_TEMPLATE =
   "https://data.assemblee-nationale.fr/static/openData/repository/{leg}/loi/scrutins/Scrutins.json.zip";
 
@@ -536,6 +537,14 @@ export async function syncScrutinsAN(
         const content = readFileSync(filePath, "utf-8");
         const data = safeJsonParseOrThrow<ANScrutin>(content);
         const s = data.scrutin;
+
+        // The archive also holds Congrès votes (VTCGR…). They are not Assemblée
+        // scrutins, and their `numero` collides with an AN scrutin's.
+        if (!AN_SCRUTIN_UID.test(s.uid)) {
+          stats.scrutinsSkipped++;
+          progress.tick();
+          continue;
+        }
 
         // Filter by today's date if --today flag is set
         if (todayOnly) {

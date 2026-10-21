@@ -1,23 +1,33 @@
 import Link from "next/link";
+import { ReportLink } from "@/components/feedback/ReportLink";
 import { ChevronDown } from "lucide-react";
 import { DATA_SOURCE_URLS } from "@/config/labels";
 import { TERRITOIRES_SANS_COMMUNE } from "@/config/regions";
 import { PoliticianAvatar } from "@/components/politicians/PoliticianAvatar";
-import type {
-  CommuneDossier,
-  MunicipalesBlock,
-  MunicipalesListe,
-  ParlementaireRef,
-  SourceRef,
-} from "@/lib/data/territoires";
+import { IntercommunaliteCard } from "@/components/territoires/IntercommunaliteCard";
+import { ConseilMembres } from "@/components/territoires/ConseilMembres";
+import { PresidentielleAgregatNote } from "@/components/territoires/CommunePresidentielle";
+import { ScrutinLine } from "@/components/territoires/CommuneElections";
+import type { CommuneDossier, ParlementaireRef, SourceRef } from "@/lib/data/territoires";
 import {
   deputeNoun,
   formatCirconscription,
-  formatPct,
   formatPopulation,
   maireSince,
 } from "@/lib/territoires/commune-display";
+import {
+  communeScrutins,
+  latestScrutinPerType,
+  type CommuneScrutin,
+} from "@/lib/territoires/commune-elections";
+import { PRESIDENTIELLE_2027_SLUG } from "@/lib/presidentielle/themes";
 import { formatDate } from "@/lib/utils";
+import {
+  TERRITOIRES_DONNEES_PATH,
+  territoireCommuneElectionsPath,
+  territoireDepartementPath,
+} from "@/lib/territoires/paths";
+import { populationVintageLabel } from "@/lib/territoires/population-label";
 
 /**
  * Sections of the Territoires commune page (#1052). Server components only: no map, no client
@@ -67,7 +77,7 @@ export function SectionCard({
       className="scroll-mt-20 rounded-2xl border bg-card p-5 md:p-6"
     >
       <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h2 id={headingId} className="font-display text-xl font-bold md:text-2xl">
+        <h2 id={headingId} className="font-display text-xl font-bold md:text-2xl text-primary">
           {title}
         </h2>
         {action}
@@ -93,7 +103,7 @@ function Collapsible({ summary, children }: { summary: string; children: React.R
   );
 }
 
-// ─── Qui décide ici ─────────────────────────────────────────────
+// ─── Élus et institutions ─────────────────────────────────────────────
 
 function MaireBlock({
   maire,
@@ -164,7 +174,7 @@ export function QuiDecideSection({ dossier }: { dossier: CommuneDossier }) {
   const { maire, mairesSecteur, identity } = dossier;
   const sansCommune = TERRITOIRES_SANS_COMMUNE.has(identity.territoireHorsRegion?.code ?? "");
   return (
-    <SectionCard id="qui-decide" title="Qui décide ici">
+    <SectionCard id="qui-decide" title="Élus et institutions">
       <MaireBlock maire={maire} communeName={identity.name} />
 
       {mairesSecteur.length > 0 && (
@@ -208,11 +218,26 @@ export function QuiDecideSection({ dossier }: { dossier: CommuneDossier }) {
       ) : (
         <div className="mt-4 rounded-xl border p-4">
           <p className="text-sm text-muted-foreground">Conseil municipal</p>
-          <p className="font-semibold">Composition actuelle non établie</p>
-          <p className="mt-1 text-sm">
-            Poligraph ne dispose pas de la liste à jour des conseillers municipaux. Les résultats de
-            mars 2026 ne la remplacent pas : des élus ont pu démissionner ou être remplacés depuis.
-          </p>
+          {dossier.conseilMunicipal.state === "DISPONIBLE" ? (
+            <div className="mt-1">
+              <ConseilMembres conseil={dossier.conseilMunicipal} groupLabel="" />
+            </div>
+          ) : (
+            <>
+              <p className="font-semibold">Composition actuelle non établie</p>
+              <p className="mt-1 text-sm">
+                Poligraph ne dispose pas de la liste à jour des conseillers municipaux. Les
+                résultats de mars 2026 ne la remplacent pas : des élus ont pu démissionner ou être
+                remplacés depuis.
+              </p>
+            </>
+          )}
+        </div>
+      )}
+
+      {dossier.intercommunalite && (
+        <div className="mt-4">
+          <IntercommunaliteCard dossier={dossier} />
         </div>
       )}
 
@@ -330,7 +355,7 @@ export function ParlementSection({ dossier }: { dossier: CommuneDossier }) {
       {department.slug && department.name && (
         <p className="mt-3 text-sm">
           <Link
-            href={`/departements/${department.slug}`}
+            href={territoireDepartementPath(department.slug)}
             prefetch={false}
             className={`${TAP} ${LINK}`}
           >
@@ -344,150 +369,81 @@ export function ParlementSection({ dossier }: { dossier: CommuneDossier }) {
 
 // ─── Élections ──────────────────────────────────────────────────
 
-function ResultRow({
-  liste,
-  pct,
-  status,
+const ELECTION_MAX_LINES = 4;
+
+export function ElectionsSection({
+  dossier,
+  scrutins,
 }: {
-  liste: MunicipalesListe;
-  pct: number;
-  status: string | null;
+  dossier: CommuneDossier;
+  /** Every scrutin of the commune, history included. Falls back on what the dossier carries. */
+  scrutins?: CommuneScrutin[];
 }) {
-  const tete = liste.teteDeListe;
-  return (
-    <li className="py-2">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 text-sm">
-        <p className="min-w-0">
-          <span className="font-semibold">{liste.listName ?? `Liste de ${tete.name}`}</span>
-          {liste.listName && (
-            <span className="text-muted-foreground">
-              {" · tête de liste "}
-              {tete.person ? (
-                <Link href={`/politiques/${tete.person.slug}`} prefetch={false} className={LINK}>
-                  {tete.name}
-                </Link>
-              ) : (
-                tete.name
-              )}
-            </span>
-          )}
-        </p>
-        <p className="shrink-0 tabular-nums">
-          <span className="font-semibold">{formatPct(pct)}</span>
-          {status && <span className="text-muted-foreground"> · {status}</span>}
-        </p>
-      </div>
-      <div className="mt-1.5 h-2 w-full rounded-full bg-muted" aria-hidden="true">
-        <div
-          className="h-2 rounded-full bg-muted-foreground/70"
-          style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
-        />
-      </div>
-    </li>
-  );
-}
-
-/** Lists shown before the rest is folded: the long tail of a big city stays one tap away. */
-const VISIBLE_LISTS = 5;
-
-function participationText(block: MunicipalesBlock, round: number): string | null {
-  const row = block.participation.find((p) => p.round === round);
-  if (row?.participationRate == null) return null;
-  return `Participation : ${formatPct(row.participationRate)}`;
-}
-
-function RoundResults({ block, round }: { block: MunicipalesBlock; round: 1 | 2 }) {
-  const date = round === 1 ? block.round1Date : block.round2Date;
-  const rows = block.listes
-    .map((l) => ({ liste: l, pct: round === 1 ? l.round1Pct : l.round2Pct }))
-    .filter((r): r is { liste: MunicipalesListe; pct: number } => r.pct != null)
-    .sort((a, b) => b.pct - a.pct);
-  if (rows.length === 0) return null;
-  const participation = participationText(block, round);
-  const renderRow = ({ liste, pct }: { liste: MunicipalesListe; pct: number }, i: number) => (
-    <ResultRow
-      key={`${liste.listName ?? liste.teteDeListe.name}-${i}`}
-      liste={liste}
-      pct={pct}
-      status={
-        round === 1 && liste.electionAuPremierTour === "ELUE"
-          ? "élue au 1er tour"
-          : round === 2 && liste.elueAuSecondTour
-            ? "élue au 2d tour"
-            : null
-      }
-    />
-  );
-  return (
-    <div className="mt-2">
-      <h3 className="font-semibold">
-        Municipales 2026, {round === 1 ? "1er tour" : "2d tour"}
-        {date && ` (${formatDate(date)})`}
-      </h3>
-      <ul className="mt-1">{rows.slice(0, VISIBLE_LISTS).map(renderRow)}</ul>
-      {rows.length > VISIBLE_LISTS && (
-        <div className="mt-2">
-          <Collapsible summary={`Autres listes (${rows.length - VISIBLE_LISTS})`}>
-            <ul>{rows.slice(VISIBLE_LISTS).map(renderRow)}</ul>
-          </Collapsible>
-        </div>
-      )}
-      {participation && <p className="mt-1 text-sm text-muted-foreground">{participation}</p>}
-    </div>
-  );
-}
-
-export function ElectionsSection({ dossier }: { dossier: CommuneDossier }) {
-  const block = dossier.elections.municipales2026;
+  const { municipales2026: block, presidentielles } = dossier.elections;
+  const { agregatTerritoire } = presidentielles;
   const code = dossier.identity.inseeCode;
-  const detailHref = `/elections/municipales-2026/communes/${code}`;
-  const hasRound2 = block?.listes.some((l) => l.round2Pct != null) ?? false;
+  const all = scrutins ?? communeScrutins(dossier.elections, code);
+  // One folded line per type, so the section never grows with the years (kit spec).
+  const lines = latestScrutinPerType(all).slice(0, ELECTION_MAX_LINES);
 
   return (
-    <SectionCard id="elections" title="Élections dans la commune">
-      {!block || block.state === "ABSENT" ? (
-        <p className="text-sm">
+    <SectionCard
+      id="elections"
+      title="Élections"
+      action={
+        all.length > 0 && (
+          <Link
+            href={territoireCommuneElectionsPath(code)}
+            prefetch={false}
+            className={`${TAP} ${LINK} text-sm`}
+          >
+            {`Tous les scrutins (${all.length})`}
+          </Link>
+        )
+      }
+    >
+      {lines.length > 0 && (
+        <ul className="space-y-2">
+          {lines.map((scrutin) => (
+            <li key={scrutin.slug}>
+              <ScrutinLine scrutin={scrutin} />
+            </li>
+          ))}
+        </ul>
+      )}
+      {(!block || block.state === "ABSENT") && (
+        <p className="mt-3 text-sm">
           Aucun résultat des municipales 2026 n{"'"}est enregistré pour cette commune.
         </p>
-      ) : block.state === "NON_ETABLI" ? (
-        <p className="text-sm">
+      )}
+      {block?.state === "NON_ETABLI" && (
+        <p className="mt-3 text-sm">
           Des candidatures aux municipales 2026 sont enregistrées pour cette commune, mais pas les
           résultats par liste.{" "}
-          <Link href={detailHref} prefetch={false} className={LINK}>
+          <Link
+            href={`/elections/municipales-2026/communes/${code}`}
+            prefetch={false}
+            className={LINK}
+          >
             Voir les candidatures
           </Link>
         </p>
-      ) : (
-        <>
-          <RoundResults block={block} round={1} />
-          {hasRound2 && (
-            <div className="mt-4">
-              <RoundResults block={block} round={2} />
-            </div>
-          )}
-          <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-            Part des suffrages exprimés, têtes de liste uniquement, sans étiquette politique. Source
-            :{" "}
-            {block.source.url ? (
-              <ExternalLink href={block.source.url}>{block.source.label}</ExternalLink>
-            ) : (
-              block.source.label
-            )}
-          </p>
-          <p className="mt-2 text-sm">
-            <Link href={detailHref} prefetch={false} className={`${TAP} ${LINK}`}>
-              Listes complètes et candidats à {dossier.identity.name}
-            </Link>
-          </p>
-        </>
       )}
-
-      {!TERRITOIRES_SANS_COMMUNE.has(dossier.identity.territoireHorsRegion?.code ?? "") && (
-        <div className="mt-4 rounded-xl bg-muted/60 p-4 text-sm">
-          <strong>Présidentielle 2027 :</strong> les résultats de la commune apparaîtront ici après
-          leur publication officielle.
+      {agregatTerritoire && (
+        <div className="mt-4">
+          <PresidentielleAgregatNote agregat={agregatTerritoire} />
         </div>
       )}
+
+      {/* A territory published as one aggregate gets no promise of commune results. */}
+      {!agregatTerritoire &&
+        !presidentielles.blocks.some((p) => p.electionSlug === PRESIDENTIELLE_2027_SLUG) &&
+        !TERRITOIRES_SANS_COMMUNE.has(dossier.identity.territoireHorsRegion?.code ?? "") && (
+          <div className="mt-4 rounded-xl border border-dashed border-primary/30 bg-primary/5 p-4 text-sm">
+            <strong>Présidentielle 2027 :</strong> les résultats de la commune apparaîtront ici
+            après leur publication officielle.
+          </div>
+        )}
     </SectionCard>
   );
 }
@@ -497,7 +453,7 @@ export function ElectionsSection({ dossier }: { dossier: CommuneDossier }) {
 function SideCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="rounded-2xl border bg-card p-5">
-      <h2 className="mb-3 font-display text-lg font-bold">{title}</h2>
+      <h2 className="mb-3 font-display text-lg font-bold text-primary">{title}</h2>
       {children}
     </section>
   );
@@ -506,7 +462,10 @@ function SideCard({ title, children }: { title: string; children: React.ReactNod
 function ReutiliserContent({ code }: { code: string }) {
   return (
     <>
-      <p className="text-sm">Les mêmes faits, avec les mêmes réserves, au format JSON.</p>
+      <p className="text-sm">
+        Les faits de cette page au format JSON, avec les mêmes réserves. L{"'"}historique des
+        municipales 2014 et 2020 n{"'"}y figure pas.
+      </p>
       <p className="mt-2 text-sm">
         <a href={`/api/v1/territoires/communes/${code}`} className={`${TAP} ${LINK}`}>
           Données de la commune (API v1, JSON)
@@ -515,6 +474,11 @@ function ReutiliserContent({ code }: { code: string }) {
       <p className="text-sm">
         <Link href="/docs/api" prefetch={false} className={`${TAP} ${LINK}`}>
           Documentation de l{"'"}API
+        </Link>
+      </p>
+      <p className="text-sm">
+        <Link href={TERRITOIRES_DONNEES_PATH} prefetch={false} className={`${TAP} ${LINK}`}>
+          Fichiers CSV et licences
         </Link>
       </p>
       <p className="mt-1 text-xs text-muted-foreground">Identifiant : code INSEE {code}</p>
@@ -526,13 +490,7 @@ function ErreurContent() {
   return (
     <>
       <p className="text-sm">Toute personne citée peut demander une correction.</p>
-      <Link
-        href="/support"
-        prefetch={false}
-        className="mt-3 flex min-h-11 items-center justify-center rounded-lg border px-4 text-sm font-semibold hover:bg-muted"
-      >
-        Signaler une erreur
-      </Link>
+      <ReportLink className="mt-3 flex min-h-11 items-center justify-center rounded-lg border px-4 text-sm font-semibold hover:bg-muted" />
       <p className="mt-1 text-sm">
         <Link href="/methodologie" prefetch={false} className={`${TAP} ${LINK}`}>
           Sources et méthode
@@ -543,7 +501,7 @@ function ErreurContent() {
 }
 
 export function CommuneSidebar({ dossier }: { dossier: CommuneDossier }) {
-  const { population, identity } = dossier;
+  const { population, identity, surface } = dossier;
   return (
     <aside id="sources" aria-label="Sources et réutilisation" className="scroll-mt-20 space-y-4">
       {/* Population is already the second fact of the banner: on a phone it is not repeated. */}
@@ -553,14 +511,37 @@ export function CommuneSidebar({ dossier }: { dossier: CommuneDossier }) {
           <p className="font-display text-xl font-bold">
             {population.value != null ? formatPopulation(population.value) : "Non disponible"}
           </p>
+          {population.vintage && (
+            <p className="text-xs">{populationVintageLabel(population.vintage)}</p>
+          )}
           <p className="mt-1 text-xs text-muted-foreground">
             {population.source.url ? (
               <ExternalLink href={population.source.url}>{population.source.label}</ExternalLink>
             ) : (
               population.source.label
             )}
-            {population.importedAt && <>, importée le {formatDate(population.importedAt)}</>}
+            {population.importedAt && (
+              <>
+                , {population.vintage ? "vérifiée" : "importée"} le{" "}
+                {formatDate(population.importedAt)}
+              </>
+            )}
           </p>
+          {surface.hectares != null && (
+            <>
+              <p className="mt-4 text-sm text-muted-foreground">Superficie</p>
+              <p className="font-display text-xl font-bold">
+                {(surface.hectares / 100).toLocaleString("fr-FR", { maximumFractionDigits: 1 })} km²
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {surface.source.url ? (
+                  <ExternalLink href={surface.source.url}>{surface.source.label}</ExternalLink>
+                ) : (
+                  surface.source.label
+                )}
+              </p>
+            </>
+          )}
         </SideCard>
       </div>
 

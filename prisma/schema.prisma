@@ -360,9 +360,9 @@ model Mandate {
   // code can derive it: see src/config/senatoriales.ts.
   senateSeries   Int?
 
-  startDate DateTime
-  endDate   DateTime?
-  isCurrent Boolean   @default(true)
+  startDate       DateTime
+  endDate         DateTime?
+  isCurrent       Boolean   @default(true)
   // Date à laquelle la source de ce mandat a affirmé pour la dernière fois qu'il était détenu.
   // Pour une API (Assemblée, Sénat), c'est la date du sync : elle répond au présent. Pour un
   // fichier publié comme le RNE, c'est la date de PUBLICATION du fichier et non celle du run :
@@ -1056,6 +1056,9 @@ enum AffairStatus {
   // A complaint has been filed (e.g. before the Cour de justice de la République) and no
   // inquiry is known yet. Earlier than ENQUETE_PRELIMINAIRE: no parquet has opened anything.
   PLAINTE_DEPOSEE
+  // A report (article 40) has been sent to a parquet and no inquiry is known. Not a complaint:
+  // nobody has filed one. Same maturity as PLAINTE_DEPOSEE, never counted as a mise en cause.
+  SIGNALEMENT_PARQUET
   ENQUETE_PRELIMINAIRE
   INSTRUCTION
   // Instruction closed with no mise en examen: article 175 CPP avis de fin
@@ -1111,6 +1114,9 @@ enum JurisdictionOrder {
   PENAL
   FINANCIER
   ADMINISTRATIF
+  // Justice civile, prud'homale ou commerciale. Une seule valeur : aucun total public ne
+  // distingue ces juridictions, elles sortent toutes des compteurs.
+  CIVIL
 }
 
 enum AffairCategory {
@@ -1385,6 +1391,23 @@ model ScrutinOfficialGroupCount {
 
   @@unique([scrutinId, sourceIndex])
   @@index([organeRef])
+}
+
+/// Official AN referential of parliamentary groups (organes of type GP), keyed by the AN
+/// `organeRef` found in ScrutinOfficialGroupCount. Holds the label the group had in the
+/// source, with its validity period. Deliberately has no relation to ParliamentaryGroup:
+/// a historical identity is never derived from a current group.
+model AnOrgan {
+  organeRef    String    @id
+  legislature  Int
+  label        String
+  abbreviation String?
+  startDate    DateTime?
+  endDate      DateTime?
+  sourceUrl    String
+  fetchedAt    DateTime
+
+  @@index([legislature])
 }
 
 model Vote {
@@ -2310,6 +2333,7 @@ model Candidacy {
   isElected   Boolean  @default(false)
 
   presidentialData CandidacyPresidential?
+  communeResults   CommuneCandidacyResult[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -2796,6 +2820,8 @@ model Commune {
   population         Int?
   latitude           Float?
   longitude          Float?
+  /// Surface in hectares, as served by geo.api.gouv.fr (`surface`). Null until imported.
+  surfaceHa          Float?
   totalSeats         Int? // Conseil municipal seats (computed from population)
   constituencyNumber Int? // Legislative constituency (CIRCO_LEG from INSEE COG)
   website            String?
@@ -2804,11 +2830,192 @@ model Commune {
   electoralLists        ElectoralList[]
   localMandates         MandateLocal[]
   communeElectionRounds CommuneElectionRound[]
+  populations           CommunePopulation[]
+  intercommunalites     CommuneIntercommunalite[]
+  candidacyResults      CommuneCandidacyResult[]
+  institutions          Institution[]
+  decisions             Decision[]
 
   @@index([departmentCode])
   @@index([departmentCode, constituencyNumber])
   @@index([name])
   @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "idx_commune_name_trgm")
+}
+
+// Population de référence (ex-population légale) of a commune, one row per vintage.
+// The figure in force on a date is the row with the latest effectiveFrom on or before it.
+// Overseas collectivities with their own census (987, 988, 986) and Mayotte carry the vintage
+// and source of their own authenticating decree. See src/config/populations-reference.ts.
+model CommunePopulation {
+  id                     String   @id @default(cuid())
+  communeId              String
+  /// Reference year of the census figures (millésime), e.g. 2023.
+  millesime              Int
+  populationMunicipale   Int
+  populationCompteeAPart Int?
+  populationTotale       Int?
+  /// Date from which the decree makes the figures apply (e.g. 2026-01-01).
+  effectiveFrom          DateTime @db.Date
+  /// Short producer name shown to readers: INSEE, ISPF, ISEE...
+  producer               String
+  sourceLabel            String
+  sourceUrl              String
+  importedAt             DateTime @default(now())
+
+  commune Commune @relation(fields: [communeId], references: [id], onDelete: Cascade)
+
+  @@unique([communeId, millesime])
+  @@index([communeId, effectiveFrom])
+}
+
+/// "Le territoire en chiffres" (#1052): one fact table, one import batch, one source. An indicator
+/// is added as rows, never as a table. Nothing here carries an elected official, a party, a
+/// transaction, a parcel or an address: the block describes the territory, not its representatives.
+enum RepereTerritoryType {
+  COM
+  DEP
+  REG
+}
+
+/// What the figure is measured on, which is not always the commune: a distribution unit for water,
+/// a weather station for climate.
+enum RepereScopeKind {
+  COMMUNE
+  UDI
+  STATION
+  DEPARTEMENT
+}
+
+/// A missing figure is a state, never a zero.
+enum RepereState {
+  ETABLI
+  PARTIEL
+  NON_ETABLI
+  SECRET_STATISTIQUE
+  HORS_COUVERTURE
+}
+
+model RepereSource {
+  id          String   @id @default(cuid())
+  producer    String
+  resourceUrl String
+  licenceName String
+  licenceUrl  String
+  /// Attribution line the licence requires, shown with every figure of this source.
+  attribution String
+  /// Slug of the public method page, /territoires/methode/[methodSlug].
+  methodSlug  String
+  createdAt   DateTime @default(now())
+
+  imports RepereImport[]
+
+  @@index([methodSlug])
+}
+
+/// One batch. Imports write DRAFT; a person reads a sample and the counts, then publishes the whole
+/// batch. Publishing sets no cache tag: pages follow the 24 h `synced` profile.
+model RepereImport {
+  id         String         @id @default(cuid())
+  sourceId   String
+  status     CurationStatus @default(DRAFT)
+  importedAt DateTime       @default(now())
+  reviewedBy String?
+  reviewedAt DateTime?
+  rowCount   Int            @default(0)
+
+  source  RepereSource       @relation(fields: [sourceId], references: [id])
+  reperes TerritoireRepere[]
+
+  @@index([sourceId, status])
+}
+
+model TerritoireRepere {
+  id            String              @id @default(cuid())
+  territoryType RepereTerritoryType
+  /// INSEE code of the commune, department or region.
+  territoryCode String
+  /// COG edition the perimeter refers to (e.g. "2025"), null for a series that has none.
+  cogEdition    String?
+  /// population_municipale, age_tranche_0_14, climat_temp_moyenne...
+  indicatorKey  String
+  /// Observed period, never the import date.
+  periodStart   DateTime            @db.Date
+  periodEnd     DateTime            @db.Date
+  scopeKind     RepereScopeKind
+  /// Identifier of the measured scope (station number...), empty when it is the territory itself.
+  scopeId       String              @default("")
+  scopeLabel    String?
+  /// Null when not established: the state says why.
+  value         Float?
+  unit          String
+  sampleSize    Int?
+  state         RepereState
+  /// SEUIL_ANALYSES, STATION_TROP_ELOIGNEE...
+  reason        String?
+  importId      String
+
+  import RepereImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+
+  /// Also serves the page read: one territory, every indicator.
+  @@unique([territoryType, territoryCode, indicatorKey, periodEnd, scopeKind, scopeId])
+  @@index([importId])
+}
+
+/// Nature of an intercommunal body, as coded by INSEE and BANATIC. MET69 is the Métropole de
+/// Lyon: a territorial collectivity with special status, listed by the source alongside the EPCI
+/// but not an EPCI itself. EPT: territorial public establishment of the Métropole du Grand Paris,
+/// not an EPCI with its own taxation.
+enum IntercommunaliteNature {
+  CC
+  CA
+  CU
+  METRO
+  MET69
+  EPT
+}
+
+/// Intercommunal body from the INSEE yearly files (EPCI à fiscalité propre, EPT). #1052 lot 1.8.
+/// Its competences are never derived from membership: none are stored.
+model Intercommunalite {
+  siren         String                 @id
+  name          String
+  nature        IntercommunaliteNature
+  sourceLabel   String
+  sourceUrl     String
+  /// "Géographie au" date of the last file that listed the body.
+  situationDate DateTime               @db.Date
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  communes CommuneIntercommunalite[]
+}
+
+/// Dated membership of a commune, closed (validTo) and never deleted when a later file stops
+/// listing it. `siren` null records that the source lists the commune with no EPCI à fiscalité
+/// propre ("Sans objet"): an absence established by the source, distinct from no row at all.
+model CommuneIntercommunalite {
+  id            String    @id @default(cuid())
+  communeId     String
+  siren         String?
+  /// Situation date of the first file that listed the membership. Not the joining date: the
+  /// source does not publish it.
+  validFrom     DateTime  @db.Date
+  /// Situation date of the first file that no longer listed it. Null while current.
+  validTo       DateTime? @db.Date
+  sourceLabel   String
+  sourceUrl     String
+  /// Situation date of the last file that listed it.
+  situationDate DateTime  @db.Date
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Restrict on both sides: history is closed, never erased, and a deleted body must not turn its
+  // memberships into "no EPCI" (siren null).
+  commune          Commune           @relation(fields: [communeId], references: [id], onDelete: Restrict)
+  intercommunalite Intercommunalite? @relation(fields: [siren], references: [siren], onDelete: Restrict)
+
+  @@unique([communeId, siren, validFrom])
+  @@index([siren])
 }
 
 model CommuneElectionRound {
@@ -2830,6 +3037,24 @@ model CommuneElectionRound {
 
   @@unique([communeId, electionId, round])
   @@index([electionId, round])
+}
+
+/// Votes of one national candidacy in one commune, for one round (présidentielle by commune).
+/// Narrow on purpose: about 490 000 rows per presidential election. Participation of the commune
+/// lives in CommuneElectionRound; shares are computed from its validVotes, never stored.
+model CommuneCandidacyResult {
+  communeId   String
+  candidacyId String
+  round       Int // 1 or 2
+  votes       Int
+
+  commune   Commune   @relation(fields: [communeId], references: [id])
+  candidacy Candidacy @relation(fields: [candidacyId], references: [id], onDelete: Cascade)
+
+  // The primary key serves the commune page (one commune, every election); the second index
+  // serves the import (delete one election round) and the cascade from Candidacy.
+  @@id([communeId, candidacyId, round])
+  @@index([candidacyId, round])
 }
 
 // ============================================
@@ -3839,4 +4064,536 @@ model ProgramEdition {
   @@unique([partyId, electionId, version])
   @@unique([candidacyId, electionId, version])
   @@index([electionId, publicationStatus])
+}
+
+// ============================================
+// TERRITOIRES : DÉCISIONS CURÉES (#1052, lot 2)
+// ============================================
+// A decision is collective: it belongs to the institution that adopted it, never to a person.
+// The link between a person and a decision is computed from the institution, the adoption date
+// and the dates of the person's mandate. It is never stored, so a corrected mandate date cannot
+// leave a stale relation behind.
+
+/// Editorial state of a curated record. Public surfaces read PUBLISHED only.
+enum CurationStatus {
+  DRAFT
+  IN_REVIEW
+  PUBLISHED
+  REJECTED
+}
+
+enum InstitutionKind {
+  CONSEIL_MUNICIPAL
+  CONSEIL_COMMUNAUTAIRE
+}
+
+enum TerritorialSourceKind {
+  DELIBERATION
+  PROCES_VERBAL
+  LISTE_DELIBERATIONS
+  RECUEIL_ACTES_ADMINISTRATIFS
+}
+
+enum DecisionOutcome {
+  ADOPTEE
+  REJETEE
+}
+
+/// A deliberative body. A municipal council carries its commune; an intercommunal council
+/// carries its SIREN, since BANATIC is not imported.
+model Institution {
+  id        String          @id @default(cuid())
+  kind      InstitutionKind
+  name      String
+  commune   Commune?        @relation(fields: [communeId], references: [id])
+  communeId String?
+  sirenEpci String?
+
+  decisions Decision[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([kind, communeId])
+  @@unique([kind, sirenEpci])
+}
+
+/// An official document a decision is read from. The URL is stored and shown, never fetched
+/// by the server.
+model TerritorialSource {
+  id             String                @id @default(cuid())
+  kind           TerritorialSourceKind
+  title          String
+  producer       String
+  url            String
+  archiveUrl     String?
+  documentDate   DateTime?             @db.Date
+  lastVerifiedAt DateTime
+
+  decisions Decision[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Canonical notice of a collective decision: authority, reference, dates, outcome, and the
+/// exact place in the source that proves them.
+model Decision {
+  id            String      @id @default(cuid())
+  institution   Institution @relation(fields: [institutionId], references: [id])
+  institutionId String
+  /// Territory the decision concerns. Equals the institution's commune for a municipal council.
+  commune       Commune     @relation(fields: [communeId], references: [id])
+  communeId     String
+
+  reference             String?
+  title                 String
+  adoptionDate          DateTime        @db.Date
+  adoptionDatePrecision DatePrecision   @default(DAY)
+  publicationDate       DateTime?       @db.Date
+  effectiveDate         DateTime?       @db.Date
+  outcome               DecisionOutcome
+  /// The source's own wording of the collective result ("adoptée à l'unanimité").
+  outcomeWording        String?
+
+  source        TerritorialSource @relation(fields: [sourceId], references: [id])
+  sourceId      String
+  /// Where the proof sits in the source: page, item number.
+  sourceLocator String
+
+  status          CurationStatus @default(DRAFT)
+  submittedAt     DateTime?
+  reviewedAt      DateTime?
+  reviewedBy      String?
+  rejectionReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([communeId, status, adoptionDate])
+  @@index([institutionId, status, adoptionDate])
+  @@index([status, updatedAt])
+  @@index([sourceId])
+}
+
+/// Level of a deliberative council whose members the RNE lists.
+enum ConseilNiveau {
+  MUNICIPAL
+  DEPARTEMENTAL
+  REGIONAL
+}
+
+/// One member of a municipal, departmental or regional council, as listed by the RNE
+/// (#1052). Deliberately not linked to `Politician`: no identity resolution is claimed, the
+/// row is a line of an official register. Birth date and profession are used to build
+/// `rowKey` (stable identity of a line across imports) and are not stored.
+model ConseilMembre {
+  id               String        @id @default(cuid())
+  niveau           ConseilNiveau
+  /// INSEE commune code (MUNICIPAL), department code (DEPARTEMENTAL), region code (REGIONAL).
+  territoryCode    String
+  /// Canton (DEPARTEMENTAL) or departmental section (REGIONAL); null for MUNICIPAL.
+  subdivisionCode  String?
+  subdivisionLabel String?
+  lastName         String
+  firstName        String
+  /// "M" or "F" as coded by the RNE.
+  gender           String?
+  mandateStart     DateTime?     @db.Date
+  /// RNE function label ("Président du conseil départemental"...); null for a plain member.
+  functionLabel    String?
+  functionStart    DateTime?     @db.Date
+  /// sha256 of niveau, territory, name and birth date. Unique per niveau.
+  rowKey           String
+  /// Publication date of the RNE file that listed this line.
+  registerDate     DateTime?     @db.Date
+  sourceUrl        String
+  importedAt       DateTime      @default(now())
+
+  @@unique([niveau, rowKey])
+  @@index([niveau, territoryCode])
+}
+
+// ============================================
+// HISTORICAL PARLIAMENTARY AFFILIATIONS (lot 5B)
+// ============================================
+// Official evidence of the Assemblée nationale and the Sénat, versioned by snapshot intervals.
+// Deliberately NO relation to Politician, ParliamentaryGroup, AnOrgan, Mandate or Vote: a
+// historical affiliation is established from the official files alone (see the architecture
+// document, docs/audits/parlement-historique-lot5-architecture-v2.md).
+//
+// The SQL in prisma/migrations/manual/2026-10-18-historical-groups-schema.sql is the source of
+// truth. It carries what Prisma cannot declare: exclusion constraints on snapshot intervals,
+// partial unique indexes, CHECK constraints, append-only triggers, RLS. NEVER `db push` these
+// tables: the diff would drop those objects. Status and kind columns are TEXT with CHECK
+// constraints on purpose (no PostgreSQL enum to alter). Key columns are versioned (primary keys
+// end with fromSeq): a reference by business key (an actor, an organ, a seat mandate) cannot be a
+// foreign key, it stays under the importer's responsibility (see the 5B report).
+
+model SourceArtifact {
+  sha256                 String                   @id
+  byteSize               BigInt
+  mediaType              String
+  storageKind            String
+  storageRef             String
+  storedAt               DateTime                 @db.Timestamptz(3)
+  storedBy               String
+  lastVerifiedAt         DateTime?                @db.Timestamptz(3)
+  officialSourceSnapshot OfficialSourceSnapshot[]
+}
+
+model OfficialSourceSnapshot {
+  id                                  String                     @id
+  stream                              String
+  seq                                 Int
+  artifactSha256                      String
+  url                                 String
+  fetchedAt                           DateTime                   @db.Timestamptz(3)
+  sourceAsOf                          DateTime?                  @db.Timestamptz(3)
+  integrity                           String
+  parserVersion                       String
+  stateHash                           String
+  recordCounts                        Json
+  importedBy                          String
+  importedAt                          DateTime                   @default(now()) @db.Timestamptz(3)
+  artifact                            SourceArtifact             @relation(fields: [artifactSha256], references: [sha256], map: "OfficialSourceSnapshot_artifactSha256_fkey", onDelete: Restrict, onUpdate: Restrict)
+  snapshotDecision                    SnapshotDecision[]
+  officialActorFromSnapshot           OfficialActor[]            @relation("OfficialActorFromSnapshot")
+  officialActorToSnapshot             OfficialActor[]            @relation("OfficialActorToSnapshot")
+  officialOrganRecordFromSnapshot     OfficialOrganRecord[]      @relation("OfficialOrganRecordFromSnapshot")
+  officialOrganRecordToSnapshot       OfficialOrganRecord[]      @relation("OfficialOrganRecordToSnapshot")
+  groupMembershipRecordFromSnapshot   GroupMembershipRecord[]    @relation("GroupMembershipRecordFromSnapshot")
+  groupMembershipRecordToSnapshot     GroupMembershipRecord[]    @relation("GroupMembershipRecordToSnapshot")
+  seatMandateRecordFromSnapshot       SeatMandateRecord[]        @relation("SeatMandateRecordFromSnapshot")
+  seatMandateRecordToSnapshot         SeatMandateRecord[]        @relation("SeatMandateRecordToSnapshot")
+  scrutinVoterAttestationFromSnapshot ScrutinVoterAttestation[]  @relation("ScrutinVoterAttestationFromSnapshot")
+  scrutinVoterAttestationToSnapshot   ScrutinVoterAttestation[]  @relation("ScrutinVoterAttestationToSnapshot")
+  historicalRunSnapshotPinSnapshot    HistoricalRunSnapshotPin[] @relation("HistoricalRunSnapshotPinSnapshot")
+  scrutinCountCheckFromSnapshot       ScrutinCountCheck[]        @relation("ScrutinCountCheckFromSnapshot")
+  scrutinCountCheckToSnapshot         ScrutinCountCheck[]        @relation("ScrutinCountCheckToSnapshot")
+  scrutinGroupCountCheckFromSnapshot  ScrutinGroupCountCheck[]   @relation("ScrutinGroupCountCheckFromSnapshot")
+  scrutinGroupCountCheckToSnapshot    ScrutinGroupCountCheck[]   @relation("ScrutinGroupCountCheckToSnapshot")
+
+  @@unique([stream, seq], map: "OfficialSourceSnapshot_stream_seq_key")
+  @@unique([stream, artifactSha256, parserVersion], map: "OfficialSourceSnapshot_stream_artifactSha256_parserVersion_key")
+  @@unique([stream, seq, stateHash], map: "OfficialSourceSnapshot_stream_seq_stateHash_key")
+}
+
+model SnapshotDecision {
+  decisionNo    BigInt                 @id @default(autoincrement())
+  snapshotId    String
+  status        String
+  reason        String
+  decidedBy     String
+  decidedByKind String
+  decidedAt     DateTime               @default(now()) @db.Timestamptz(3)
+  snapshot      OfficialSourceSnapshot @relation(fields: [snapshotId], references: [id], map: "SnapshotDecision_snapshotId_fkey", onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([snapshotId, decisionNo], map: "SnapshotDecision_snapshotId_decisionNo_idx")
+}
+
+model OfficialActor {
+  stream       String
+  officialId   String
+  fromSeq      Int
+  toSeq        Int?
+  sourceMember String
+  rawHash      String
+  memberHash   String
+  fromSnapshot OfficialSourceSnapshot  @relation("OfficialActorFromSnapshot", fields: [stream, fromSeq], references: [stream, seq], map: "OfficialActor_fromSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+  toSnapshot   OfficialSourceSnapshot? @relation("OfficialActorToSnapshot", fields: [stream, toSeq], references: [stream, seq], map: "OfficialActor_toSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([stream, officialId, fromSeq])
+}
+
+model OfficialOrganRecord {
+  stream       String
+  organeRef    String
+  fromSeq      Int
+  toSeq        Int?
+  codeType     String
+  legislature  Int?
+  label        String
+  abbreviation String?
+  startDate    DateTime?               @db.Date
+  endDate      DateTime?               @db.Date
+  sourceMember String
+  rawHash      String
+  memberHash   String
+  fromSnapshot OfficialSourceSnapshot  @relation("OfficialOrganRecordFromSnapshot", fields: [stream, fromSeq], references: [stream, seq], map: "OfficialOrganRecord_fromSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+  toSnapshot   OfficialSourceSnapshot? @relation("OfficialOrganRecordToSnapshot", fields: [stream, toSeq], references: [stream, seq], map: "OfficialOrganRecord_toSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([stream, organeRef, fromSeq])
+  @@index([stream, legislature, startDate], map: "OfficialOrganRecord_stream_legislature_startDate_idx")
+}
+
+model GroupMembershipRecord {
+  stream          String
+  sourceRecordId  String
+  fromSeq         Int
+  toSeq           Int?
+  officialId      String
+  chamber         String
+  groupRef        String
+  legislature     Int?
+  qualityCode     String?
+  isPrincipal     Boolean?
+  precedence      Int?
+  startDate       DateTime?               @db.Date
+  startState      String
+  endDate         DateTime?               @db.Date
+  endState        String
+  publicationDate DateTime?               @db.Date
+  sourceMember    String
+  rawHash         String
+  memberHash      String
+  fromSnapshot    OfficialSourceSnapshot  @relation("GroupMembershipRecordFromSnapshot", fields: [stream, fromSeq], references: [stream, seq], map: "GroupMembershipRecord_fromSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+  toSnapshot      OfficialSourceSnapshot? @relation("GroupMembershipRecordToSnapshot", fields: [stream, toSeq], references: [stream, seq], map: "GroupMembershipRecord_toSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([stream, sourceRecordId, fromSeq])
+  @@index([stream, officialId, startDate], map: "GroupMembershipRecord_stream_officialId_startDate_idx")
+  @@index([stream, groupRef, startDate], map: "GroupMembershipRecord_stream_groupRef_startDate_idx")
+}
+
+model SeatMandateRecord {
+  stream         String
+  sourceRecordId String
+  fromSeq        Int
+  toSeq          Int?
+  officialId     String
+  legislature    Int?
+  startDate      DateTime?               @db.Date
+  startState     String
+  endDate        DateTime?               @db.Date
+  endState       String
+  sourceMember   String
+  rawHash        String
+  memberHash     String
+  fromSnapshot   OfficialSourceSnapshot  @relation("SeatMandateRecordFromSnapshot", fields: [stream, fromSeq], references: [stream, seq], map: "SeatMandateRecord_fromSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+  toSnapshot     OfficialSourceSnapshot? @relation("SeatMandateRecordToSnapshot", fields: [stream, toSeq], references: [stream, seq], map: "SeatMandateRecord_toSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([stream, sourceRecordId, fromSeq])
+  @@index([stream, officialId, startDate], map: "SeatMandateRecord_stream_officialId_startDate_idx")
+}
+
+model ScrutinVoterAttestation {
+  stream            String
+  scrutinExternalId String
+  officialId        String
+  fromSeq           Int
+  toSeq             Int?
+  scrutinDate       DateTime                @db.Date
+  legislature       Int
+  publishedOrganRef String
+  publishedPosition String
+  byDelegation      Boolean?
+  seatMandateRef    String?
+  memberHash        String
+  sourceMember      String
+  rawHash           String
+  fromSnapshot      OfficialSourceSnapshot  @relation("ScrutinVoterAttestationFromSnapshot", fields: [stream, fromSeq], references: [stream, seq], map: "ScrutinVoterAttestation_fromSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+  toSnapshot        OfficialSourceSnapshot? @relation("ScrutinVoterAttestationToSnapshot", fields: [stream, toSeq], references: [stream, seq], map: "ScrutinVoterAttestation_toSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([stream, scrutinExternalId, officialId, fromSeq])
+  @@index([stream, scrutinExternalId], map: "ScrutinVoterAttestation_stream_scrutinExternalId_idx")
+  @@index([stream, officialId, scrutinDate], map: "ScrutinVoterAttestation_stream_officialId_scrutinDate_idx")
+  @@index([stream, publishedOrganRef, scrutinDate], map: "ScrutinVoterAttestation_stream_organRef_date_idx")
+}
+
+model OfficialActorLinkDecision {
+  decisionNo    BigInt   @id @default(autoincrement())
+  chamber       String
+  officialId    String
+  politicianId  String?
+  status        String
+  evidence      String
+  decidedBy     String
+  decidedByKind String
+  decidedAt     DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([chamber, officialId, decisionNo], map: "OfficialActorLinkDecision_chamber_officialId_decisionNo_idx")
+}
+
+model OrganContinuityDecision {
+  decisionNo    BigInt   @id @default(autoincrement())
+  fromOrganRef  String
+  toOrganRef    String
+  relation      String
+  status        String
+  evidence      String
+  evidenceUrl   String?
+  decidedBy     String
+  decidedByKind String
+  decidedAt     DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([fromOrganRef, toOrganRef, decisionNo], map: "OrganContinuityDecision_fromOrganRef_toOrganRef_decisionNo_idx")
+}
+
+model HistoricalResolutionRun {
+  id                       String                     @id
+  inputHash                String                     @unique(map: "HistoricalResolutionRun_inputHash_key")
+  status                   String
+  linkDecisionCutoff       BigInt
+  continuityDecisionCutoff BigInt
+  decisionsHash            String
+  preparedInputsHash       String
+  parserVersion            String
+  resolverVersion          String
+  dateSemanticsVersion     String
+  exclusionRulesVersion    String
+  configHash               String
+  config                   Json
+  codeVersion              String
+  outputHash               String?
+  statusCounts             Json?
+  startedBy                String
+  startedAt                DateTime                   @db.Timestamptz(3)
+  finishedAt               DateTime?                  @db.Timestamptz(3)
+  historicalRunSnapshotPin HistoricalRunSnapshotPin[]
+  runExclusion             RunExclusion[]
+  scrutinOrganPosition     ScrutinOrganPosition[]
+}
+
+model HistoricalRunSnapshotPin {
+  runId     String
+  stream    String
+  seq       Int
+  stateHash String
+  run       HistoricalResolutionRun @relation(fields: [runId], references: [id], map: "HistoricalRunSnapshotPin_runId_fkey", onDelete: Restrict, onUpdate: Restrict)
+  snapshot  OfficialSourceSnapshot  @relation("HistoricalRunSnapshotPinSnapshot", fields: [stream, seq, stateHash], references: [stream, seq, stateHash], map: "HistoricalRunSnapshotPin_snapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([runId, stream])
+}
+
+model RunExclusion {
+  runId             String
+  scrutinExternalId String
+  officialId        String
+  status            String
+  reason            String
+  evidence          Json
+  run               HistoricalResolutionRun @relation(fields: [runId], references: [id], map: "RunExclusion_runId_fkey", onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([runId, scrutinExternalId, officialId])
+  @@index([runId, reason], map: "RunExclusion_runId_reason_idx")
+}
+
+// Lot 5C-0: count coherence of the official counts, per scrutin and per group (see
+// docs/audits/parlement-historique-lot5c0-schema.md). Same rules as the models above.
+
+model ScrutinCountCheck {
+  stream                     String
+  scrutinExternalId          String
+  fromSeq                    Int
+  toSeq                      Int?
+  scrutinDate                DateTime                @db.Date
+  legislature                Int
+  countCoherence             String
+  groupCount                 Int
+  mismatchedGroups           Int
+  unverifiableGroups         Int
+  nominalPour                Int
+  nominalContre              Int
+  nominalAbstention          Int
+  nominalNonVotant           Int
+  officialPour               Int?
+  officialContre             Int?
+  officialAbstention         Int?
+  officialNonVotant          Int?
+  diffPour                   Int?
+  diffContre                 Int?
+  diffAbstention             Int?
+  diffNonVotant              Int?
+  miseAuPointListedVotants   Int
+  miseAuPointMalformedBlocks Int
+  memberHash                 String
+  sourceMember               String
+  rawHash                    String
+  fromSnapshot               OfficialSourceSnapshot  @relation("ScrutinCountCheckFromSnapshot", fields: [stream, fromSeq], references: [stream, seq], map: "ScrutinCountCheck_fromSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+  toSnapshot                 OfficialSourceSnapshot? @relation("ScrutinCountCheckToSnapshot", fields: [stream, toSeq], references: [stream, seq], map: "ScrutinCountCheck_toSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([stream, scrutinExternalId, fromSeq])
+  @@index([stream, countCoherence], map: "ScrutinCountCheck_stream_countCoherence_idx")
+}
+
+model ScrutinGroupCountCheck {
+  stream             String
+  scrutinExternalId  String
+  organRef           String
+  organOrdinal       Int
+  fromSeq            Int
+  toSeq              Int?
+  groupCoherence     String
+  nominalPour        Int
+  nominalContre      Int
+  nominalAbstention  Int
+  nominalNonVotant   Int
+  officialPour       Int?
+  officialContre     Int?
+  officialAbstention Int?
+  officialNonVotant  Int?
+  diffPour           Int?
+  diffContre         Int?
+  diffAbstention     Int?
+  diffNonVotant      Int?
+  memberHash         String
+  sourceMember       String
+  rawHash            String
+  fromSnapshot       OfficialSourceSnapshot  @relation("ScrutinGroupCountCheckFromSnapshot", fields: [stream, fromSeq], references: [stream, seq], map: "ScrutinGroupCountCheck_fromSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+  toSnapshot         OfficialSourceSnapshot? @relation("ScrutinGroupCountCheckToSnapshot", fields: [stream, toSeq], references: [stream, seq], map: "ScrutinGroupCountCheck_toSnapshot_fkey", onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([stream, scrutinExternalId, organRef, organOrdinal, fromSeq])
+  @@index([stream, scrutinExternalId], map: "ScrutinGroupCountCheck_stream_scrutinExternalId_idx")
+}
+
+// Lot 5D (PR A): internal historical positions of a run, per scrutin and official organ. Counts and
+// the reason a position is not shown, never a majority position. Same rules as the models above.
+
+model ScrutinOrganPosition {
+  runId             String
+  scrutinExternalId String
+  organRef          String
+  organKind         String?
+  forCount          Int
+  againstCount      Int
+  abstainCount      Int
+  nonVoterCount     Int
+  excludedCount     Int
+  excludedByReason  Json
+  publishable       Boolean
+  reason            String?
+  run               HistoricalResolutionRun @relation(fields: [runId], references: [id], map: "ScrutinOrganPosition_runId_fkey", onDelete: Restrict, onUpdate: Restrict)
+
+  @@id([runId, scrutinExternalId, organRef])
+  @@index([runId, publishable], map: "ScrutinOrganPosition_runId_publishable_idx")
+  @@index([scrutinExternalId], map: "ScrutinOrganPosition_scrutinExternalId_idx")
+}
+
+/// Retour d'un visiteur via /signaler. Table privée : jamais exposée par une page ou une API
+/// publique. `contactEmail` est effacé quand le retour est clos.
+model VisitorFeedback {
+  id             String           @id @default(cuid())
+  category       FeedbackCategory
+  message        String
+  /// Chemin relatif de la page d'origine, sans paramètres de requête.
+  pagePath       String?
+  contactEmail   String?
+  status         FeedbackStatus   @default(NEW)
+  createdAt      DateTime         @default(now())
+  resolvedAt     DateTime?
+
+  @@index([status, createdAt])
+}
+
+enum FeedbackCategory {
+  FACTUAL_ERROR
+  BUG
+  IDEA
+  OTHER
+}
+
+enum FeedbackStatus {
+  NEW
+  DONE
+  REJECTED
 }

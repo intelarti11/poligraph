@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseFrenchPct } from "../parse-wide-results-2026";
+import { parseFrenchPct, parseWideResultRow2026 } from "../parse-wide-results-2026";
 
 describe("parseFrenchPct", () => {
   it("lit un pourcentage français", () => {
@@ -23,5 +23,41 @@ describe("parseFrenchPct", () => {
   it("retire tous les signes pourcent, pas seulement le premier", () => {
     expect(parseFrenchPct("%%55,08")).toBe(55.08);
     expect(parseFrenchPct("55,08%%")).toBe(55.08);
+  });
+});
+
+describe("parseWideResultRow2026 : quart des inscrits (art. L. 262)", () => {
+  function row(registered: string, votes: string, pctExpressed: string) {
+    const fixed = Array(18).fill("");
+    fixed[2] = "31555";
+    fixed[3] = "Ville";
+    fixed[4] = registered;
+    // panel, name, first name, sex, nuance, short label, label, votes, %reg, %expr, elu, CM, CC
+    const block = [
+      "1",
+      "DUPONT",
+      "Jean",
+      "M",
+      "DVG",
+      "A",
+      "LISTE A",
+      votes,
+      "0",
+      pctExpressed,
+      "",
+      "",
+      "",
+    ];
+    return [...fixed, ...block];
+  }
+
+  it("n'élit pas une liste à plus de 50 % des exprimés sous le quart des inscrits", () => {
+    const r = parseWideResultRow2026(row("5000", "1000", "65,79%"));
+    expect(r.lists[0]?.isElected).toBe(false);
+  });
+
+  it("élit une liste qui atteint le quart des inscrits", () => {
+    const r = parseWideResultRow2026(row("5000", "1250", "82,24%"));
+    expect(r.lists[0]?.isElected).toBe(true);
   });
 });

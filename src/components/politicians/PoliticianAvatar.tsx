@@ -21,6 +21,12 @@ interface PoliticianAvatarProps {
   size?: "sm" | "md" | "lg" | "xl";
   className?: string;
   priority?: boolean; // Load immediately (above the fold)
+  /**
+   * Fixed rendered width in CSS pixels. When set, the image is sized with width/height instead of
+   * `fill` + `sizes`, so next/image emits a 1x/2x srcSet instead of every configured width: much
+   * lighter HTML on pages listing many avatars.
+   */
+  fixedPx?: number;
 }
 
 const sizeClasses = {
@@ -39,6 +45,7 @@ export function PoliticianAvatar({
   size = "md",
   className = "",
   priority = false,
+  fixedPx,
 }: PoliticianAvatarProps) {
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
@@ -80,10 +87,16 @@ export function PoliticianAvatar({
       <Image
         src={imageSrc}
         alt={displayName}
-        fill
-        sizes={size === "sm" ? "40px" : size === "md" ? "56px" : size === "lg" ? "96px" : "128px"}
+        {...(fixedPx
+          ? { width: fixedPx, height: fixedPx }
+          : {
+              fill: true,
+              sizes:
+                size === "sm" ? "40px" : size === "md" ? "56px" : size === "lg" ? "96px" : "128px",
+            })}
         className={cn(
           "object-cover transition-opacity duration-200",
+          fixedPx && "h-full w-full",
           imageLoaded ? "opacity-100" : "opacity-0"
         )}
         onError={() => setImageError(true)}

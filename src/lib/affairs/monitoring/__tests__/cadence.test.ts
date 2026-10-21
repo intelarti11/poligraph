@@ -25,6 +25,11 @@ describe("computeCadenceReview", () => {
       nextReviewAt: d("2027-04-07"),
       dueReason: "CADENCE",
     }));
+  it("SIGNALEMENT_PARQUET : six mois, motif CADENCE", () =>
+    expect(computeCadenceReview("SIGNALEMENT_PARQUET", d("2026-10-07"))).toEqual({
+      nextReviewAt: d("2027-04-07"),
+      dueReason: "CADENCE",
+    }));
   it("INSTRUCTION_CLOTUREE_SANS_MISE_EN_EXAMEN : six mois", () =>
     expect(
       computeCadenceReview("INSTRUCTION_CLOTUREE_SANS_MISE_EN_EXAMEN", d("2026-10-07")).nextReviewAt

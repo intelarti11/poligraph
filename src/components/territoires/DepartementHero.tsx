@@ -2,7 +2,11 @@ import Link from "next/link";
 import { BreadcrumbJsonLd } from "@/components/seo/JsonLd";
 import { TerritoryShape } from "@/components/territoires/TerritoryShape";
 import { DEPARTMENT_OUTLINES } from "@/config/territoires-shapes";
-import { TERRITOIRES_PATH, territoireRegionPath } from "@/lib/territoires/paths";
+import {
+  TERRITOIRES_PATH,
+  territoireRegionPath,
+  territoireDepartementPath,
+} from "@/lib/territoires/paths";
 import { COMMUNES_ANCHOR } from "@/lib/territoires/departement-communes";
 import type { DepartementTerritoire } from "@/lib/data/territoires";
 import { cn, formatDate } from "@/lib/utils";
@@ -60,7 +64,7 @@ export function DepartementHero({
       <BreadcrumbJsonLd
         items={[{ label: "Accueil", href: "/" }, ...crumbs].map((c) => ({
           name: c.label,
-          url: `${SITE_URL}${c.href ?? `/departements/${slug}`}`,
+          url: `${SITE_URL}${c.href ?? territoireDepartementPath(slug)}`,
         }))}
       />
       <div aria-hidden="true" className="flex h-1">
@@ -140,6 +144,8 @@ export function DepartementHero({
                     >
                       {presidence.person.fullName}
                     </Link>
+                  ) : presidence.registre ? (
+                    presidence.registre.fullName
                   ) : (
                     "Non établie"
                   )}
@@ -149,7 +155,9 @@ export function DepartementHero({
                     ? presidence.source
                       ? `Source : ${presidence.source.label}`
                       : "Source non précisée dans nos données"
-                    : "dans nos données"}
+                    : presidence.registre
+                      ? "d'après le registre national des élus"
+                      : "dans nos données"}
                 </dd>
               </div>
             )}
@@ -198,7 +206,7 @@ export function DepartementHero({
   );
 }
 
-/** Silhouette plus a small France inset. Nothing without an outline (DROM, COM). */
+/** Silhouette plus a small France inset (metropolitan departments only). */
 function TerritoryHeroShape({ code }: { code: string }) {
   return (
     <div

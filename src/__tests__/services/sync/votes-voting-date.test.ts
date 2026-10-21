@@ -4,8 +4,11 @@ const createManyMock = vi.fn();
 const updateMock = vi.fn();
 const deleteManyMock = vi.fn();
 
+const transactionMock = vi.fn();
+
 vi.mock("@/lib/db", () => ({
   db: {
+    $transaction: (...args: unknown[]) => transactionMock(...args),
     vote: {
       createMany: (...args: unknown[]) => createManyMock(...args),
       deleteMany: (...args: unknown[]) => deleteManyMock(...args),
@@ -21,6 +24,8 @@ describe("Vote denorm fields are populated by sync write paths", () => {
     createManyMock.mockReset();
     deleteManyMock.mockReset();
     updateMock.mockReset();
+    transactionMock.mockReset();
+    transactionMock.mockImplementation((operations: Promise<unknown>[]) => Promise.all(operations));
   });
 
   it("writeVotesForScrutin writes votingDate, chamber AND scrutinType on every Vote row", async () => {
@@ -88,5 +93,22 @@ describe("Vote denorm fields are populated by sync write paths", () => {
         votes: [],
       })
     ).rejects.toThrow(/chamber is required/);
+  });
+
+  it("deletes and recreates the votes in a single transaction", async () => {
+    const { writeVotesForScrutin } = await import("@/services/sync/scrutins-vote-writer");
+
+    await writeVotesForScrutin({
+      scrutinId: "s1",
+      votingDate: new Date("2025-03-15T15:00:00Z"),
+      chamber: "AN",
+      scrutinType: "FINAL",
+      votes: [{ politicianId: "p1", position: "POUR" }],
+    });
+
+    expect(transactionMock).toHaveBeenCalledTimes(1);
+    expect(transactionMock.mock.calls[0]![0]).toHaveLength(2);
+    expect(deleteManyMock).toHaveBeenCalledWith({ where: { scrutinId: "s1" } });
+    expect(createManyMock).toHaveBeenCalledTimes(1);
   });
 });

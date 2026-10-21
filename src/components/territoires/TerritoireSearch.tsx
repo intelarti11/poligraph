@@ -40,7 +40,7 @@ export function TerritoireSearch({
           maxLength={80}
           autoComplete="off"
           defaultValue={defaultValue}
-          placeholder="Commune ou code postal"
+          placeholder="Commune, département, région ou code postal"
           aria-describedby={hintId}
           className={cn(
             "min-h-11 min-w-0 flex-1 rounded-lg bg-transparent px-3 text-base focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
@@ -51,6 +51,8 @@ export function TerritoireSearch({
         />
         <button
           type="submit"
+          aria-label="Rechercher"
+          title="Rechercher"
           className="inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg bg-primary px-3 font-bold text-primary-foreground hover:brightness-110 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:px-5"
         >
           <Search className="h-5 w-5 sm:hidden" aria-hidden="true" />

@@ -25,7 +25,14 @@ import {
 import { CERTAINTY_LABELS, type CertaintyLevel } from "@/config/certainty";
 import { CollectionPageJsonLd } from "@/components/seo/JsonLd";
 import { SITE_URL } from "@/config/site";
-import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BandeauSurtitre, RubriqueBandeau } from "@/components/ui/RubriqueBandeau";
+import { BandeauFilterForm } from "@/components/ui/BandeauFilterForm";
+import {
+  certaintyFilterOptions,
+  partyFilterOptions,
+  sortFilterOptions,
+  superCategoryFilterOptions,
+} from "@/components/affairs/affaires-filter-options";
 import type { AffairStatus, Involvement } from "@/types";
 import { hasActiveListingFilter, listingRobotsMetadata } from "@/lib/seo/listing-robots";
 import { AFFAIRES_DEFAULT_TITLE, AFFAIRES_DEFAULT_DESCRIPTION } from "@/lib/seo/affaires-metadata";
@@ -156,9 +163,10 @@ export default async function AffairesPage({ searchParams }: PageProps) {
       sortFilter || undefined,
       certaintyFilter || undefined
     ),
-    getSuperCategoryCounts(),
-    // Filter options count the cards of the listed perimeter, a witness included;
-    // the hub tile counts only the convictions of the person prosecuted.
+    // Facets, page total and result count all count the cards of the listed perimeter, a witness
+    // included; the hub tile counts only the convictions of the person prosecuted, like the
+    // condamnations page it leads to.
+    getSuperCategoryCounts(activeInvolvements),
     getCertaintyFacetCounts(activeInvolvements),
     getAdverseCertaintyCounts(),
     getPartiesWithAffairs(),
@@ -191,6 +199,40 @@ export default async function AffairesPage({ searchParams }: PageProps) {
     return search ? `/affaires?${search}` : "/affaires";
   }
 
+  // Bare landing: the banner only shows without search, filter, sort, victim mode or page.
+  const isLanding =
+    !searchFilter &&
+    !sortFilter &&
+    !statusFilter &&
+    !superCatFilter &&
+    !categoryFilter &&
+    !certaintyFilter &&
+    !partiFilter &&
+    mode === "mise-en-cause" &&
+    page === 1;
+  const hasFilters = Boolean(
+    searchFilter ||
+    statusFilter ||
+    superCatFilter ||
+    categoryFilter ||
+    certaintyFilter ||
+    partiFilter
+  );
+  const partyOptions = partiesWithAffairs.map((p) => ({
+    slug: p.slug as string,
+    shortName: p.shortName,
+    name: p.name,
+    count: p._count.affairsAtTime,
+  }));
+  const compteur = `${totalAffairs.toLocaleString("fr-FR")} affaire${totalAffairs !== 1 ? "s" : ""} documentée${totalAffairs !== 1 ? "s" : ""} avec sources vérifiables`;
+  const seoIntro = (
+    <div className="sr-only">
+      <SeoIntro
+        text={`${totalAffairs} affaires judiciaires impliquant des responsables politiques, documentées avec sources vérifiables. Mises en examen, procès, condamnations et relaxes.`}
+      />
+    </div>
+  );
+
   return (
     <>
       <CollectionPageJsonLd
@@ -199,24 +241,57 @@ export default async function AffairesPage({ searchParams }: PageProps) {
         url={`${SITE_URL}/affaires`}
         numberOfItems={totalAffairs}
       />
+      {isLanding && (
+        <RubriqueBandeau labelledBy="affaires-titre">
+          <div className="max-w-4xl">
+            <BandeauSurtitre>Affaires</BandeauSurtitre>
+            <h1
+              id="affaires-titre"
+              className="mt-4 font-display text-3xl font-extrabold leading-tight tracking-tight sm:text-5xl"
+            >
+              Affaires judiciaires
+            </h1>
+            <p className="mt-4 max-w-2xl text-base text-white/85 sm:text-lg">
+              Procédures visant des responsables politiques, chacune appuyée sur au moins une source
+              vérifiable. Toute personne mise en cause dans une procédure judiciaire est présumée
+              innocente jusqu{"'"}à ce qu{"'"}elle ait été déclarée coupable par une décision de
+              justice définitive.
+            </p>
+            <div className="mt-6">
+              <BandeauFilterForm
+                action="/affaires"
+                idPrefix="affaires"
+                searchPlaceholder="Nom, mot-clé"
+                selects={[
+                  {
+                    name: "certainty",
+                    label: "Certitude",
+                    options: certaintyFilterOptions(certaintyCounts),
+                  },
+                  {
+                    name: "supercat",
+                    label: "Catégorie",
+                    options: superCategoryFilterOptions(superCounts),
+                  },
+                  { name: "parti", label: "Parti", options: partyFilterOptions(partyOptions) },
+                  { name: "sort", label: "Trier", options: sortFilterOptions() },
+                ]}
+              />
+            </div>
+            <p className="mt-4 text-sm text-white/85">{compteur}</p>
+            {seoIntro}
+          </div>
+        </RubriqueBandeau>
+      )}
       <div className="container mx-auto px-4 pt-4 pb-8">
-        <Breadcrumb items={[{ label: "Affaires" }]} />
-        <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
+        {!isLanding && (
+          <div className="mb-6">
             <h1 className="text-3xl font-display font-extrabold tracking-tight mb-1">
               Affaires judiciaires
             </h1>
-            <p className="text-sm text-muted-foreground">
-              {totalAffairs} affaire{totalAffairs !== 1 ? "s" : ""} documentée
-              {totalAffairs !== 1 ? "s" : ""} avec sources vérifiables
-            </p>
-            <div className="sr-only">
-              <SeoIntro
-                text={`${totalAffairs} affaires judiciaires impliquant des responsables politiques, documentées avec sources vérifiables. Mises en examen, procès, condamnations et relaxes.`}
-              />
-            </div>
+            {seoIntro}
           </div>
-        </div>
+        )}
 
         {/* Hub tiles: route the strong judicial/statistics/victim intents from the bare listing */}
         <div className="mb-4">
@@ -255,26 +330,23 @@ export default async function AffairesPage({ searchParams }: PageProps) {
             ) : null;
           })()}
 
-        {/* Compact filter bar */}
-        <AffairesFilterBar
-          mode={mode}
-          currentFilters={{
-            search: searchFilter,
-            sort: sortFilter,
-            certainty: certaintyFilter,
-            parti: partiFilter,
-            category: categoryFilter,
-            supercat: superCatFilter,
-          }}
-          parties={partiesWithAffairs.map((p) => ({
-            slug: p.slug as string,
-            shortName: p.shortName,
-            name: p.name,
-            count: p._count.affairsAtTime,
-          }))}
-          certaintyCounts={certaintyCounts}
-          superCounts={superCounts}
-        />
+        {/* Compact filter bar: on the bare landing, the banner form carries the filters */}
+        {!isLanding && (
+          <AffairesFilterBar
+            mode={mode}
+            currentFilters={{
+              search: searchFilter,
+              sort: sortFilter,
+              certainty: certaintyFilter,
+              parti: partiFilter,
+              category: categoryFilter,
+              supercat: superCatFilter,
+            }}
+            parties={partyOptions}
+            certaintyCounts={certaintyCounts}
+            superCounts={superCounts}
+          />
+        )}
 
         {/* Condamnations hub callout when ETABLI certainty is active */}
         {certaintyFilter === "ETABLI" && (
@@ -293,10 +365,28 @@ export default async function AffairesPage({ searchParams }: PageProps) {
           </div>
         )}
 
-        {/* Results count */}
-        <p className="text-sm text-muted-foreground mb-4">
-          {total} résultat{total !== 1 ? "s" : ""}
-        </p>
+        {/* Results count: same perimeter as the page total, so the two numbers share a unit */}
+        {!isLanding && (
+          <p className="text-sm text-muted-foreground mb-4" aria-live="polite">
+            {hasFilters ? (
+              <>
+                <strong className="text-foreground">
+                  {total.toLocaleString("fr-FR")} affaire{total > 1 ? "s" : ""}
+                </strong>{" "}
+                {total > 1 ? "correspondent" : "correspond"} à ces critères sur{" "}
+                {totalAffairs.toLocaleString("fr-FR")} documentée{totalAffairs !== 1 ? "s" : ""}.{" "}
+                <Link
+                  href="/affaires"
+                  className="font-medium text-primary underline-offset-4 hover:underline"
+                >
+                  Tout réinitialiser
+                </Link>
+              </>
+            ) : (
+              compteur
+            )}
+          </p>
+        )}
 
         {/* Results */}
         {affairs.length > 0 ? (
@@ -348,6 +438,14 @@ export default async function AffairesPage({ searchParams }: PageProps) {
                 Les affaires sont ajoutées avec des sources vérifiables. Notre base est enrichie
                 régulièrement et ne prétend pas à l&apos;exhaustivité.
               </p>
+              {hasFilters && (
+                <Link
+                  href="/affaires"
+                  className="mt-4 inline-flex min-h-11 items-center font-medium text-primary underline-offset-4 hover:underline"
+                >
+                  Tout réinitialiser
+                </Link>
+              )}
             </CardContent>
           </Card>
         )}
