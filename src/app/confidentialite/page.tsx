@@ -121,6 +121,22 @@ export default function ConfidentialitePage() {
           </div>
         </section>
 
+        <section id="retours">
+          <h2 className="mb-4 text-xl font-semibold">Formulaire de retour</h2>
+          <div className="space-y-3 text-muted-foreground">
+            <p>
+              Le formulaire de la page « Signaler une erreur » enregistre la nature du retour, le
+              message, le chemin de la page concernée (sans paramètres de requête) et, si la
+              personne le souhaite, une adresse email pour recevoir une réponse. Aucun compte
+              n&apos;est demandé et l&apos;adresse IP n&apos;est pas conservée avec le message.
+            </p>
+            <p>
+              Le message est lu par l&apos;équipe. L&apos;adresse email est effacée dès que le
+              retour est traité. Le message n&apos;est transmis à aucun service tiers.
+            </p>
+          </div>
+        </section>
+
         <section>
           <h2 className="mb-4 text-xl font-semibold">Don en ligne</h2>
           <p className="text-muted-foreground">
@@ -147,6 +163,10 @@ export default function ConfidentialitePage() {
                 Répondre aux demandes de support, de rectification et de droit de réponse :
               </strong>{" "}
               traitement de la demande et intérêt légitime de l&apos;association.
+            </li>
+            <li>
+              <strong>Formulaire de retour :</strong> intérêt légitime de l&apos;association à
+              corriger ses données ; l&apos;adresse email facultative sert uniquement à répondre.
             </li>
             <li>
               <strong>Newsletter :</strong> consentement de la personne inscrite.
@@ -203,6 +223,11 @@ export default function ConfidentialitePage() {
             <li>
               <strong>Support :</strong> pendant le temps nécessaire au traitement de la demande,
               puis selon les obligations applicables ou le besoin de conserver une preuve utile.
+            </li>
+            <li>
+              <strong>Formulaire de retour :</strong> l&apos;adresse email est effacée quand le
+              retour est traité ; le message est conservé pour garder la trace des corrections
+              apportées.
             </li>
             <li>
               <strong>Newsletter :</strong> jusqu&apos;au désabonnement, avec suppression
